@@ -1,5 +1,5 @@
 {
-  "installCommand": "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && . $HOME/.cargo/env && curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh && cd ../.. && pnpm install",
-  "buildCommand": ". $HOME/.cargo/env && wasm-pack build --target web ../gen-wasm && pnpm build:web",
+  "installCommand": "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && . $HOME/.cargo/env && curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh && wasm-pack build --target web ../gen-wasm && cd ../.. && pnpm install",
+  "buildCommand": "pnpm build:web",
   "outputDirectory": "dist"
 }
