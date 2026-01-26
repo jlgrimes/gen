@@ -1,5 +1,5 @@
-import init, { compile_with_options, list_scores } from 'gen-wasm';
-import type { CompilerAdapter, FileAdapter, ScoreInfo } from 'gen-ui';
+import init, { compile_with_options } from 'gen-wasm';
+import type { CompilerAdapter, FileAdapter } from 'gen-ui';
 
 let initialized = false;
 
@@ -25,10 +25,6 @@ export const wasmCompiler: CompilerAdapter = {
         return { status: 'error', error: { message: errorStr, line: null, column: null } };
       }
     }
-  },
-  async listScores() {
-    await ensureInit();
-    return list_scores() as ScoreInfo[];
   },
 };
 

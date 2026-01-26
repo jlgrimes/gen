@@ -22,7 +22,6 @@ export interface ScoreInfo {
 
 export interface CompilerAdapter {
   compile(source: string, options: CompileOptions): Promise<CompileResult>;
-  listScores(): Promise<ScoreInfo[]>;
 }
 
 export interface FileAdapter {

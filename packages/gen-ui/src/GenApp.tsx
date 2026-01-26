@@ -95,11 +95,11 @@ MusicSheetCalculator.transposeCalculator = new TransposeCalculator();
 export interface GenAppProps {
   compiler: CompilerAdapter;
   files: FileAdapter;
+  scores: ScoreInfo[];
 }
 
-export function GenApp({ compiler, files }: GenAppProps) {
+export function GenApp({ compiler, files, scores }: GenAppProps) {
   const [genSource, setGenSource] = useState('');
-  const [scores, setScores] = useState<ScoreInfo[]>([]);
   const [selectedScore, setSelectedScore] = useState<string | null>(null);
   const [error, setError] = useState<CompileError | null>(null);
   const [isCompiling, setIsCompiling] = useState(false);
@@ -117,23 +117,13 @@ export function GenApp({ compiler, files }: GenAppProps) {
     setIsSidebarCollapsed(prev => !prev);
   }, []);
 
-  // Load embedded scores on mount
+  // Auto-select first score on mount
   useEffect(() => {
-    const loadScores = async () => {
-      try {
-        const scoreList = await compiler.listScores();
-        setScores(scoreList);
-        // Auto-select first score if available
-        if (scoreList.length > 0) {
-          setGenSource(scoreList[0].content);
-          setSelectedScore(scoreList[0].name);
-        }
-      } catch (e) {
-        console.error('Failed to load scores:', e);
-      }
-    };
-    loadScores();
-  }, [compiler]);
+    if (scores.length > 0) {
+      setGenSource(scores[0].content);
+      setSelectedScore(scores[0].name);
+    }
+  }, [scores]);
 
   const compileAndRender = useCallback(
     async (
