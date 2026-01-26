@@ -1,60 +1,118 @@
 use crate::ast::*;
+use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
+use quick_xml::Writer;
+use std::io::Cursor;
 
 /// Convert a Score to MusicXML format
 pub fn to_musicxml(score: &Score) -> String {
-    let mut xml = String::new();
+    let mut writer = Writer::new_with_indent(Cursor::new(Vec::new()), b' ', 2);
 
-    // XML declaration and doctype
-    xml.push_str(r#"<?xml version="1.0" encoding="UTF-8"?>"#);
-    xml.push('\n');
-    xml.push_str(r#"<!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 4.0 Partwise//EN" "http://www.musicxml.org/dtds/partwise.dtd">"#);
-    xml.push('\n');
+    // XML declaration
+    writer
+        .write_event(Event::Decl(BytesDecl::new("1.0", Some("UTF-8"), None)))
+        .unwrap();
+
+    // DOCTYPE - write as raw text since quick-xml doesn't have direct doctype support
+    writer
+        .get_mut()
+        .get_mut()
+        .extend_from_slice(b"\n<!DOCTYPE score-partwise PUBLIC \"-//Recordare//DTD MusicXML 4.0 Partwise//EN\" \"http://www.musicxml.org/dtds/partwise.dtd\">\n");
 
     // Root element
-    xml.push_str(r#"<score-partwise version="4.0">"#);
-    xml.push('\n');
+    let mut root = BytesStart::new("score-partwise");
+    root.push_attribute(("version", "4.0"));
+    writer.write_event(Event::Start(root)).unwrap();
 
     // Work info (title)
     if let Some(title) = &score.metadata.title {
-        xml.push_str("  <work>\n");
-        xml.push_str(&format!("    <work-title>{}</work-title>\n", escape_xml(title)));
-        xml.push_str("  </work>\n");
+        writer
+            .write_event(Event::Start(BytesStart::new("work")))
+            .unwrap();
+        write_text_element(&mut writer, "work-title", title);
+        writer
+            .write_event(Event::End(BytesEnd::new("work")))
+            .unwrap();
     }
 
     // Identification (composer)
     if let Some(composer) = &score.metadata.composer {
-        xml.push_str("  <identification>\n");
-        xml.push_str(&format!(
-            "    <creator type=\"composer\">{}</creator>\n",
-            escape_xml(composer)
-        ));
-        xml.push_str("  </identification>\n");
+        writer
+            .write_event(Event::Start(BytesStart::new("identification")))
+            .unwrap();
+        let mut creator = BytesStart::new("creator");
+        creator.push_attribute(("type", "composer"));
+        writer.write_event(Event::Start(creator)).unwrap();
+        writer
+            .write_event(Event::Text(BytesText::new(composer)))
+            .unwrap();
+        writer
+            .write_event(Event::End(BytesEnd::new("creator")))
+            .unwrap();
+        writer
+            .write_event(Event::End(BytesEnd::new("identification")))
+            .unwrap();
     }
 
     // Part list
-    xml.push_str("  <part-list>\n");
-    xml.push_str("    <score-part id=\"P1\">\n");
-    xml.push_str("      <part-name print-object=\"no\"></part-name>\n");
-    xml.push_str("    </score-part>\n");
-    xml.push_str("  </part-list>\n");
+    writer
+        .write_event(Event::Start(BytesStart::new("part-list")))
+        .unwrap();
+    let mut score_part = BytesStart::new("score-part");
+    score_part.push_attribute(("id", "P1"));
+    writer.write_event(Event::Start(score_part)).unwrap();
+    let mut part_name = BytesStart::new("part-name");
+    part_name.push_attribute(("print-object", "no"));
+    writer.write_event(Event::Start(part_name)).unwrap();
+    writer
+        .write_event(Event::End(BytesEnd::new("part-name")))
+        .unwrap();
+    writer
+        .write_event(Event::End(BytesEnd::new("score-part")))
+        .unwrap();
+    writer
+        .write_event(Event::End(BytesEnd::new("part-list")))
+        .unwrap();
 
     // Part with measures
-    xml.push_str("  <part id=\"P1\">\n");
+    let mut part = BytesStart::new("part");
+    part.push_attribute(("id", "P1"));
+    writer.write_event(Event::Start(part)).unwrap();
 
     for (i, measure) in score.measures.iter().enumerate() {
-        xml.push_str(&measure_to_xml(
+        write_measure(
+            &mut writer,
             measure,
             i + 1,
             &score.metadata.time_signature,
             &score.metadata.key_signature,
             i == 0,
-        ));
+        );
     }
 
-    xml.push_str("  </part>\n");
-    xml.push_str("</score-partwise>\n");
+    writer
+        .write_event(Event::End(BytesEnd::new("part")))
+        .unwrap();
+    writer
+        .write_event(Event::End(BytesEnd::new("score-partwise")))
+        .unwrap();
 
+    let result = writer.into_inner().into_inner();
+    let mut xml = String::from_utf8(result).unwrap();
+    xml.push('\n');
     xml
+}
+
+/// Helper to write a simple text element
+fn write_text_element<W: std::io::Write>(writer: &mut Writer<W>, name: &str, text: &str) {
+    writer
+        .write_event(Event::Start(BytesStart::new(name)))
+        .unwrap();
+    writer
+        .write_event(Event::Text(BytesText::new(text)))
+        .unwrap();
+    writer
+        .write_event(Event::End(BytesEnd::new(name)))
+        .unwrap();
 }
 
 /// Beam state for a note
@@ -78,8 +136,14 @@ fn is_beamable(duration: Duration) -> bool {
 /// Using 12 divisions allows clean representation of triplets (divisible by 3)
 fn element_divisions_for_beaming(element: &Element) -> u32 {
     match element {
-        Element::Note(note) => duration_to_divisions_high_res(note.duration, note.dotted, note.tuplet),
-        Element::Rest { duration, dotted, tuplet } => duration_to_divisions_high_res(*duration, *dotted, *tuplet),
+        Element::Note(note) => {
+            duration_to_divisions_high_res(note.duration, note.dotted, note.tuplet)
+        }
+        Element::Rest {
+            duration,
+            dotted,
+            tuplet,
+        } => duration_to_divisions_high_res(*duration, *dotted, *tuplet),
     }
 }
 
@@ -152,69 +216,95 @@ fn calculate_beam_states(elements: &[Element], time_signature: &TimeSignature) -
     states
 }
 
-fn measure_to_xml(
+fn write_measure<W: std::io::Write>(
+    writer: &mut Writer<W>,
     measure: &Measure,
     number: usize,
     time_signature: &TimeSignature,
     key_signature: &KeySignature,
     include_attributes: bool,
-) -> String {
-    let mut xml = String::new();
-
-    xml.push_str(&format!("    <measure number=\"{}\">\n", number));
+) {
+    let mut measure_elem = BytesStart::new("measure");
+    measure_elem.push_attribute(("number", number.to_string().as_str()));
+    writer.write_event(Event::Start(measure_elem)).unwrap();
 
     // Include time signature, key signature, and clef on first measure
     if include_attributes {
-        xml.push_str("      <attributes>\n");
-        xml.push_str("        <divisions>4</divisions>\n"); // 4 divisions per quarter note
-        xml.push_str("        <key>\n");
-        xml.push_str(&format!("          <fifths>{}</fifths>\n", key_signature.fifths));
-        xml.push_str("        </key>\n");
-        xml.push_str("        <time>\n");
-        xml.push_str(&format!("          <beats>{}</beats>\n", time_signature.beats));
-        xml.push_str(&format!(
-            "          <beat-type>{}</beat-type>\n",
-            time_signature.beat_type
-        ));
-        xml.push_str("        </time>\n");
-        xml.push_str("        <clef>\n");
-        xml.push_str("          <sign>G</sign>\n");
-        xml.push_str("          <line>2</line>\n");
-        xml.push_str("        </clef>\n");
-        xml.push_str("      </attributes>\n");
+        writer
+            .write_event(Event::Start(BytesStart::new("attributes")))
+            .unwrap();
+
+        write_text_element(writer, "divisions", "4");
+
+        writer
+            .write_event(Event::Start(BytesStart::new("key")))
+            .unwrap();
+        write_text_element(writer, "fifths", &key_signature.fifths.to_string());
+        writer
+            .write_event(Event::End(BytesEnd::new("key")))
+            .unwrap();
+
+        writer
+            .write_event(Event::Start(BytesStart::new("time")))
+            .unwrap();
+        write_text_element(writer, "beats", &time_signature.beats.to_string());
+        write_text_element(writer, "beat-type", &time_signature.beat_type.to_string());
+        writer
+            .write_event(Event::End(BytesEnd::new("time")))
+            .unwrap();
+
+        writer
+            .write_event(Event::Start(BytesStart::new("clef")))
+            .unwrap();
+        write_text_element(writer, "sign", "G");
+        write_text_element(writer, "line", "2");
+        writer
+            .write_event(Event::End(BytesEnd::new("clef")))
+            .unwrap();
+
+        writer
+            .write_event(Event::End(BytesEnd::new("attributes")))
+            .unwrap();
     }
 
     // Calculate beam states for all elements
     let beam_states = calculate_beam_states(&measure.elements, time_signature);
 
     for (element, beam_state) in measure.elements.iter().zip(beam_states.iter()) {
-        xml.push_str(&element_to_xml(element, *beam_state));
+        write_element(writer, element, *beam_state);
     }
 
-    xml.push_str("    </measure>\n");
-    xml
+    writer
+        .write_event(Event::End(BytesEnd::new("measure")))
+        .unwrap();
 }
 
-fn element_to_xml(element: &Element, beam_state: BeamState) -> String {
+fn write_element<W: std::io::Write>(writer: &mut Writer<W>, element: &Element, beam_state: BeamState) {
     match element {
-        Element::Note(note) => note_to_xml(note, beam_state),
-        Element::Rest { duration, dotted, tuplet } => rest_to_xml(*duration, *dotted, *tuplet),
+        Element::Note(note) => write_note(writer, note, beam_state),
+        Element::Rest {
+            duration,
+            dotted,
+            tuplet,
+        } => write_rest(writer, *duration, *dotted, *tuplet),
     }
 }
 
-fn note_to_xml(note: &Note, beam_state: BeamState) -> String {
-    let mut xml = String::new();
-
-    xml.push_str("      <note>\n");
+fn write_note<W: std::io::Write>(writer: &mut Writer<W>, note: &Note, beam_state: BeamState) {
+    writer
+        .write_event(Event::Start(BytesStart::new("note")))
+        .unwrap();
 
     // Pitch
-    xml.push_str("        <pitch>\n");
-    xml.push_str(&format!("          <step>{}</step>\n", note_name_to_str(note.name)));
+    writer
+        .write_event(Event::Start(BytesStart::new("pitch")))
+        .unwrap();
+    write_text_element(writer, "step", note_name_to_str(note.name));
 
     // Alter for sharps/flats
     match note.accidental {
-        Accidental::Sharp => xml.push_str("          <alter>1</alter>\n"),
-        Accidental::Flat => xml.push_str("          <alter>-1</alter>\n"),
+        Accidental::Sharp => write_text_element(writer, "alter", "1"),
+        Accidental::Flat => write_text_element(writer, "alter", "-1"),
         Accidental::Natural => {}
     }
 
@@ -226,120 +316,187 @@ fn note_to_xml(note: &Note, beam_state: BeamState) -> String {
         Octave::High => 5,
         Octave::DoubleHigh => 6,
     };
-    xml.push_str(&format!("          <octave>{}</octave>\n", octave));
-    xml.push_str("        </pitch>\n");
+    write_text_element(writer, "octave", &octave.to_string());
+    writer
+        .write_event(Event::End(BytesEnd::new("pitch")))
+        .unwrap();
 
     // Duration (in divisions - 4 per quarter note)
-    // For tuplets, we need to calculate the actual played duration
     let divisions = duration_to_divisions_with_tuplet(note.duration, note.dotted, note.tuplet);
-    xml.push_str(&format!("        <duration>{}</duration>\n", divisions));
+    write_text_element(writer, "duration", &divisions.to_string());
 
     // Ties (for playback - must come before <type>)
     if note.tie_start {
-        xml.push_str("        <tie type=\"start\"/>\n");
+        let mut tie = BytesStart::new("tie");
+        tie.push_attribute(("type", "start"));
+        writer.write_event(Event::Empty(tie)).unwrap();
     }
     if note.tie_stop {
-        xml.push_str("        <tie type=\"stop\"/>\n");
+        let mut tie = BytesStart::new("tie");
+        tie.push_attribute(("type", "stop"));
+        writer.write_event(Event::Empty(tie)).unwrap();
     }
 
     // Type
-    xml.push_str(&format!("        <type>{}</type>\n", note.duration.musicxml_type()));
+    write_text_element(writer, "type", note.duration.musicxml_type());
 
     // Dot if dotted
     if note.dotted {
-        xml.push_str("        <dot/>\n");
+        writer
+            .write_event(Event::Empty(BytesStart::new("dot")))
+            .unwrap();
     }
 
     // Time modification for tuplets
     if let Some(tuplet_info) = note.tuplet {
-        xml.push_str("        <time-modification>\n");
-        xml.push_str(&format!("          <actual-notes>{}</actual-notes>\n", tuplet_info.actual_notes));
-        xml.push_str(&format!("          <normal-notes>{}</normal-notes>\n", tuplet_info.normal_notes));
-        xml.push_str("        </time-modification>\n");
+        writer
+            .write_event(Event::Start(BytesStart::new("time-modification")))
+            .unwrap();
+        write_text_element(writer, "actual-notes", &tuplet_info.actual_notes.to_string());
+        write_text_element(writer, "normal-notes", &tuplet_info.normal_notes.to_string());
+        writer
+            .write_event(Event::End(BytesEnd::new("time-modification")))
+            .unwrap();
     }
 
     // Beam (for eighth notes and shorter)
     match beam_state {
-        BeamState::Begin => xml.push_str("        <beam number=\"1\">begin</beam>\n"),
-        BeamState::Continue => xml.push_str("        <beam number=\"1\">continue</beam>\n"),
-        BeamState::End => xml.push_str("        <beam number=\"1\">end</beam>\n"),
+        BeamState::Begin => write_beam(writer, "begin"),
+        BeamState::Continue => write_beam(writer, "continue"),
+        BeamState::End => write_beam(writer, "end"),
         BeamState::None => {}
     }
 
     // Notations (tuplet markers, ties, and accidentals display)
-    let has_tuplet_notation = note.tuplet.map(|t| t.is_start || t.is_stop).unwrap_or(false);
+    let has_tuplet_notation = note
+        .tuplet
+        .map(|t| t.is_start || t.is_stop)
+        .unwrap_or(false);
     let has_tie_notation = note.tie_start || note.tie_stop;
     if has_tuplet_notation || has_tie_notation {
-        xml.push_str("        <notations>\n");
+        writer
+            .write_event(Event::Start(BytesStart::new("notations")))
+            .unwrap();
+
         // Tied notations (for visual display)
         if note.tie_start {
-            xml.push_str("          <tied type=\"start\"/>\n");
+            let mut tied = BytesStart::new("tied");
+            tied.push_attribute(("type", "start"));
+            writer.write_event(Event::Empty(tied)).unwrap();
         }
         if note.tie_stop {
-            xml.push_str("          <tied type=\"stop\"/>\n");
+            let mut tied = BytesStart::new("tied");
+            tied.push_attribute(("type", "stop"));
+            writer.write_event(Event::Empty(tied)).unwrap();
         }
+
         // Tuplet notations
         if let Some(tuplet_info) = note.tuplet {
             if tuplet_info.is_start {
-                xml.push_str("          <tuplet type=\"start\" bracket=\"yes\"/>\n");
+                let mut tuplet = BytesStart::new("tuplet");
+                tuplet.push_attribute(("type", "start"));
+                tuplet.push_attribute(("bracket", "yes"));
+                writer.write_event(Event::Empty(tuplet)).unwrap();
             }
             if tuplet_info.is_stop {
-                xml.push_str("          <tuplet type=\"stop\"/>\n");
+                let mut tuplet = BytesStart::new("tuplet");
+                tuplet.push_attribute(("type", "stop"));
+                writer.write_event(Event::Empty(tuplet)).unwrap();
             }
         }
-        xml.push_str("        </notations>\n");
+
+        writer
+            .write_event(Event::End(BytesEnd::new("notations")))
+            .unwrap();
     }
 
     // Accidental display
     match note.accidental {
-        Accidental::Sharp => xml.push_str("        <accidental>sharp</accidental>\n"),
-        Accidental::Flat => xml.push_str("        <accidental>flat</accidental>\n"),
+        Accidental::Sharp => write_text_element(writer, "accidental", "sharp"),
+        Accidental::Flat => write_text_element(writer, "accidental", "flat"),
         Accidental::Natural => {}
     }
 
-    xml.push_str("      </note>\n");
-    xml
+    writer
+        .write_event(Event::End(BytesEnd::new("note")))
+        .unwrap();
 }
 
-fn rest_to_xml(duration: Duration, dotted: bool, tuplet: Option<TupletInfo>) -> String {
-    let mut xml = String::new();
+fn write_beam<W: std::io::Write>(writer: &mut Writer<W>, beam_type: &str) {
+    let mut beam = BytesStart::new("beam");
+    beam.push_attribute(("number", "1"));
+    writer.write_event(Event::Start(beam)).unwrap();
+    writer
+        .write_event(Event::Text(BytesText::new(beam_type)))
+        .unwrap();
+    writer
+        .write_event(Event::End(BytesEnd::new("beam")))
+        .unwrap();
+}
 
-    xml.push_str("      <note>\n");
-    xml.push_str("        <rest/>\n");
+fn write_rest<W: std::io::Write>(
+    writer: &mut Writer<W>,
+    duration: Duration,
+    dotted: bool,
+    tuplet: Option<TupletInfo>,
+) {
+    writer
+        .write_event(Event::Start(BytesStart::new("note")))
+        .unwrap();
+
+    writer
+        .write_event(Event::Empty(BytesStart::new("rest")))
+        .unwrap();
 
     let divisions = duration_to_divisions_with_tuplet(duration, dotted, tuplet);
-    xml.push_str(&format!("        <duration>{}</duration>\n", divisions));
-    xml.push_str(&format!("        <type>{}</type>\n", duration.musicxml_type()));
+    write_text_element(writer, "duration", &divisions.to_string());
+    write_text_element(writer, "type", duration.musicxml_type());
 
     if dotted {
-        xml.push_str("        <dot/>\n");
+        writer
+            .write_event(Event::Empty(BytesStart::new("dot")))
+            .unwrap();
     }
 
     // Time modification for tuplets
     if let Some(tuplet_info) = tuplet {
-        xml.push_str("        <time-modification>\n");
-        xml.push_str(&format!("          <actual-notes>{}</actual-notes>\n", tuplet_info.actual_notes));
-        xml.push_str(&format!("          <normal-notes>{}</normal-notes>\n", tuplet_info.normal_notes));
-        xml.push_str("        </time-modification>\n");
+        writer
+            .write_event(Event::Start(BytesStart::new("time-modification")))
+            .unwrap();
+        write_text_element(writer, "actual-notes", &tuplet_info.actual_notes.to_string());
+        write_text_element(writer, "normal-notes", &tuplet_info.normal_notes.to_string());
+        writer
+            .write_event(Event::End(BytesEnd::new("time-modification")))
+            .unwrap();
     }
 
     // Notations (tuplet markers)
     let has_tuplet_notation = tuplet.map(|t| t.is_start || t.is_stop).unwrap_or(false);
     if has_tuplet_notation {
-        xml.push_str("        <notations>\n");
+        writer
+            .write_event(Event::Start(BytesStart::new("notations")))
+            .unwrap();
         if let Some(tuplet_info) = tuplet {
             if tuplet_info.is_start {
-                xml.push_str("          <tuplet type=\"start\" bracket=\"yes\"/>\n");
+                let mut tuplet_elem = BytesStart::new("tuplet");
+                tuplet_elem.push_attribute(("type", "start"));
+                tuplet_elem.push_attribute(("bracket", "yes"));
+                writer.write_event(Event::Empty(tuplet_elem)).unwrap();
             }
             if tuplet_info.is_stop {
-                xml.push_str("          <tuplet type=\"stop\"/>\n");
+                let mut tuplet_elem = BytesStart::new("tuplet");
+                tuplet_elem.push_attribute(("type", "stop"));
+                writer.write_event(Event::Empty(tuplet_elem)).unwrap();
             }
         }
-        xml.push_str("        </notations>\n");
+        writer
+            .write_event(Event::End(BytesEnd::new("notations")))
+            .unwrap();
     }
 
-    xml.push_str("      </note>\n");
-    xml
+    writer
+        .write_event(Event::End(BytesEnd::new("note")))
+        .unwrap();
 }
 
 fn note_name_to_str(name: NoteName) -> &'static str {
@@ -374,7 +531,11 @@ fn duration_to_divisions(duration: Duration, dotted: bool) -> u32 {
 
 /// Convert duration to high-resolution divisions (12 per quarter note) for beam calculations
 /// Using 12 divisions allows clean representation of triplets (divisible by 2, 3, 4, 6)
-fn duration_to_divisions_high_res(duration: Duration, dotted: bool, tuplet: Option<TupletInfo>) -> u32 {
+fn duration_to_divisions_high_res(
+    duration: Duration,
+    dotted: bool,
+    tuplet: Option<TupletInfo>,
+) -> u32 {
     let base = match duration {
         Duration::Whole => 48,
         Duration::Half => 24,
@@ -384,11 +545,7 @@ fn duration_to_divisions_high_res(duration: Duration, dotted: bool, tuplet: Opti
         Duration::ThirtySecond => 2, // Approximate, but fine for beaming
     };
 
-    let with_dot = if dotted {
-        base + (base / 2)
-    } else {
-        base
-    };
+    let with_dot = if dotted { base + (base / 2) } else { base };
 
     if let Some(tuplet_info) = tuplet {
         // For tuplets, actual duration = base * (normal_notes / actual_notes)
@@ -400,7 +557,11 @@ fn duration_to_divisions_high_res(duration: Duration, dotted: bool, tuplet: Opti
 }
 
 /// Convert duration to MusicXML divisions, accounting for tuplets
-fn duration_to_divisions_with_tuplet(duration: Duration, dotted: bool, tuplet: Option<TupletInfo>) -> u32 {
+fn duration_to_divisions_with_tuplet(
+    duration: Duration,
+    dotted: bool,
+    tuplet: Option<TupletInfo>,
+) -> u32 {
     let base = duration_to_divisions(duration, dotted);
 
     if let Some(tuplet_info) = tuplet {
@@ -411,14 +572,6 @@ fn duration_to_divisions_with_tuplet(duration: Duration, dotted: bool, tuplet: O
     } else {
         base
     }
-}
-
-fn escape_xml(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
-        .replace('\'', "&apos;")
 }
 
 #[cfg(test)]
