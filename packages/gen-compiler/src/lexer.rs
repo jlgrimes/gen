@@ -25,6 +25,11 @@ pub enum Token {
     Underscore,     // _
     Caret,          // ^
 
+    // Tuplet/grouping
+    LeftBracket,    // [
+    RightBracket,   // ]
+    Number(u8),     // 2, 3, 4, 5, 6, etc.
+
     // Structure
     Newline,
     Whitespace,
@@ -204,6 +209,18 @@ impl<'a> Lexer<'a> {
                 '^' => {
                     self.advance();
                     Token::Caret
+                }
+                '[' => {
+                    self.advance();
+                    Token::LeftBracket
+                }
+                ']' => {
+                    self.advance();
+                    Token::RightBracket
+                }
+                '0'..='9' => {
+                    self.advance();
+                    Token::Number(c.to_digit(10).unwrap() as u8)
                 }
                 '\n' => {
                     self.advance();

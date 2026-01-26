@@ -159,7 +159,7 @@ fn measure_to_xml(
 fn element_to_xml(element: &Element, beam_state: BeamState) -> String {
     match element {
         Element::Note(note) => note_to_xml(note, beam_state),
-        Element::Rest { duration, dotted } => rest_to_xml(*duration, *dotted),
+        Element::Rest { duration, dotted, tuplet } => rest_to_xml(*duration, *dotted, *tuplet),
     }
 }
 
@@ -191,7 +191,8 @@ fn note_to_xml(note: &Note, beam_state: BeamState) -> String {
     xml.push_str("        </pitch>\n");
 
     // Duration (in divisions - 4 per quarter note)
-    let divisions = duration_to_divisions(note.duration, note.dotted);
+    // For tuplets, we need to calculate the actual played duration
+    let divisions = duration_to_divisions_with_tuplet(note.duration, note.dotted, note.tuplet);
     xml.push_str(&format!("        <duration>{}</duration>\n", divisions));
 
     // Type
@@ -202,12 +203,35 @@ fn note_to_xml(note: &Note, beam_state: BeamState) -> String {
         xml.push_str("        <dot/>\n");
     }
 
+    // Time modification for tuplets
+    if let Some(tuplet_info) = note.tuplet {
+        xml.push_str("        <time-modification>\n");
+        xml.push_str(&format!("          <actual-notes>{}</actual-notes>\n", tuplet_info.actual_notes));
+        xml.push_str(&format!("          <normal-notes>{}</normal-notes>\n", tuplet_info.normal_notes));
+        xml.push_str("        </time-modification>\n");
+    }
+
     // Beam (for eighth notes and shorter)
     match beam_state {
         BeamState::Begin => xml.push_str("        <beam number=\"1\">begin</beam>\n"),
         BeamState::Continue => xml.push_str("        <beam number=\"1\">continue</beam>\n"),
         BeamState::End => xml.push_str("        <beam number=\"1\">end</beam>\n"),
         BeamState::None => {}
+    }
+
+    // Notations (tuplet markers and accidentals display)
+    let has_tuplet_notation = note.tuplet.map(|t| t.is_start || t.is_stop).unwrap_or(false);
+    if has_tuplet_notation {
+        xml.push_str("        <notations>\n");
+        if let Some(tuplet_info) = note.tuplet {
+            if tuplet_info.is_start {
+                xml.push_str("          <tuplet type=\"start\" bracket=\"yes\"/>\n");
+            }
+            if tuplet_info.is_stop {
+                xml.push_str("          <tuplet type=\"stop\"/>\n");
+            }
+        }
+        xml.push_str("        </notations>\n");
     }
 
     // Accidental display
@@ -221,18 +245,41 @@ fn note_to_xml(note: &Note, beam_state: BeamState) -> String {
     xml
 }
 
-fn rest_to_xml(duration: Duration, dotted: bool) -> String {
+fn rest_to_xml(duration: Duration, dotted: bool, tuplet: Option<TupletInfo>) -> String {
     let mut xml = String::new();
 
     xml.push_str("      <note>\n");
     xml.push_str("        <rest/>\n");
 
-    let divisions = duration_to_divisions(duration, dotted);
+    let divisions = duration_to_divisions_with_tuplet(duration, dotted, tuplet);
     xml.push_str(&format!("        <duration>{}</duration>\n", divisions));
     xml.push_str(&format!("        <type>{}</type>\n", duration.musicxml_type()));
 
     if dotted {
         xml.push_str("        <dot/>\n");
+    }
+
+    // Time modification for tuplets
+    if let Some(tuplet_info) = tuplet {
+        xml.push_str("        <time-modification>\n");
+        xml.push_str(&format!("          <actual-notes>{}</actual-notes>\n", tuplet_info.actual_notes));
+        xml.push_str(&format!("          <normal-notes>{}</normal-notes>\n", tuplet_info.normal_notes));
+        xml.push_str("        </time-modification>\n");
+    }
+
+    // Notations (tuplet markers)
+    let has_tuplet_notation = tuplet.map(|t| t.is_start || t.is_stop).unwrap_or(false);
+    if has_tuplet_notation {
+        xml.push_str("        <notations>\n");
+        if let Some(tuplet_info) = tuplet {
+            if tuplet_info.is_start {
+                xml.push_str("          <tuplet type=\"start\" bracket=\"yes\"/>\n");
+            }
+            if tuplet_info.is_stop {
+                xml.push_str("          <tuplet type=\"stop\"/>\n");
+            }
+        }
+        xml.push_str("        </notations>\n");
     }
 
     xml.push_str("      </note>\n");
@@ -264,6 +311,20 @@ fn duration_to_divisions(duration: Duration, dotted: bool) -> u32 {
 
     if dotted {
         base + (base / 2)
+    } else {
+        base
+    }
+}
+
+/// Convert duration to MusicXML divisions, accounting for tuplets
+fn duration_to_divisions_with_tuplet(duration: Duration, dotted: bool, tuplet: Option<TupletInfo>) -> u32 {
+    let base = duration_to_divisions(duration, dotted);
+
+    if let Some(tuplet_info) = tuplet {
+        // For tuplets, actual duration = base * (normal_notes / actual_notes)
+        // e.g., triplet = base * 2/3
+        // We need to handle this carefully to avoid integer division issues
+        (base * tuplet_info.normal_notes as u32) / tuplet_info.actual_notes as u32
     } else {
         base
     }
@@ -302,5 +363,20 @@ C"#;
         let xml = to_musicxml(&score);
         assert!(xml.contains("<work-title>Test</work-title>"));
         assert!(xml.contains("composer"));
+    }
+
+    #[test]
+    fn test_musicxml_triplet_output() {
+        let score = parse("[C D E]3").unwrap();
+        let xml = to_musicxml(&score);
+
+        // Should contain time-modification for triplets
+        assert!(xml.contains("<time-modification>"));
+        assert!(xml.contains("<actual-notes>3</actual-notes>"));
+        assert!(xml.contains("<normal-notes>2</normal-notes>"));
+
+        // Should contain tuplet notation markers
+        assert!(xml.contains("<tuplet type=\"start\""));
+        assert!(xml.contains("<tuplet type=\"stop\""));
     }
 }

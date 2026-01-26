@@ -148,6 +148,39 @@ impl Duration {
     }
 }
 
+/// Tuplet information for a note (e.g., triplet = 3 notes in the time of 2)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TupletInfo {
+    pub actual_notes: u8,   // Number of notes played (e.g., 3 for triplet)
+    pub normal_notes: u8,   // Number of notes in normal time (e.g., 2 for triplet)
+    pub is_start: bool,     // First note of the tuplet group
+    pub is_stop: bool,      // Last note of the tuplet group
+}
+
+impl TupletInfo {
+    /// Create tuplet info for a standard tuplet (N notes in the time of the next lower power of 2)
+    pub fn new(actual_notes: u8) -> Self {
+        // Standard tuplet: N notes in the time of (N-1) for odd, or N in N-1 for even
+        // But the common convention is:
+        // 3 (triplet) = 3 in the time of 2
+        // 5 (quintuplet) = 5 in the time of 4
+        // 6 (sextuplet) = 6 in the time of 4
+        // 7 (septuplet) = 7 in the time of 4
+        let normal_notes = if actual_notes <= 4 {
+            actual_notes - 1
+        } else {
+            4 // For 5, 6, 7, etc., they're typically in the time of 4
+        };
+
+        Self {
+            actual_notes,
+            normal_notes,
+            is_start: false,
+            is_stop: false,
+        }
+    }
+}
+
 /// A musical note
 #[derive(Debug, Clone, PartialEq)]
 pub struct Note {
@@ -156,13 +189,14 @@ pub struct Note {
     pub octave: Octave,
     pub duration: Duration,
     pub dotted: bool,
+    pub tuplet: Option<TupletInfo>,
 }
 
 /// An element in a measure: either a note or a rest
 #[derive(Debug, Clone, PartialEq)]
 pub enum Element {
     Note(Note),
-    Rest { duration: Duration, dotted: bool },
+    Rest { duration: Duration, dotted: bool, tuplet: Option<TupletInfo> },
 }
 
 /// A single measure containing musical elements

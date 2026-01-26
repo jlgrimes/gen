@@ -113,6 +113,32 @@ there are two different modifiers to pitch.
 | `^^`                        | 8vaa          |
 *note - these second level modifiers are only to be applied at the note level*
 
+## Group modifiers
+Sometimes, you want to modify more than one note at a time. For this you can use group modifiers. All you need to do is put a group of notes in brackets [], and specify what you'd like to add to the grouping in the beginning.
+
+## Triplets
+
+The first obvious use case of this is triplets, where you want to play three notes as triplets. To make triplets with Gen, it looks like this
+
+`[G_ C E]3 [|oG E]|3 |oG`
+
+Some notes on the triplets
+1. It is notated as a triplet because there is a 3 after the end bracket.
+2. You can specify how fast the triplet is by putting the rhythm modifier after the brackets before the 3. If not specified, it is a quarter note triplet. for example, `[C E G]/3` is an eigth note triplet.
+	1. With this, normally, the notes duration are default to quarter note. However, if in a triplet modifier, the default duration of the note would be whatever the triplet duration specifies, instead of quarter note. In the example shown, C E G would all have duration 8th note triplets since defined in the eighth note triplet rhythm bracket. You can also override rhythm like you see from above.
+
+Other tuplets can be specified using the respective numbers:
+
+| syntax    | meaning                 |
+| --------- | ----------------------- |
+| `[...]2`  | duplet                  |
+| `[...]3`  | triplet                 |
+| `[...]4`  | four-et? (the four one) |
+| `[...]5`  | quintuplet              |
+| `[...]6`  | sextuplet               |
+| and so on |                         |
+
+
 # gen viewer specifics
 the gen viewer will be a tauri app that renders the gen file into real sheet music you can read.
 The viewer will allow you to view by instrument, which transposes the music to given instrumet/key. It changes a new property on the client side called `viewed-pitch`, which is used to transpose the gen notation before it is translated to sheet music. The value of viewed-pitch is whichever note middle C should be mapped to.

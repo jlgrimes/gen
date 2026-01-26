@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { File, Music, Folder, ChevronRight } from "lucide-react";
 
@@ -114,6 +114,21 @@ function FolderItem({
 export function Sidebar({ scores, onScoreSelect, selectedScore }: SidebarProps) {
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(() => new Set());
   const tree = buildFolderTree(scores);
+
+  // Auto-expand folders containing the selected score
+  useEffect(() => {
+    if (selectedScore && selectedScore.includes("/")) {
+      const parts = selectedScore.split("/");
+      const foldersToExpand = parts.slice(0, -1); // All parts except the filename
+      setExpandedFolders((prev) => {
+        const next = new Set(prev);
+        for (const folder of foldersToExpand) {
+          next.add(folder);
+        }
+        return next;
+      });
+    }
+  }, [selectedScore]);
 
   const toggleFolder = (path: string) => {
     setExpandedFolders((prev) => {

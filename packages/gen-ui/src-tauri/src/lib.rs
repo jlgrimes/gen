@@ -1,14 +1,60 @@
 use serde::Serialize;
 use tauri::command;
 
-#[command]
-fn compile_gen(source: &str) -> Result<String, String> {
-    gen::compile(source).map_err(|e| e.to_string())
+#[derive(Serialize)]
+struct CompileError {
+    message: String,
+    line: Option<usize>,
+    column: Option<usize>,
+}
+
+#[derive(Serialize)]
+#[serde(tag = "status")]
+enum CompileResult {
+    #[serde(rename = "success")]
+    Success { xml: String },
+    #[serde(rename = "error")]
+    Error { error: CompileError },
 }
 
 #[command]
-fn compile_gen_unchecked(source: &str) -> Result<String, String> {
-    gen::compile_unchecked(source).map_err(|e| e.to_string())
+fn compile_gen(source: &str) -> CompileResult {
+    match gen::compile(source) {
+        Ok(xml) => CompileResult::Success { xml },
+        Err(e) => CompileResult::Error {
+            error: error_to_compile_error(e),
+        },
+    }
+}
+
+#[command]
+fn compile_gen_unchecked(source: &str) -> CompileResult {
+    match gen::compile_unchecked(source) {
+        Ok(xml) => CompileResult::Success { xml },
+        Err(e) => CompileResult::Error {
+            error: error_to_compile_error(e),
+        },
+    }
+}
+
+fn error_to_compile_error(e: gen::GenError) -> CompileError {
+    match e {
+        gen::GenError::ParseError { line, column, message } => CompileError {
+            message,
+            line: Some(line),
+            column: Some(column),
+        },
+        gen::GenError::MetadataError(msg) => CompileError {
+            message: msg,
+            line: None,
+            column: None,
+        },
+        gen::GenError::SemanticError { measure, message } => CompileError {
+            message: format!("Measure {}: {}", measure, message),
+            line: None,
+            column: None,
+        },
+    }
 }
 
 #[derive(Serialize)]

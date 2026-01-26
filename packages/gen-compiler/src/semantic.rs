@@ -45,17 +45,23 @@ fn calculate_measure_duration(measure: &Measure) -> f64 {
 
 /// Get the duration of an element as a fraction of a whole note
 fn element_duration(element: &Element) -> f64 {
-    let (duration, dotted) = match element {
-        Element::Note(note) => (note.duration, note.dotted),
-        Element::Rest { duration, dotted } => (*duration, *dotted),
+    let (duration, dotted, tuplet) = match element {
+        Element::Note(note) => (note.duration, note.dotted, note.tuplet),
+        Element::Rest { duration, dotted, tuplet } => (*duration, *dotted, *tuplet),
     };
 
-    let base = duration.as_fraction();
+    let mut base = duration.as_fraction();
     if dotted {
-        base * 1.5
-    } else {
-        base
+        base *= 1.5;
     }
+
+    // Apply tuplet ratio: actual duration = base * (normal_notes / actual_notes)
+    // e.g., triplet eighth = eighth * (2/3)
+    if let Some(tuplet_info) = tuplet {
+        base *= tuplet_info.normal_notes as f64 / tuplet_info.actual_notes as f64;
+    }
+
+    base
 }
 
 /// Get the expected duration of a measure based on time signature
@@ -88,6 +94,20 @@ mod tests {
     #[test]
     fn test_valid_with_different_durations() {
         let score = parse("|oC |oC").unwrap(); // 2 half notes
+        assert!(validate(&score).is_ok());
+    }
+
+    #[test]
+    fn test_triplet_duration() {
+        // Quarter note triplet (3 quarters in the time of 2) + 2 regular quarters = 4 beats
+        let score = parse("[C D E]3 C C").unwrap();
+        assert!(validate(&score).is_ok());
+    }
+
+    #[test]
+    fn test_eighth_note_triplet_duration() {
+        // Eighth note triplet (3 eighths in time of 2 eighths = 1 quarter) + 3 regular quarters = 4 beats
+        let score = parse("[C D E]/3 C C C").unwrap();
         assert!(validate(&score).is_ok());
     }
 }

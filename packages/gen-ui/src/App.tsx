@@ -2,12 +2,19 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { OpenSheetMusicDisplay } from "opensheetmusicdisplay";
 import { Sidebar, type ScoreInfo } from "@/components/ui/sidebar";
+import { GenEditor, type CompileError } from "@/components/GenEditor";
+
+interface CompileResult {
+  status: "success" | "error";
+  xml?: string;
+  error?: CompileError;
+}
 
 function App() {
   const [genSource, setGenSource] = useState("");
   const [scores, setScores] = useState<ScoreInfo[]>([]);
   const [selectedScore, setSelectedScore] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<CompileError | null>(null);
   const [isCompiling, setIsCompiling] = useState(false);
   const sheetMusicRef = useRef<HTMLDivElement>(null);
   const osmdRef = useRef<OpenSheetMusicDisplay | null>(null);
@@ -36,21 +43,27 @@ function App() {
 
     setIsCompiling(true);
     try {
-      setError(null);
-      const musicXml = await invoke<string>("compile_gen_unchecked", { source });
+      const result = await invoke<CompileResult>("compile_gen_unchecked", { source });
 
-      if (sheetMusicRef.current) {
+      if (result.status === "error" && result.error) {
+        setError(result.error);
+        return;
+      }
+
+      setError(null);
+
+      if (result.xml && sheetMusicRef.current) {
         if (!osmdRef.current) {
           osmdRef.current = new OpenSheetMusicDisplay(sheetMusicRef.current, {
             autoResize: true,
             backend: "svg",
           });
         }
-        await osmdRef.current.load(musicXml);
+        await osmdRef.current.load(result.xml);
         osmdRef.current.render();
       }
     } catch (e) {
-      setError(String(e));
+      setError({ message: String(e), line: null, column: null });
     } finally {
       setIsCompiling(false);
     }
@@ -94,15 +107,17 @@ function App() {
             {isCompiling && <span className="ml-2 text-xs text-muted-foreground">compiling...</span>}
           </h2>
         </div>
-        <textarea
-          value={genSource}
-          onChange={(e) => setGenSource(e.target.value)}
-          placeholder="Select a score or start typing..."
-          className="flex-1 p-3 font-mono text-sm resize-none focus:outline-none"
-        />
+        <div className="flex-1 overflow-hidden">
+          <GenEditor
+            value={genSource}
+            onChange={setGenSource}
+            error={error}
+            placeholder="Select a score or start typing..."
+          />
+        </div>
         {error && (
           <div className="p-3 text-sm text-red-600 border-t border-border bg-red-50 max-h-24 overflow-auto">
-            {error}
+            {error.line !== null ? `Line ${error.line}: ` : ""}{error.message}
           </div>
         )}
       </div>
