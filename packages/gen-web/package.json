@@ -5,10 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "cd ../gen-wasm && wasm-pack build --target web && cd ../gen-web && tsc && vite build",
+    "build:web": "tsc && vite build",
     "preview": "vite preview"
   },
   "dependencies": {
+    "gen-scores": "workspace:*",
     "gen-ui": "workspace:*",
     "gen-wasm": "file:../gen-wasm/pkg",
     "react": "^18.2.0",

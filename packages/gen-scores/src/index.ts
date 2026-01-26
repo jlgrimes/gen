@@ -1,4 +1,7 @@
-import type { ScoreInfo } from 'gen-ui';
+export interface ScoreInfo {
+  name: string;
+  content: string;
+}
 
 // Import all .gen files using Vite's glob import with ?raw
 const scoreModules = import.meta.glob('../scores/**/*.gen', {
@@ -24,7 +27,4 @@ function parseScores(): ScoreInfo[] {
   return scores;
 }
 
-// Flat list of all scores with folder paths in names
-export function getAllScores(): ScoreInfo[] {
-  return parseScores();
-}
+export const scores = parseScores();

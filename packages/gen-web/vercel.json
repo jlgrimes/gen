@@ -1,5 +1,5 @@
 {
-  "buildCommand": "cd ../gen-wasm && wasm-pack build --target web --out-dir pkg && cd ../gen-web && pnpm install && pnpm build",
-  "outputDirectory": "dist",
-  "installCommand": "cd ../.. && pnpm install"
+  "installCommand": "curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh && cd ../.. && pnpm install",
+  "buildCommand": "cd ../gen-wasm && wasm-pack build --target web && cd ../gen-web && pnpm build:web",
+  "outputDirectory": "dist"
 }
