@@ -1,0 +1,18 @@
+[package]
+name = "gen"
+version = "0.1.0"
+edition = "2021"
+description = "A compiler for the Gen music notation language"
+
+[dependencies]
+thiserror = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_yaml = "0.9"
+
+[[bin]]
+name = "gen"
+path = "src/main.rs"
+
+[lib]
+name = "gen"
+path = "src/lib.rs"
