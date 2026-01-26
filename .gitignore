@@ -1,5 +1,13 @@
 .obsidian/
 
 # Rust
-/target/
+**/target/
 Cargo.lock
+
+# Node/React
+node_modules/
+dist/
+.DS_Store
+
+# Tauri
+packages/gen-ui/src-tauri/target/

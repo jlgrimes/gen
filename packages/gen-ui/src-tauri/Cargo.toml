@@ -1,0 +1,23 @@
+[package]
+name = "gen-ui"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "gen_ui_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Reference the gen-compiler as a path dependency
+gen = { path = "../../gen-compiler" }
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
