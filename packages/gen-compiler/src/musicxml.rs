@@ -3,6 +3,14 @@ use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 use quick_xml::Writer;
 use std::io::Cursor;
 
+/// Clef type for the score
+#[derive(Clone, Copy, Default, PartialEq)]
+pub enum Clef {
+    #[default]
+    Treble,
+    Bass,
+}
+
 /// Transposition info for MusicXML
 #[derive(Clone, Copy, Default)]
 pub struct Transposition {
@@ -26,11 +34,21 @@ impl Transposition {
 
 /// Convert a Score to MusicXML format
 pub fn to_musicxml(score: &Score) -> String {
-    to_musicxml_transposed(score, None)
+    to_musicxml_full(score, None, Clef::Treble, 0)
 }
 
 /// Convert a Score to MusicXML format with optional transposition
 pub fn to_musicxml_transposed(score: &Score, transposition: Option<Transposition>) -> String {
+    to_musicxml_full(score, transposition, Clef::Treble, 0)
+}
+
+/// Convert a Score to MusicXML format with clef and octave shift options
+pub fn to_musicxml_with_options(score: &Score, transposition: Option<Transposition>, clef: Clef, octave_shift: i8) -> String {
+    to_musicxml_full(score, transposition, clef, octave_shift)
+}
+
+/// Convert a Score to MusicXML format with all options
+fn to_musicxml_full(score: &Score, transposition: Option<Transposition>, clef: Clef, octave_shift: i8) -> String {
     let mut writer = Writer::new(Cursor::new(Vec::new()));
 
     // XML declaration
@@ -113,6 +131,8 @@ pub fn to_musicxml_transposed(score: &Score, transposition: Option<Transposition
             &score.metadata.key_signature,
             i == 0,
             transposition,
+            clef,
+            octave_shift,
         );
     }
 
@@ -249,6 +269,8 @@ fn write_measure<W: std::io::Write>(
     key_signature: &KeySignature,
     include_attributes: bool,
     transposition: Option<Transposition>,
+    clef: Clef,
+    octave_shift: i8,
 ) {
     let mut measure_elem = BytesStart::new("measure");
     measure_elem.push_attribute(("number", number.to_string().as_str()));
@@ -287,8 +309,16 @@ fn write_measure<W: std::io::Write>(
         writer
             .write_event(Event::Start(BytesStart::new("clef")))
             .unwrap();
-        write_text_element(writer, "sign", "G");
-        write_text_element(writer, "line", "2");
+        match clef {
+            Clef::Treble => {
+                write_text_element(writer, "sign", "G");
+                write_text_element(writer, "line", "2");
+            }
+            Clef::Bass => {
+                write_text_element(writer, "sign", "F");
+                write_text_element(writer, "line", "4");
+            }
+        }
         writer
             .write_event(Event::End(BytesEnd::new("clef")))
             .unwrap();
@@ -314,7 +344,7 @@ fn write_measure<W: std::io::Write>(
     let beam_states = calculate_beam_states(&measure.elements, time_signature);
 
     for (element, beam_state) in measure.elements.iter().zip(beam_states.iter()) {
-        write_element(writer, element, *beam_state);
+        write_element(writer, element, *beam_state, octave_shift);
     }
 
     // Write right barline (repeat end and/or ending stop)
@@ -414,9 +444,9 @@ fn write_right_barline<W: std::io::Write>(
         .unwrap();
 }
 
-fn write_element<W: std::io::Write>(writer: &mut Writer<W>, element: &Element, beam_state: BeamState) {
+fn write_element<W: std::io::Write>(writer: &mut Writer<W>, element: &Element, beam_state: BeamState, octave_shift: i8) {
     match element {
-        Element::Note(note) => write_note(writer, note, beam_state),
+        Element::Note(note) => write_note(writer, note, beam_state, octave_shift),
         Element::Rest {
             duration,
             dotted,
@@ -425,7 +455,7 @@ fn write_element<W: std::io::Write>(writer: &mut Writer<W>, element: &Element, b
     }
 }
 
-fn write_note<W: std::io::Write>(writer: &mut Writer<W>, note: &Note, beam_state: BeamState) {
+fn write_note<W: std::io::Write>(writer: &mut Writer<W>, note: &Note, beam_state: BeamState, octave_shift: i8) {
     writer
         .write_event(Event::Start(BytesStart::new("note")))
         .unwrap();
@@ -443,14 +473,15 @@ fn write_note<W: std::io::Write>(writer: &mut Writer<W>, note: &Note, beam_state
         Accidental::Natural => {}
     }
 
-    // Octave (middle C = octave 4)
-    let octave = match note.octave {
+    // Octave (middle C = octave 4, adjusted by octave_shift)
+    let base_octave: i8 = match note.octave {
         Octave::DoubleLow => 2,
         Octave::Low => 3,
         Octave::Middle => 4,
         Octave::High => 5,
         Octave::DoubleHigh => 6,
     };
+    let octave = (base_octave + octave_shift).max(0).min(9);
     write_text_element(writer, "octave", &octave.to_string());
     writer
         .write_event(Event::End(BytesEnd::new("pitch")))

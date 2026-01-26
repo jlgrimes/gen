@@ -18,13 +18,69 @@ import {
   ResizableHandle,
 } from '@/components/ui/resizable';
 
-// Transposition options with halftone values for OSMD
+// Clef options
+type Clef = 'treble' | 'bass';
+
+const CLEF_OPTIONS: { label: string; value: Clef }[] = [
+  { label: 'Treble', value: 'treble' },
+  { label: 'Bass', value: 'bass' },
+];
+
+// Transpose key options with halftone values for OSMD
 const TRANSPOSE_OPTIONS = [
-  { label: 'C (Concert Pitch)', halftones: 0 },
-  { label: 'Bb (Clarinet, Tenor Sax, Trumpet)', halftones: 2 }, // Up a major 2nd
-  { label: 'Eb (Alto, Baritone Sax)', halftones: 9 }, // Up a major 6th
-  { label: 'F (French Horn)', halftones: 7 }, // Up a perfect 5th
+  { label: 'C', halftones: 0 },
+  { label: 'Bb', halftones: 2 },
+  { label: 'Eb', halftones: 9 },
+  { label: 'F', halftones: 7 },
 ] as const;
+
+// Octave shift options
+const OCTAVE_OPTIONS = [
+  { label: '-2', value: -2 },
+  { label: '-1', value: -1 },
+  { label: '0', value: 0 },
+  { label: '+1', value: 1 },
+  { label: '+2', value: 2 },
+] as const;
+
+// Instrument presets that set transpose, octave, and clef together
+interface InstrumentPreset {
+  label: string;
+  transposeIndex: number; // Index into TRANSPOSE_OPTIONS
+  octaveShift: number;
+  clef: Clef;
+}
+
+const INSTRUMENT_PRESETS: InstrumentPreset[] = [
+  {
+    label: 'Treble Clef (Concert)',
+    transposeIndex: 0,
+    octaveShift: 0,
+    clef: 'treble',
+  },
+  {
+    label: 'Bass Clef (Concert)',
+    transposeIndex: 0,
+    octaveShift: -1,
+    clef: 'bass',
+  },
+  {
+    label: 'Bb Trumpet/Clarinet/Tenor Sax',
+    transposeIndex: 1,
+    octaveShift: 0,
+    clef: 'treble',
+  },
+  {
+    label: 'Eb Alto/Baritone Sax',
+    transposeIndex: 2,
+    octaveShift: 0,
+    clef: 'treble',
+  },
+  { label: 'F French Horn', transposeIndex: 3, octaveShift: 0, clef: 'treble' },
+];
+
+// Index for "Custom" option (after all presets)
+const CUSTOM_PRESET_INDEX = INSTRUMENT_PRESETS.length;
 
 // Letter size in millimeters
 const LETTER_WIDTH_MM = 215.9; // 8.5 inches
@@ -46,7 +102,10 @@ function App() {
   const [error, setError] = useState<CompileError | null>(null);
   const [isCompiling, setIsCompiling] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [instrumentIndex, setInstrumentIndex] = useState(0); // Index into INSTRUMENT_PRESETS, or CUSTOM_PRESET_INDEX for custom
   const [transposeIndex, setTransposeIndex] = useState(0); // Index into TRANSPOSE_OPTIONS
+  const [octaveShift, setOctaveShift] = useState(0); // Octave shift (-2 to +2)
+  const [clef, setClef] = useState<Clef>('treble'); // Clef selection
   const [zoom, setZoom] = useState(0.75); // Zoom level for sheet music
   const sheetMusicRef = useRef<HTMLDivElement>(null);
   const osmdRef = useRef<OpenSheetMusicDisplay | null>(null);
@@ -75,14 +134,21 @@ function App() {
   }, []);
 
   const compileAndRender = useCallback(
-    async (source: string, halftones: number) => {
+    async (
+      source: string,
+      halftones: number,
+      octave: number,
+      selectedClef: Clef,
+    ) => {
       if (!source.trim()) return;
 
       setIsCompiling(true);
       try {
-        // Compile without transposition - OSMD handles it
-        const result = await invoke<CompileResult>('compile_gen_unchecked', {
+        // Compile with clef parameter
+        const result = await invoke<CompileResult>('compile_gen_with_options', {
           source,
+          clef: selectedClef,
+          octaveShift: octave,
         });
 
         if (result.status === 'error' && result.error) {
@@ -123,13 +189,18 @@ function App() {
     [],
   );
 
-  // Debounced compile on source change or transpose change
+  // Debounced compile on source change or settings change
   useEffect(() => {
     if (debounceRef.current) {
       clearTimeout(debounceRef.current);
     }
     debounceRef.current = setTimeout(() => {
-      compileAndRender(genSource, TRANSPOSE_OPTIONS[transposeIndex].halftones);
+      compileAndRender(
+        genSource,
+        TRANSPOSE_OPTIONS[transposeIndex].halftones,
+        octaveShift,
+        clef,
+      );
     }, 150);
 
     return () => {
@@ -137,7 +208,7 @@ function App() {
         clearTimeout(debounceRef.current);
       }
     };
-  }, [genSource, transposeIndex, compileAndRender]);
+  }, [genSource, transposeIndex, octaveShift, clef, compileAndRender]);
 
   // Update zoom without recompiling
   useEffect(() => {
@@ -250,23 +321,90 @@ function App() {
               </button>
             </div>
             {/* Toolbar */}
-            <div className='px-4 py-2 border-b border-border bg-gray-50 flex items-center gap-6'>
+            <div className='px-4 py-2 border-b border-border bg-gray-50 flex items-center gap-6 flex-wrap'>
+              {/* Instrument preset dropdown */}
               <div className='flex items-center gap-2'>
                 <label className='text-xs font-medium text-gray-600'>
-                  Transpose:
+                  Instrument:
                 </label>
                 <select
-                  value={transposeIndex}
-                  onChange={e => setTransposeIndex(Number(e.target.value))}
+                  value={instrumentIndex}
+                  onChange={e => {
+                    const idx = Number(e.target.value);
+                    setInstrumentIndex(idx);
+                    if (idx < INSTRUMENT_PRESETS.length) {
+                      const preset = INSTRUMENT_PRESETS[idx];
+                      setTransposeIndex(preset.transposeIndex);
+                      setOctaveShift(preset.octaveShift);
+                      setClef(preset.clef);
+                    }
+                  }}
                   className='px-2 py-1 text-xs border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
                 >
-                  {TRANSPOSE_OPTIONS.map((option, index) => (
-                    <option key={option.label} value={index}>
-                      {option.label}
+                  {INSTRUMENT_PRESETS.map((preset, index) => (
+                    <option key={preset.label} value={index}>
+                      {preset.label}
                     </option>
                   ))}
+                  <option value={CUSTOM_PRESET_INDEX}>Custom</option>
                 </select>
               </div>
+
+              {/* Custom controls - only shown when Custom is selected */}
+              {instrumentIndex === CUSTOM_PRESET_INDEX && (
+                <>
+                  <div className='flex items-center gap-2'>
+                    <label className='text-xs font-medium text-gray-600'>
+                      Transpose:
+                    </label>
+                    <select
+                      value={transposeIndex}
+                      onChange={e => setTransposeIndex(Number(e.target.value))}
+                      className='px-2 py-1 text-xs border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
+                    >
+                      {TRANSPOSE_OPTIONS.map((option, index) => (
+                        <option key={option.label} value={index}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className='flex items-center gap-2'>
+                    <label className='text-xs font-medium text-gray-600'>
+                      Octave:
+                    </label>
+                    <select
+                      value={octaveShift}
+                      onChange={e => setOctaveShift(Number(e.target.value))}
+                      className='px-2 py-1 text-xs border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
+                    >
+                      {OCTAVE_OPTIONS.map(option => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className='flex items-center gap-2'>
+                    <label className='text-xs font-medium text-gray-600'>
+                      Clef:
+                    </label>
+                    <select
+                      value={clef}
+                      onChange={e => setClef(e.target.value as Clef)}
+                      className='px-2 py-1 text-xs border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
+                    >
+                      {CLEF_OPTIONS.map(option => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </>
+              )}
+
+              {/* Zoom control - always visible */}
               <div className='flex items-center gap-2'>
                 <label className='text-xs font-medium text-gray-600'>
                   Zoom:
