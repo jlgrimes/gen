@@ -145,6 +145,16 @@ Other tuplets can be specified using the respective numbers:
 | `[...]5`  | quintuplet              |
 | `[...]6`  | sextuplet               |
 | and so on |                         |
+## Slurs
+
+Slurs can be represented with a normal parantheses set around the group you want a slur between ()
+
+for example
+
+`(Bb_ D F) Bb`
+
+slurs the first three notes
+
 # Other notation
 
 ## Repeats

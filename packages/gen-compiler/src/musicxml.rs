@@ -439,13 +439,14 @@ fn write_note<W: std::io::Write>(writer: &mut Writer<W>, note: &Note, beam_state
         BeamState::None => {}
     }
 
-    // Notations (tuplet markers, ties, and accidentals display)
+    // Notations (tuplet markers, ties, slurs, and accidentals display)
     let has_tuplet_notation = note
         .tuplet
         .map(|t| t.is_start || t.is_stop)
         .unwrap_or(false);
     let has_tie_notation = note.tie_start || note.tie_stop;
-    if has_tuplet_notation || has_tie_notation {
+    let has_slur_notation = note.slur_start || note.slur_stop;
+    if has_tuplet_notation || has_tie_notation || has_slur_notation {
         writer
             .write_event(Event::Start(BytesStart::new("notations")))
             .unwrap();
@@ -460,6 +461,20 @@ fn write_note<W: std::io::Write>(writer: &mut Writer<W>, note: &Note, beam_state
             let mut tied = BytesStart::new("tied");
             tied.push_attribute(("type", "stop"));
             writer.write_event(Event::Empty(tied)).unwrap();
+        }
+
+        // Slur notations
+        if note.slur_start {
+            let mut slur = BytesStart::new("slur");
+            slur.push_attribute(("type", "start"));
+            slur.push_attribute(("number", "1"));
+            writer.write_event(Event::Empty(slur)).unwrap();
+        }
+        if note.slur_stop {
+            let mut slur = BytesStart::new("slur");
+            slur.push_attribute(("type", "stop"));
+            slur.push_attribute(("number", "1"));
+            writer.write_event(Event::Empty(slur)).unwrap();
         }
 
         // Tuplet notations
@@ -758,5 +773,57 @@ C"#;
         assert!(xml.contains("<repeat direction=\"forward\"/>"));
         assert!(xml.contains("<barline location=\"right\">"));
         assert!(xml.contains("<repeat direction=\"backward\"/>"));
+    }
+
+    #[test]
+    fn test_musicxml_slur_output() {
+        let score = parse("(C D E)").unwrap();
+        let xml = to_musicxml(&score);
+
+        // Should contain slur start and stop elements
+        assert!(xml.contains("<slur type=\"start\" number=\"1\"/>"));
+        assert!(xml.contains("<slur type=\"stop\" number=\"1\"/>"));
+    }
+
+    #[test]
+    fn test_musicxml_slur_two_notes() {
+        let score = parse("(C D)").unwrap();
+        let xml = to_musicxml(&score);
+
+        // Count slur start/stop occurrences
+        let slur_starts = xml.matches("<slur type=\"start\"").count();
+        let slur_stops = xml.matches("<slur type=\"stop\"").count();
+
+        assert_eq!(slur_starts, 1, "Should have 1 slur start");
+        assert_eq!(slur_stops, 1, "Should have 1 slur stop");
+    }
+
+    #[test]
+    fn test_musicxml_slur_with_ties() {
+        // Slur containing a tie: (C-D E)
+        let score = parse("(C-D E)").unwrap();
+        let xml = to_musicxml(&score);
+
+        // Should contain both slur and tie elements
+        assert!(xml.contains("<slur type=\"start\""));
+        assert!(xml.contains("<slur type=\"stop\""));
+        assert!(xml.contains("<tie type=\"start\"/>"));
+        assert!(xml.contains("<tie type=\"stop\"/>"));
+        assert!(xml.contains("<tied type=\"start\"/>"));
+        assert!(xml.contains("<tied type=\"stop\"/>"));
+    }
+
+    #[test]
+    fn test_musicxml_slur_across_measures() {
+        // Slur spanning two measures
+        let score = parse("(C D E F\nG A B C^)").unwrap();
+        let xml = to_musicxml(&score);
+
+        // Should contain slur start and stop
+        let slur_starts = xml.matches("<slur type=\"start\"").count();
+        let slur_stops = xml.matches("<slur type=\"stop\"").count();
+
+        assert_eq!(slur_starts, 1, "Should have exactly 1 slur start");
+        assert_eq!(slur_stops, 1, "Should have exactly 1 slur stop");
     }
 }

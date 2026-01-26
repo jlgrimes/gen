@@ -33,6 +33,10 @@ pub enum Token {
     // Ties
     Hyphen,         // -
 
+    // Slurs
+    LeftParen,      // (
+    RightParen,     // )
+
     // Repeats
     RepeatStart,    // ||:
     RepeatEnd,      // :||
@@ -277,6 +281,14 @@ impl<'a> Lexer<'a> {
                 '-' => {
                     self.advance();
                     Token::Hyphen
+                }
+                '(' => {
+                    self.advance();
+                    Token::LeftParen
+                }
+                ')' => {
+                    self.advance();
+                    Token::RightParen
                 }
                 '\n' => {
                     self.advance();

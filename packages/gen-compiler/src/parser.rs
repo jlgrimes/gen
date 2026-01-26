@@ -47,8 +47,14 @@ impl Parser {
         self.skip_whitespace_and_newlines();
 
         let mut measures = Vec::new();
+        let mut in_slur = false;  // Track whether we're inside a slur across measures
+        let mut slur_start_marked = false;  // Track if slur_start has been marked on a note
+
         while self.current().is_some() {
-            if let Some(measure) = self.parse_measure()? {
+            let (measure_opt, new_slur_state, new_slur_start_marked) = self.parse_measure(in_slur, slur_start_marked)?;
+            in_slur = new_slur_state;
+            slur_start_marked = new_slur_start_marked;
+            if let Some(measure) = measure_opt {
                 measures.push(measure);
             }
             self.skip_whitespace_and_newlines();
@@ -174,7 +180,9 @@ impl Parser {
     }
 
     /// Parse a single measure (one line)
-    fn parse_measure(&mut self) -> Result<Option<Measure>, GenError> {
+    /// Takes and returns slur state to track slurs across measures
+    /// Returns: (Option<Measure>, in_slur, slur_start_marked)
+    fn parse_measure(&mut self, mut in_slur: bool, mut slur_start_marked: bool) -> Result<(Option<Measure>, bool, bool), GenError> {
         let mut elements = Vec::new();
         let mut next_note_has_tie_stop = false;
         let mut repeat_start = false;
@@ -223,6 +231,26 @@ impl Parser {
                 break;
             }
 
+            // Check for slur start
+            if t.token == Token::LeftParen {
+                self.advance();
+                in_slur = true;
+                slur_start_marked = false;  // Reset so next note gets slur_start
+                continue;
+            }
+
+            // Check for slur end
+            if t.token == Token::RightParen {
+                self.advance();
+                // Mark the last note as slur_stop
+                if let Some(Element::Note(note)) = elements.last_mut() {
+                    note.slur_stop = true;
+                }
+                in_slur = false;
+                slur_start_marked = false;  // Reset for next slur
+                continue;
+            }
+
             // Check for tuplet group starting with [
             if t.token == Token::LeftBracket {
                 let mut tuplet_elements = self.parse_tuplet_group()?;
@@ -233,6 +261,14 @@ impl Parser {
                         note.tie_stop = true;
                     }
                     next_note_has_tie_stop = false;
+                }
+
+                // Mark slur_start on first note if we're in a slur and haven't marked it yet
+                if in_slur && !slur_start_marked {
+                    if let Some(Element::Note(note)) = tuplet_elements.first_mut() {
+                        note.slur_start = true;
+                        slur_start_marked = true;
+                    }
                 }
 
                 // Check if there's a hyphen after the tuplet (tie from last note)
@@ -258,6 +294,14 @@ impl Parser {
                     next_note_has_tie_stop = false;
                 }
 
+                // Mark slur_start on first note if we're in a slur and haven't marked it yet
+                if in_slur && !slur_start_marked {
+                    if let Element::Note(note) = &mut element {
+                        note.slur_start = true;
+                        slur_start_marked = true;
+                    }
+                }
+
                 // Check if there's a hyphen after this note (tie to next note)
                 if let Some(t) = self.current() {
                     if t.token == Token::Hyphen {
@@ -274,9 +318,9 @@ impl Parser {
         }
 
         if elements.is_empty() && !repeat_start && !repeat_end {
-            Ok(None)
+            Ok((None, in_slur, slur_start_marked))
         } else {
-            Ok(Some(Measure { elements, repeat_start, repeat_end }))
+            Ok((Some(Measure { elements, repeat_start, repeat_end }), in_slur, slur_start_marked))
         }
     }
 
@@ -435,6 +479,8 @@ impl Parser {
                     tuplet: tuplet_info,
                     tie_start: false,
                     tie_stop: false,
+                    slur_start: false,
+                    slur_stop: false,
                 }))
             }
             _ => Err(GenError::ParseError {
@@ -610,6 +656,70 @@ C D E"#;
         }
         if let Element::Note(n) = &elements[2] {
             assert_eq!(n.duration, Duration::Whole);
+        }
+    }
+
+    #[test]
+    fn test_dotted_quarter_rest_asterisk_dollar() {
+        // *$ - dotted quarter rest (asterisk before dollar)
+        let score = parse("*$").unwrap();
+        let elements = &score.measures[0].elements;
+
+        assert_eq!(elements.len(), 1);
+
+        if let Element::Rest { duration, dotted, .. } = &elements[0] {
+            assert_eq!(*duration, Duration::Quarter);
+            assert!(*dotted, "Rest should be dotted");
+        } else {
+            panic!("Expected rest");
+        }
+    }
+
+    #[test]
+    fn test_dotted_quarter_rest_pipe_asterisk_dollar() {
+        // |*$ - dotted quarter rest (pipe + asterisk before dollar)
+        let score = parse("|*$").unwrap();
+        let elements = &score.measures[0].elements;
+
+        assert_eq!(elements.len(), 1);
+
+        if let Element::Rest { duration, dotted, .. } = &elements[0] {
+            assert_eq!(*duration, Duration::Quarter);
+            assert!(*dotted, "Rest should be dotted");
+        } else {
+            panic!("Expected rest");
+        }
+    }
+
+    #[test]
+    fn test_dotted_half_rest() {
+        // |o*$ - dotted half rest
+        let score = parse("|o*$").unwrap();
+        let elements = &score.measures[0].elements;
+
+        assert_eq!(elements.len(), 1);
+
+        if let Element::Rest { duration, dotted, .. } = &elements[0] {
+            assert_eq!(*duration, Duration::Half);
+            assert!(*dotted, "Rest should be dotted");
+        } else {
+            panic!("Expected rest");
+        }
+    }
+
+    #[test]
+    fn test_dotted_eighth_rest() {
+        // /*$ - dotted eighth rest
+        let score = parse("/*$").unwrap();
+        let elements = &score.measures[0].elements;
+
+        assert_eq!(elements.len(), 1);
+
+        if let Element::Rest { duration, dotted, .. } = &elements[0] {
+            assert_eq!(*duration, Duration::Eighth);
+            assert!(*dotted, "Rest should be dotted");
+        } else {
+            panic!("Expected rest");
         }
     }
 
@@ -815,5 +925,157 @@ C D E"#;
         // This should fail because :|| is not at the end
         let result = parse("C :|| D E F");
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_simple_slur() {
+        // (C D E) - three slurred notes
+        let score = parse("(C D E)").unwrap();
+        let elements = &score.measures[0].elements;
+
+        assert_eq!(elements.len(), 3);
+
+        // First note should have slur_start
+        if let Element::Note(n) = &elements[0] {
+            assert!(n.slur_start, "First note should have slur_start");
+            assert!(!n.slur_stop, "First note should not have slur_stop");
+        } else {
+            panic!("Expected note");
+        }
+
+        // Middle note should have neither
+        if let Element::Note(n) = &elements[1] {
+            assert!(!n.slur_start, "Middle note should not have slur_start");
+            assert!(!n.slur_stop, "Middle note should not have slur_stop");
+        } else {
+            panic!("Expected note");
+        }
+
+        // Last note should have slur_stop
+        if let Element::Note(n) = &elements[2] {
+            assert!(!n.slur_start, "Last note should not have slur_start");
+            assert!(n.slur_stop, "Last note should have slur_stop");
+        } else {
+            panic!("Expected note");
+        }
+    }
+
+    #[test]
+    fn test_slur_with_accidentals_and_octaves() {
+        // (Bb_ D F) - slur with flat and octave modifier
+        let score = parse("(Bb_ D F)").unwrap();
+        let elements = &score.measures[0].elements;
+
+        assert_eq!(elements.len(), 3);
+
+        if let Element::Note(n) = &elements[0] {
+            assert_eq!(n.name, NoteName::B);
+            assert_eq!(n.accidental, Accidental::Flat);
+            assert_eq!(n.octave, Octave::Low);
+            assert!(n.slur_start);
+        }
+
+        if let Element::Note(n) = &elements[2] {
+            assert_eq!(n.name, NoteName::F);
+            assert!(n.slur_stop);
+        }
+    }
+
+    #[test]
+    fn test_slur_followed_by_regular_note() {
+        // (C D E) F - slur followed by regular note
+        let score = parse("(C D E) F").unwrap();
+        let elements = &score.measures[0].elements;
+
+        assert_eq!(elements.len(), 4);
+
+        // First three notes should be slurred
+        if let Element::Note(n) = &elements[0] {
+            assert!(n.slur_start);
+        }
+        if let Element::Note(n) = &elements[2] {
+            assert!(n.slur_stop);
+        }
+
+        // Fourth note should have no slur
+        if let Element::Note(n) = &elements[3] {
+            assert!(!n.slur_start);
+            assert!(!n.slur_stop);
+        }
+    }
+
+    #[test]
+    fn test_slur_two_notes() {
+        // (C D) - two note slur (first note has both start and stop for rendering)
+        let score = parse("(C D)").unwrap();
+        let elements = &score.measures[0].elements;
+
+        assert_eq!(elements.len(), 2);
+
+        if let Element::Note(n) = &elements[0] {
+            assert!(n.slur_start);
+            assert!(!n.slur_stop);
+        }
+
+        if let Element::Note(n) = &elements[1] {
+            assert!(!n.slur_start);
+            assert!(n.slur_stop);
+        }
+    }
+
+    #[test]
+    fn test_slur_with_rhythm_modifiers() {
+        // (/C /D /E) - eighth note slur
+        let score = parse("(/C /D /E)").unwrap();
+        let elements = &score.measures[0].elements;
+
+        assert_eq!(elements.len(), 3);
+
+        for element in elements {
+            if let Element::Note(n) = element {
+                assert_eq!(n.duration, Duration::Eighth);
+            }
+        }
+
+        if let Element::Note(n) = &elements[0] {
+            assert!(n.slur_start);
+        }
+        if let Element::Note(n) = &elements[2] {
+            assert!(n.slur_stop);
+        }
+    }
+
+    #[test]
+    fn test_slur_across_measures() {
+        // Slur that spans two measures
+        let score = parse("(C D E F\nG A B C^)").unwrap();
+
+        assert_eq!(score.measures.len(), 2);
+        assert_eq!(score.measures[0].elements.len(), 4);
+        assert_eq!(score.measures[1].elements.len(), 4);
+
+        // First note of first measure should have slur_start
+        if let Element::Note(n) = &score.measures[0].elements[0] {
+            assert!(n.slur_start, "First note should have slur_start");
+            assert!(!n.slur_stop);
+        }
+
+        // Last note of first measure should NOT have slur_stop (slur continues)
+        if let Element::Note(n) = &score.measures[0].elements[3] {
+            assert!(!n.slur_start);
+            assert!(!n.slur_stop, "Last note of first measure should not have slur_stop");
+        }
+
+        // First note of second measure should NOT have slur_start (slur continues)
+        if let Element::Note(n) = &score.measures[1].elements[0] {
+            assert!(!n.slur_start, "First note of second measure should not have slur_start");
+            assert!(!n.slur_stop);
+        }
+
+        // Last note of second measure should have slur_stop
+        if let Element::Note(n) = &score.measures[1].elements[3] {
+            assert!(!n.slur_start);
+            assert!(n.slur_stop, "Last note should have slur_stop");
+        }
     }
 }
