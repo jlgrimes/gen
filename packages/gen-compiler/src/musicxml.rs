@@ -5,7 +5,7 @@ use std::io::Cursor;
 
 /// Convert a Score to MusicXML format
 pub fn to_musicxml(score: &Score) -> String {
-    let mut writer = Writer::new_with_indent(Cursor::new(Vec::new()), b' ', 2);
+    let mut writer = Writer::new(Cursor::new(Vec::new()));
 
     // XML declaration
     writer
@@ -16,7 +16,7 @@ pub fn to_musicxml(score: &Score) -> String {
     writer
         .get_mut()
         .get_mut()
-        .extend_from_slice(b"\n<!DOCTYPE score-partwise PUBLIC \"-//Recordare//DTD MusicXML 4.0 Partwise//EN\" \"http://www.musicxml.org/dtds/partwise.dtd\">\n");
+        .extend_from_slice(b"<!DOCTYPE score-partwise PUBLIC \"-//Recordare//DTD MusicXML 4.0 Partwise//EN\" \"http://www.musicxml.org/dtds/partwise.dtd\">");
 
     // Root element
     let mut root = BytesStart::new("score-partwise");
@@ -97,9 +97,7 @@ pub fn to_musicxml(score: &Score) -> String {
         .unwrap();
 
     let result = writer.into_inner().into_inner();
-    let mut xml = String::from_utf8(result).unwrap();
-    xml.push('\n');
-    xml
+    String::from_utf8(result).unwrap()
 }
 
 /// Helper to write a simple text element
