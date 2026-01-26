@@ -139,8 +139,9 @@ function App() {
     if (!svg) return;
 
     // Show save dialog
+    const baseName = selectedScore?.replace(/\.gen$/, '') || 'score';
     const filePath = await save({
-      defaultPath: `${selectedScore || 'score'}.pdf`,
+      defaultPath: `${baseName}.pdf`,
       filters: [{ name: 'PDF', extensions: ['pdf'] }],
     });
 
