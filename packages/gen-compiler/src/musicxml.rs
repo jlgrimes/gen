@@ -3,8 +3,34 @@ use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 use quick_xml::Writer;
 use std::io::Cursor;
 
+/// Transposition info for MusicXML
+#[derive(Clone, Copy, Default)]
+pub struct Transposition {
+    pub diatonic: i8,   // Number of diatonic steps (letter names)
+    pub chromatic: i8,  // Number of chromatic half steps
+}
+
+impl Transposition {
+    /// Create transposition for a given viewed key
+    /// Returns None for concert pitch (C), Some for transposing instruments
+    pub fn for_key(viewed_key: &str) -> Option<Self> {
+        match viewed_key.trim() {
+            "C" => None, // Concert pitch, no transposition needed
+            "Bb" => Some(Transposition { diatonic: 1, chromatic: 2 }),   // Up a major 2nd
+            "Eb" => Some(Transposition { diatonic: 5, chromatic: 9 }),   // Up a major 6th
+            "F" => Some(Transposition { diatonic: 4, chromatic: 5 }),    // Up a perfect 4th (or down a 5th)
+            _ => None,
+        }
+    }
+}
+
 /// Convert a Score to MusicXML format
 pub fn to_musicxml(score: &Score) -> String {
+    to_musicxml_transposed(score, None)
+}
+
+/// Convert a Score to MusicXML format with optional transposition
+pub fn to_musicxml_transposed(score: &Score, transposition: Option<Transposition>) -> String {
     let mut writer = Writer::new(Cursor::new(Vec::new()));
 
     // XML declaration
@@ -86,6 +112,7 @@ pub fn to_musicxml(score: &Score) -> String {
             &score.metadata.time_signature,
             &score.metadata.key_signature,
             i == 0,
+            transposition,
         );
     }
 
@@ -221,6 +248,7 @@ fn write_measure<W: std::io::Write>(
     time_signature: &TimeSignature,
     key_signature: &KeySignature,
     include_attributes: bool,
+    transposition: Option<Transposition>,
 ) {
     let mut measure_elem = BytesStart::new("measure");
     measure_elem.push_attribute(("number", number.to_string().as_str()));
@@ -264,6 +292,18 @@ fn write_measure<W: std::io::Write>(
         writer
             .write_event(Event::End(BytesEnd::new("clef")))
             .unwrap();
+
+        // Transposition for transposing instruments
+        if let Some(trans) = transposition {
+            writer
+                .write_event(Event::Start(BytesStart::new("transpose")))
+                .unwrap();
+            write_text_element(writer, "diatonic", &trans.diatonic.to_string());
+            write_text_element(writer, "chromatic", &trans.chromatic.to_string());
+            writer
+                .write_event(Event::End(BytesEnd::new("transpose")))
+                .unwrap();
+        }
 
         writer
             .write_event(Event::End(BytesEnd::new("attributes")))
@@ -674,6 +714,16 @@ C"#;
         // First note: start only, Second note: both, Third note: stop only
         assert_eq!(tie_starts, 2, "Should have 2 tie starts (C and D)");
         assert_eq!(tie_stops, 2, "Should have 2 tie stops (D and E)");
+    }
+
+    #[test]
+    fn test_transposition_xml() {
+        let score = parse("C D E F").unwrap();
+        let trans = Transposition { diatonic: 1, chromatic: 2 };
+        let xml = to_musicxml_transposed(&score, Some(trans));
+        assert!(xml.contains("<transpose>"));
+        assert!(xml.contains("<diatonic>1</diatonic>"));
+        assert!(xml.contains("<chromatic>2</chromatic>"));
     }
 
     #[test]
