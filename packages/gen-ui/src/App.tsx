@@ -1,31 +1,44 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { OpenSheetMusicDisplay } from "opensheetmusicdisplay";
+import { Sidebar, type ScoreInfo } from "@/components/ui/sidebar";
 
 function App() {
-  const [genSource, setGenSource] = useState(`---
-title: Twinkle Twinkle
-composer: Traditional
-time-signature: 4/4
----
-C C G G
-A A |oG
-F F E E
-D D |oC`);
+  const [genSource, setGenSource] = useState("");
+  const [scores, setScores] = useState<ScoreInfo[]>([]);
+  const [selectedScore, setSelectedScore] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isCompiling, setIsCompiling] = useState(false);
   const sheetMusicRef = useRef<HTMLDivElement>(null);
   const osmdRef = useRef<OpenSheetMusicDisplay | null>(null);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Load embedded scores on mount
+  useEffect(() => {
+    const loadScores = async () => {
+      try {
+        const scoreList = await invoke<ScoreInfo[]>("list_scores");
+        setScores(scoreList);
+        // Auto-select first score if available
+        if (scoreList.length > 0) {
+          setGenSource(scoreList[0].content);
+          setSelectedScore(scoreList[0].name);
+        }
+      } catch (e) {
+        console.error("Failed to load scores:", e);
+      }
+    };
+    loadScores();
+  }, []);
+
   const compileAndRender = useCallback(async (source: string) => {
+    if (!source.trim()) return;
+
     setIsCompiling(true);
     try {
       setError(null);
-      // Call Rust backend to compile Gen to MusicXML (unchecked for real-time)
       const musicXml = await invoke<string>("compile_gen_unchecked", { source });
 
-      // Render MusicXML with OpenSheetMusicDisplay
       if (sheetMusicRef.current) {
         if (!osmdRef.current) {
           osmdRef.current = new OpenSheetMusicDisplay(sheetMusicRef.current, {
@@ -50,7 +63,7 @@ D D |oC`);
     }
     debounceRef.current = setTimeout(() => {
       compileAndRender(genSource);
-    }, 150); // 150ms debounce
+    }, 150);
 
     return () => {
       if (debounceRef.current) {
@@ -59,33 +72,49 @@ D D |oC`);
     };
   }, [genSource, compileAndRender]);
 
+  const handleScoreSelect = (score: ScoreInfo) => {
+    setGenSource(score.content);
+    setSelectedScore(score.name);
+  };
+
   return (
-    <div style={{ display: "flex", height: "100vh" }}>
+    <div className="flex h-screen w-screen">
+      {/* Sidebar */}
+      <Sidebar
+        scores={scores}
+        onScoreSelect={handleScoreSelect}
+        selectedScore={selectedScore}
+      />
+
       {/* Editor Panel */}
-      <div style={{ width: "40%", padding: "1rem", borderRight: "1px solid #ccc", display: "flex", flexDirection: "column" }}>
-        <h2>Gen Editor {isCompiling && <span style={{ fontSize: "0.8rem", color: "#888" }}>compiling...</span>}</h2>
+      <div className="w-80 border-r border-border flex flex-col bg-white">
+        <div className="p-3 border-b border-border flex items-center justify-between">
+          <h2 className="font-semibold text-sm">
+            {selectedScore || "Editor"}
+            {isCompiling && <span className="ml-2 text-xs text-muted-foreground">compiling...</span>}
+          </h2>
+        </div>
         <textarea
           value={genSource}
           onChange={(e) => setGenSource(e.target.value)}
-          style={{
-            flex: 1,
-            fontFamily: "monospace",
-            fontSize: "14px",
-            padding: "0.5rem",
-            resize: "none",
-          }}
+          placeholder="Select a score or start typing..."
+          className="flex-1 p-3 font-mono text-sm resize-none focus:outline-none"
         />
         {error && (
-          <div style={{ color: "red", marginTop: "1rem", whiteSpace: "pre-wrap", maxHeight: "100px", overflow: "auto" }}>
+          <div className="p-3 text-sm text-red-600 border-t border-border bg-red-50 max-h-24 overflow-auto">
             {error}
           </div>
         )}
       </div>
 
       {/* Sheet Music Panel */}
-      <div style={{ flex: 1, padding: "1rem", overflow: "auto" }}>
-        <h2>Sheet Music</h2>
-        <div ref={sheetMusicRef} style={{ width: "100%", minHeight: "400px" }} />
+      <div className="flex-1 flex flex-col bg-white min-w-0">
+        <div className="p-3 border-b border-border">
+          <h2 className="font-semibold text-sm">Sheet Music</h2>
+        </div>
+        <div className="flex-1 overflow-auto p-4">
+          <div ref={sheetMusicRef} className="w-full" />
+        </div>
       </div>
     </div>
   );

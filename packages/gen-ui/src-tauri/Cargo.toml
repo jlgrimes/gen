@@ -15,8 +15,9 @@ tauri = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
-# Reference the gen-compiler as a path dependency
+# Reference the gen-compiler and scores as path dependencies
 gen = { path = "../../gen-compiler" }
+gen-scores = { path = "../../scores" }
 
 [features]
 default = ["custom-protocol"]
