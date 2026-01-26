@@ -69,14 +69,14 @@ Each line is its own measure. If you do a new line, it will do a new measure.
 
 | rhythm modifier | result         |
 | --------------- | -------------- |
-| `[none]` or \|  | Quarter note   |
-| `\`             | Eighth note    |
-| `\\`            | Sixteenth note |
-| `\\\`           | 32nd note      |
-| `\|o`           | Half note      |
+| `[none]` or `|` | Quarter note   |
+| `/`             | Eighth note    |
+| `//`            | Sixteenth note |
+| `///`           | 32nd note      |
+| `|o`            | Half note      |
 | `o`             | Whole note     |
-| `\*`            | dotted eighth  |
-| `\|o*`          | dotted half    |
+| `/*`            | dotted eighth  |
+| `|o*`           | dotted half    |
 
 | note | result          |
 | ---- | --------------- |

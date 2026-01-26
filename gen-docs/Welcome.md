@@ -56,20 +56,20 @@ cargo run -- path/to/score.gen
 ### Note Format
 `[rhythm][note][pitch]`
 
-- **Rhythm**: `\` (eighth), `|o` (half), `o` (whole), etc.
+- **Rhythm**: `/` (eighth), `|o` (half), `o` (whole), etc.
 - **Note**: `A B C D E F G` or `$` for rest
 - **Pitch**: `#` (sharp), `b` (flat), `^` (octave up), `_` (octave down)
 
 ### Example Notes
 ```
 C       # Quarter note C
-\E      # Eighth note E
+/E      # Eighth note E
 |oG     # Half note G
 oC      # Whole note C
 Ab_     # Quarter note Ab, one octave down
 F#^     # Quarter note F#, one octave up
 $       # Quarter rest
-\$      # Eighth rest
+/$      # Eighth rest
 ```
 
 See [Gen Basics](v1/gen%20basics.md) for complete documentation.

@@ -239,7 +239,7 @@ impl Parser {
 
     /// Parse rhythm modifiers and return (Duration, dotted)
     fn parse_rhythm(&mut self) -> Result<(Duration, bool), GenError> {
-        let mut backslash_count = 0;
+        let mut slash_count = 0;
         let mut has_pipe = false;
         let mut has_o = false;
         let mut dotted = false;
@@ -249,9 +249,9 @@ impl Parser {
             let Some(t) = self.current() else { break };
 
             match &t.token {
-                Token::Backslash => {
+                Token::Slash => {
                     self.advance();
-                    backslash_count += 1;
+                    slash_count += 1;
                 }
                 Token::Pipe => {
                     self.advance();
@@ -270,13 +270,13 @@ impl Parser {
         }
 
         // Determine duration based on modifiers
-        let duration = match (backslash_count, has_pipe, has_o) {
+        let duration = match (slash_count, has_pipe, has_o) {
             (0, false, true) => Duration::Whole,        // o
             (0, true, true) => Duration::Half,          // |o
             (0, false, false) | (0, true, false) => Duration::Quarter, // (none) or |
-            (1, false, false) => Duration::Eighth,      // \
-            (2, false, false) => Duration::Sixteenth,   // \\
-            (3, false, false) => Duration::ThirtySecond, // \\\
+            (1, false, false) => Duration::Eighth,      // /
+            (2, false, false) => Duration::Sixteenth,   // //
+            (3, false, false) => Duration::ThirtySecond, // ///
             _ => Duration::Quarter, // fallback
         };
 
@@ -391,7 +391,7 @@ C D E"#;
 
     #[test]
     fn test_rhythm_modifiers() {
-        let score = parse("\\C |oD oE").unwrap();
+        let score = parse("/C |oD oE").unwrap();
         let elements = &score.measures[0].elements;
 
         if let Element::Note(n) = &elements[0] {

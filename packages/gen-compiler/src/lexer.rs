@@ -4,7 +4,7 @@ use crate::error::GenError;
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
     // Rhythm modifiers
-    Backslash,      // \
+    Slash,          // /
     Pipe,           // |
     SmallO,         // o
     Asterisk,       // *
@@ -141,9 +141,9 @@ impl<'a> Lexer<'a> {
             }
 
             let token = match c {
-                '\\' => {
+                '/' => {
                     self.advance();
-                    Token::Backslash
+                    Token::Slash
                 }
                 '|' => {
                     self.advance();
@@ -256,13 +256,13 @@ mod tests {
 
     #[test]
     fn test_rhythm_modifiers() {
-        let mut lexer = Lexer::new("\\C |oD");
+        let mut lexer = Lexer::new("/C |oD");
         let tokens = lexer.tokenize().unwrap();
         let token_types: Vec<_> = tokens.iter().map(|t| &t.token).collect();
         assert_eq!(
             token_types,
             vec![
-                &Token::Backslash,
+                &Token::Slash,
                 &Token::NoteC,
                 &Token::Whitespace,
                 &Token::Pipe,

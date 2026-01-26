@@ -89,9 +89,9 @@ G A B C^
 
 **Rhythm modifiers:**
 - (none) or `|` = quarter note
-- `\` = eighth note
-- `\\` = sixteenth note
-- `\\\` = 32nd note
+- `/` = eighth note
+- `//` = sixteenth note
+- `///` = 32nd note
 - `|o` = half note
 - `o` = whole note
 - `*` suffix = dotted
@@ -106,12 +106,12 @@ G A B C^
 ### Examples
 ```
 C           # C quarter note
-\E          # E eighth note
+/E          # E eighth note
 |oG         # G half note
 /Ab_        # Ab eighth note, one octave down
-\\F#^       # F# sixteenth note, one octave up
+//F#^       # F# sixteenth note, one octave up
 $           # quarter rest
-\$          # eighth rest
+/$          # eighth rest
 ```
 
 ## Building

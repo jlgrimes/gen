@@ -15,7 +15,7 @@ Source Code → Lexer → Tokens → Parser → AST → Semantic Analysis → Mu
 Tokenizes the input source into a stream of tokens.
 
 **Token types:**
-- `RhythmModifier` - Duration indicators (`\`, `\\`, `|o`, `o`, etc.)
+- `RhythmModifier` - Duration indicators (`/`, `//`, `|o`, `o`, etc.)
 - `NoteName` - Note letters (A-G)
 - `Rest` - Rest indicator (`$`)
 - `Accidental` - Sharp (`#`) or flat (`b`)
