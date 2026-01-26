@@ -1,0 +1,5 @@
+{
+  "buildCommand": "cd ../gen-wasm && wasm-pack build --target web --out-dir pkg && cd ../gen-web && pnpm install && pnpm build",
+  "outputDirectory": "dist",
+  "installCommand": "cd ../.. && pnpm install"
+}

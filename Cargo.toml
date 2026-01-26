@@ -1,0 +1,8 @@
+[workspace]
+resolver = "2"
+members = [
+  "packages/gen-compiler",
+  "packages/gen-wasm",
+  "packages/gen-desktop/src-tauri",
+  "packages/scores"
+]

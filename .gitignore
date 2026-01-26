@@ -9,6 +9,30 @@ node_modules/
 dist/
 .DS_Store
 
-# Tauri
-packages/gen-ui/src-tauri/target/
-packages/gen-ui/src-tauri/gen/schemas/
+# WASM build output
+packages/gen-wasm/pkg/
+
+# Tauri generated files
+**/src-tauri/gen/
+
+# IDE
+.idea/
+*.swp
+*.swo
+.vscode/
+
+# OS
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Local env files
+.env
+.env.local
+.env.*.local
+
+# Vercel
+.vercel/

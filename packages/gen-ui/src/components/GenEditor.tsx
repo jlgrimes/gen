@@ -3,12 +3,7 @@ import { EditorState } from "@codemirror/state";
 import { EditorView, keymap, lineNumbers, highlightActiveLine, placeholder as cmPlaceholder } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { lintGutter, setDiagnostics, Diagnostic } from "@codemirror/lint";
-
-export interface CompileError {
-  message: string;
-  line: number | null;
-  column: number | null;
-}
+import type { CompileError } from "../types";
 
 interface GenEditorProps {
   value: string;

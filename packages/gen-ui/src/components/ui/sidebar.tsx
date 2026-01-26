@@ -1,11 +1,7 @@
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { File, Music, Folder, ChevronRight, PanelLeftClose, PanelLeft } from "lucide-react";
-
-interface ScoreInfo {
-  name: string;
-  content: string;
-}
+import type { ScoreInfo } from "../../types";
 
 interface SidebarProps {
   scores: ScoreInfo[];
@@ -216,4 +212,3 @@ export function Sidebar({ scores, onScoreSelect, selectedScore, isCollapsed, onT
   );
 }
 
-export type { ScoreInfo };

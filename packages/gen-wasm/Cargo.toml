@@ -1,0 +1,20 @@
+[package]
+name = "gen-wasm"
+version = "0.1.0"
+edition = "2021"
+description = "WebAssembly bindings for the Gen music notation compiler"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+gen = { path = "../gen-compiler" }
+gen-scores = { path = "../scores" }
+wasm-bindgen = "=0.2.99"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde-wasm-bindgen = "0.6"
+
+[profile.release]
+opt-level = "z"
+lto = true

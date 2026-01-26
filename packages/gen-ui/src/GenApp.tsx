@@ -1,7 +1,4 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { invoke } from '@tauri-apps/api/core';
-import { save } from '@tauri-apps/plugin-dialog';
-import { writeFile } from '@tauri-apps/plugin-fs';
 import {
   OpenSheetMusicDisplay,
   TransposeCalculator,
@@ -10,13 +7,19 @@ import {
 import { jsPDF } from 'jspdf';
 import 'svg2pdf.js';
 import { Download } from 'lucide-react';
-import { Sidebar, type ScoreInfo } from '@/components/ui/sidebar';
-import { GenEditor, type CompileError } from '@/components/GenEditor';
+import { Sidebar } from '@/components/ui/sidebar';
+import { GenEditor } from '@/components/GenEditor';
 import {
   ResizablePanelGroup,
   ResizablePanel,
   ResizableHandle,
 } from '@/components/ui/resizable';
+import type {
+  CompilerAdapter,
+  FileAdapter,
+  ScoreInfo,
+  CompileError,
+} from './types';
 
 // Clef options
 type Clef = 'treble' | 'bass';
@@ -89,13 +92,12 @@ const LETTER_HEIGHT_MM = 279.4; // 11 inches
 // Initialize OSMD's transpose calculator
 MusicSheetCalculator.transposeCalculator = new TransposeCalculator();
 
-interface CompileResult {
-  status: 'success' | 'error';
-  xml?: string;
-  error?: CompileError;
+export interface GenAppProps {
+  compiler: CompilerAdapter;
+  files: FileAdapter;
 }
 
-function App() {
+export function GenApp({ compiler, files }: GenAppProps) {
   const [genSource, setGenSource] = useState('');
   const [scores, setScores] = useState<ScoreInfo[]>([]);
   const [selectedScore, setSelectedScore] = useState<string | null>(null);
@@ -119,7 +121,7 @@ function App() {
   useEffect(() => {
     const loadScores = async () => {
       try {
-        const scoreList = await invoke<ScoreInfo[]>('list_scores');
+        const scoreList = await compiler.listScores();
         setScores(scoreList);
         // Auto-select first score if available
         if (scoreList.length > 0) {
@@ -131,7 +133,7 @@ function App() {
       }
     };
     loadScores();
-  }, []);
+  }, [compiler]);
 
   const compileAndRender = useCallback(
     async (
@@ -145,8 +147,7 @@ function App() {
       setIsCompiling(true);
       try {
         // Compile with clef parameter
-        const result = await invoke<CompileResult>('compile_gen_with_options', {
-          source,
+        const result = await compiler.compile(source, {
           clef: selectedClef,
           octaveShift: octave,
         });
@@ -186,7 +187,7 @@ function App() {
         setIsCompiling(false);
       }
     },
-    [],
+    [compiler, zoom],
   );
 
   // Debounced compile on source change or settings change
@@ -227,14 +228,7 @@ function App() {
     const svgs = sheetMusicRef.current?.querySelectorAll('svg');
     if (!svgs || svgs.length === 0) return;
 
-    // Show save dialog
     const baseName = selectedScore?.replace(/\.gen$/, '') || 'score';
-    const filePath = await save({
-      defaultPath: `${baseName}.pdf`,
-      filters: [{ name: 'PDF', extensions: ['pdf'] }],
-    });
-
-    if (!filePath) return; // User cancelled
 
     // Create PDF with letter size in mm (like OSMD demo does)
     const pdf = new jsPDF({
@@ -256,10 +250,10 @@ function App() {
       });
     }
 
-    // Get PDF as array buffer and write to file
+    // Get PDF as array buffer and save via adapter
     const pdfData = pdf.output('arraybuffer');
-    await writeFile(filePath, new Uint8Array(pdfData));
-  }, [selectedScore]);
+    await files.savePdf(new Uint8Array(pdfData), `${baseName}.pdf`);
+  }, [selectedScore, files]);
 
   return (
     <div className='flex h-screen w-screen'>
@@ -432,5 +426,3 @@ function App() {
     </div>
   );
 }
-
-export default App;
