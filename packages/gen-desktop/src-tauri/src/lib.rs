@@ -67,31 +67,6 @@ fn error_to_compile_error(e: gen::GenError) -> CompileError {
     }
 }
 
-#[derive(Serialize)]
-struct ScoreInfo {
-    name: String,
-    content: String,
-}
-
-#[command]
-fn list_scores() -> Vec<ScoreInfo> {
-    gen_scores::get_all_scores()
-        .into_iter()
-        .map(|s| ScoreInfo {
-            name: s.name.to_string(),
-            content: s.content.to_string(),
-        })
-        .collect()
-}
-
-#[command]
-fn get_score(name: &str) -> Option<ScoreInfo> {
-    gen_scores::get_score(name).map(|s| ScoreInfo {
-        name: s.name.to_string(),
-        content: s.content.to_string(),
-    })
-}
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -101,8 +76,6 @@ pub fn run() {
             compile_gen,
             compile_gen_unchecked,
             compile_gen_with_options,
-            list_scores,
-            get_score
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

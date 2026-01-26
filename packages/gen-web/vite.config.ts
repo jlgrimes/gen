@@ -17,6 +17,9 @@ export default defineConfig({
       '@': path.resolve(__dirname, '../gen-ui/src'),
     },
   },
+  optimizeDeps: {
+    exclude: ['gen-wasm'],
+  },
   build: {
     target: 'esnext',
   },

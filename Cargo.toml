@@ -4,5 +4,4 @@ members = [
   "packages/gen-compiler",
   "packages/gen-wasm",
   "packages/gen-desktop/src-tauri",
-  "packages/scores"
 ]
