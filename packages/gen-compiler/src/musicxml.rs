@@ -34,7 +34,7 @@ pub fn to_musicxml(score: &Score) -> String {
     // Part list
     xml.push_str("  <part-list>\n");
     xml.push_str("    <score-part id=\"P1\">\n");
-    xml.push_str("      <part-name>Music</part-name>\n");
+    xml.push_str("      <part-name print-object=\"no\"></part-name>\n");
     xml.push_str("    </score-part>\n");
     xml.push_str("  </part-list>\n");
 
