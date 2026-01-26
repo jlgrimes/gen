@@ -203,12 +203,20 @@ pub enum Element {
     Rest { duration: Duration, dotted: bool, tuplet: Option<TupletInfo> },
 }
 
+/// Ending type for volta brackets (1st/2nd endings)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Ending {
+    First,   // 1st:
+    Second,  // 2nd:
+}
+
 /// A single measure containing musical elements
 #[derive(Debug, Clone)]
 pub struct Measure {
     pub elements: Vec<Element>,
-    pub repeat_start: bool,  // ||: at the beginning of the measure
-    pub repeat_end: bool,    // :|| at the end of the measure
+    pub repeat_start: bool,   // ||: at the beginning of the measure
+    pub repeat_end: bool,     // :|| at the end of the measure
+    pub ending: Option<Ending>, // 1st: or 2nd: volta bracket
 }
 
 /// A complete musical score

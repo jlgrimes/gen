@@ -7,6 +7,7 @@ pub fn validate(score: &Score) -> Result<(), GenError> {
         validate_measure(measure, &score.metadata.time_signature, i + 1)?;
     }
     validate_repeats(score)?;
+    validate_endings(score)?;
     Ok(())
 }
 
@@ -45,6 +46,53 @@ fn validate_repeats(score: &Score) -> Result<(), GenError> {
             measure: start_measure,
             message: "Repeat start (||:) at this measure has no matching repeat end (:||)".to_string(),
         });
+    }
+
+    Ok(())
+}
+
+/// Validate that first/second endings are properly used
+fn validate_endings(score: &Score) -> Result<(), GenError> {
+    for (i, measure) in score.measures.iter().enumerate() {
+        let measure_number = i + 1;
+
+        match measure.ending {
+            Some(Ending::First) => {
+                // 1st ending must have a repeat end
+                if !measure.repeat_end {
+                    return Err(GenError::SemanticError {
+                        measure: measure_number,
+                        message: "First ending (1st:) must end with a repeat sign (:||)".to_string(),
+                    });
+                }
+            }
+            Some(Ending::Second) => {
+                // 2nd ending cannot have a repeat end
+                if measure.repeat_end {
+                    return Err(GenError::SemanticError {
+                        measure: measure_number,
+                        message: "Second ending (2nd:) cannot have a repeat sign (:||)".to_string(),
+                    });
+                }
+
+                // 2nd ending must immediately follow a 1st ending
+                if i == 0 {
+                    return Err(GenError::SemanticError {
+                        measure: measure_number,
+                        message: "Second ending (2nd:) must immediately follow a first ending (1st:)".to_string(),
+                    });
+                }
+
+                let prev_measure = &score.measures[i - 1];
+                if prev_measure.ending != Some(Ending::First) {
+                    return Err(GenError::SemanticError {
+                        measure: measure_number,
+                        message: "Second ending (2nd:) must immediately follow a first ending (1st:)".to_string(),
+                    });
+                }
+            }
+            None => {}
+        }
     }
 
     Ok(())
@@ -194,5 +242,49 @@ mod tests {
         let score = parse("||: C C C C\n||: D D D D :||").unwrap();
         let result = validate(&score);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_valid_endings() {
+        // Valid: 1st ending with repeat, followed by 2nd ending without repeat
+        let score = parse("||: C C C C\n1st: D D D D :||\n2nd: E E E E").unwrap();
+        assert!(validate(&score).is_ok());
+    }
+
+    #[test]
+    fn test_first_ending_without_repeat() {
+        // Invalid: 1st ending must have repeat end
+        let score = parse("1st: C C C C").unwrap();
+        let result = validate(&score);
+        assert!(result.is_err());
+        if let Err(GenError::SemanticError { message, .. }) = result {
+            assert!(message.contains("must end with a repeat sign"));
+        }
+    }
+
+    #[test]
+    fn test_second_ending_with_repeat() {
+        // Invalid: 2nd ending cannot have repeat end
+        // Start a new repeat after 2nd ending to make the :|| valid from repeat perspective,
+        // but ending validation should still catch it
+        let score = parse("||: C C C C\n1st: D D D D :||\n2nd: ||: E E E E :||").unwrap();
+        let result = validate(&score);
+        assert!(result.is_err(), "Should fail validation but got: {:?}", result);
+        if let Err(GenError::SemanticError { message, .. }) = &result {
+            assert!(message.contains("cannot have a repeat sign"), "Expected 'cannot have a repeat sign' but got: {}", message);
+        } else {
+            panic!("Expected SemanticError but got: {:?}", result);
+        }
+    }
+
+    #[test]
+    fn test_second_ending_without_first() {
+        // Invalid: 2nd ending must follow 1st ending
+        let score = parse("C C C C\n2nd: D D D D").unwrap();
+        let result = validate(&score);
+        assert!(result.is_err());
+        if let Err(GenError::SemanticError { message, .. }) = result {
+            assert!(message.contains("must immediately follow a first ending"));
+        }
     }
 }

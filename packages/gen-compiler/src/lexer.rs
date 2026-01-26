@@ -41,6 +41,10 @@ pub enum Token {
     RepeatStart,    // ||:
     RepeatEnd,      // :||
 
+    // Endings
+    FirstEnding,    // 1st:
+    SecondEnding,   // 2nd:
+
     // Structure
     Newline,
     Whitespace,
@@ -100,6 +104,16 @@ impl<'a> Lexer<'a> {
         remaining.starts_with("---")
     }
 
+    fn check_first_ending(&self) -> bool {
+        let remaining = &self.input[self.position..];
+        remaining.starts_with("1st:")
+    }
+
+    fn check_second_ending(&self) -> bool {
+        let remaining = &self.input[self.position..];
+        remaining.starts_with("2nd:")
+    }
+
     fn consume_metadata_content(&mut self) -> String {
         let start = self.position;
 
@@ -153,6 +167,35 @@ impl<'a> Lexer<'a> {
                         });
                     }
                 }
+                continue;
+            }
+
+            // Check for first/second endings (only after metadata is complete)
+            if self.check_first_ending() {
+                // Consume "1st:"
+                self.advance(); // 1
+                self.advance(); // s
+                self.advance(); // t
+                self.advance(); // :
+                tokens.push(LocatedToken {
+                    token: Token::FirstEnding,
+                    line,
+                    column,
+                });
+                continue;
+            }
+
+            if self.check_second_ending() {
+                // Consume "2nd:"
+                self.advance(); // 2
+                self.advance(); // n
+                self.advance(); // d
+                self.advance(); // :
+                tokens.push(LocatedToken {
+                    token: Token::SecondEnding,
+                    line,
+                    column,
+                });
                 continue;
             }
 
@@ -406,6 +449,42 @@ mod tests {
                 &Token::NoteD,
                 &Token::Whitespace,
                 &Token::RepeatEnd,
+            ]
+        );
+    }
+
+    #[test]
+    fn test_first_ending() {
+        let mut lexer = Lexer::new("1st: C D :||");
+        let tokens = lexer.tokenize().unwrap();
+        let token_types: Vec<_> = tokens.iter().map(|t| &t.token).collect();
+        assert_eq!(
+            token_types,
+            vec![
+                &Token::FirstEnding,
+                &Token::Whitespace,
+                &Token::NoteC,
+                &Token::Whitespace,
+                &Token::NoteD,
+                &Token::Whitespace,
+                &Token::RepeatEnd,
+            ]
+        );
+    }
+
+    #[test]
+    fn test_second_ending() {
+        let mut lexer = Lexer::new("2nd: C D");
+        let tokens = lexer.tokenize().unwrap();
+        let token_types: Vec<_> = tokens.iter().map(|t| &t.token).collect();
+        assert_eq!(
+            token_types,
+            vec![
+                &Token::SecondEnding,
+                &Token::Whitespace,
+                &Token::NoteC,
+                &Token::Whitespace,
+                &Token::NoteD,
             ]
         );
     }

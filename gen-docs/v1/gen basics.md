@@ -165,6 +165,19 @@ a compiler error will be thrown if:
 - repeat end is not at end of measure
 - repeat start does not have a matching repeat end
 
+## First/second endings
+
+since these are measure level modifiers, they go at the beginning of the measure to indicate first or second ending respectively.
+this is how you use it
+```
+oF
+1st: Eb $ *Bb /Ab :||
+2nd: Eb $ |oEb
+```
+
+some requirements
+1. "1st" modifier is required to have a repeat sign at the end of it. if not, throw error
+2. "2nd time" modifier cannot have a repeat sign at the end of it. Also, must immediately proceed a line with "1st" AND a repeat. else, throw error
 # gen viewer specifics
 the gen viewer will be a tauri app that renders the gen file into real sheet music you can read.
 The viewer will allow you to view by instrument, which transposes the music to given instrumet/key. It changes a new property on the client side called `viewed-pitch`, which is used to transpose the gen notation before it is translated to sheet music. The value of viewed-pitch is whichever note middle C should be mapped to.

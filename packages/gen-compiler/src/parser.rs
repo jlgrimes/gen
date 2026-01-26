@@ -187,6 +187,27 @@ impl Parser {
         let mut next_note_has_tie_stop = false;
         let mut repeat_start = false;
         let mut repeat_end = false;
+        let mut ending: Option<Ending> = None;
+
+        // Check for first/second ending at beginning of measure
+        if let Some(t) = self.current() {
+            if t.token == Token::FirstEnding {
+                ending = Some(Ending::First);
+                self.advance();
+            } else if t.token == Token::SecondEnding {
+                ending = Some(Ending::Second);
+                self.advance();
+            }
+        }
+
+        // Skip whitespace after ending marker
+        while let Some(t) = self.current() {
+            if t.token == Token::Whitespace {
+                self.advance();
+            } else {
+                break;
+            }
+        }
 
         // Check for repeat start at beginning of measure (||:)
         if let Some(t) = self.current() {
@@ -317,10 +338,10 @@ impl Parser {
             }
         }
 
-        if elements.is_empty() && !repeat_start && !repeat_end {
+        if elements.is_empty() && !repeat_start && !repeat_end && ending.is_none() {
             Ok((None, in_slur, slur_start_marked))
         } else {
-            Ok((Some(Measure { elements, repeat_start, repeat_end }), in_slur, slur_start_marked))
+            Ok((Some(Measure { elements, repeat_start, repeat_end, ending }), in_slur, slur_start_marked))
         }
     }
 
@@ -1077,5 +1098,47 @@ C D E"#;
             assert!(!n.slur_start);
             assert!(n.slur_stop, "Last note should have slur_stop");
         }
+    }
+
+    #[test]
+    fn test_first_ending_parsing() {
+        // 1st: measure with repeat end
+        let score = parse("1st: C C C C :||").unwrap();
+
+        assert_eq!(score.measures.len(), 1);
+        assert_eq!(score.measures[0].ending, Some(Ending::First));
+        assert!(score.measures[0].repeat_end);
+        assert_eq!(score.measures[0].elements.len(), 4);
+    }
+
+    #[test]
+    fn test_second_ending_parsing() {
+        // 2nd: measure without repeat
+        let score = parse("2nd: C C C C").unwrap();
+
+        assert_eq!(score.measures.len(), 1);
+        assert_eq!(score.measures[0].ending, Some(Ending::Second));
+        assert!(!score.measures[0].repeat_end);
+        assert_eq!(score.measures[0].elements.len(), 4);
+    }
+
+    #[test]
+    fn test_first_and_second_endings() {
+        // Full volta bracket pattern
+        let source = "oF\n1st: C C C C :||\n2nd: D D D D";
+        let score = parse(source).unwrap();
+
+        assert_eq!(score.measures.len(), 3);
+
+        // First measure - no ending
+        assert_eq!(score.measures[0].ending, None);
+
+        // Second measure - first ending with repeat
+        assert_eq!(score.measures[1].ending, Some(Ending::First));
+        assert!(score.measures[1].repeat_end);
+
+        // Third measure - second ending without repeat
+        assert_eq!(score.measures[2].ending, Some(Ending::Second));
+        assert!(!score.measures[2].repeat_end);
     }
 }

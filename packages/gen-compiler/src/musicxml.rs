@@ -254,9 +254,9 @@ fn write_measure<W: std::io::Write>(
     measure_elem.push_attribute(("number", number.to_string().as_str()));
     writer.write_event(Event::Start(measure_elem)).unwrap();
 
-    // Write repeat start barline if present (before attributes and notes)
-    if measure.repeat_start {
-        write_barline(writer, "left", "heavy-light", Some("forward"));
+    // Write left barline (repeat start and/or ending start)
+    if measure.repeat_start || measure.ending.is_some() {
+        write_left_barline(writer, measure.repeat_start, measure.ending);
     }
 
     // Include time signature, key signature, and clef on first measure
@@ -317,9 +317,9 @@ fn write_measure<W: std::io::Write>(
         write_element(writer, element, *beam_state);
     }
 
-    // Write repeat end barline if present (after notes)
-    if measure.repeat_end {
-        write_barline(writer, "right", "light-heavy", Some("backward"));
+    // Write right barline (repeat end and/or ending stop)
+    if measure.repeat_end || measure.ending.is_some() {
+        write_right_barline(writer, measure.repeat_end, measure.ending);
     }
 
     writer
@@ -327,22 +327,85 @@ fn write_measure<W: std::io::Write>(
         .unwrap();
 }
 
-/// Write a barline element with optional repeat
-fn write_barline<W: std::io::Write>(
+/// Write a left barline element with optional repeat and ending
+fn write_left_barline<W: std::io::Write>(
     writer: &mut Writer<W>,
-    location: &str,
-    bar_style: &str,
-    repeat_direction: Option<&str>,
+    repeat_start: bool,
+    ending: Option<Ending>,
 ) {
     let mut barline = BytesStart::new("barline");
-    barline.push_attribute(("location", location));
+    barline.push_attribute(("location", "left"));
     writer.write_event(Event::Start(barline)).unwrap();
 
-    write_text_element(writer, "bar-style", bar_style);
+    // Bar style: heavy-light for repeat start, otherwise regular
+    if repeat_start {
+        write_text_element(writer, "bar-style", "heavy-light");
+    }
 
-    if let Some(direction) = repeat_direction {
+    // Ending element for volta brackets
+    if let Some(ending_type) = ending {
+        let mut ending_elem = BytesStart::new("ending");
+        let number = match ending_type {
+            Ending::First => "1",
+            Ending::Second => "2",
+        };
+        ending_elem.push_attribute(("number", number));
+        ending_elem.push_attribute(("type", "start"));
+        writer.write_event(Event::Start(ending_elem)).unwrap();
+        // Text content for the ending bracket
+        let text = match ending_type {
+            Ending::First => "1.",
+            Ending::Second => "2.",
+        };
+        writer.write_event(Event::Text(BytesText::new(text))).unwrap();
+        writer.write_event(Event::End(BytesEnd::new("ending"))).unwrap();
+    }
+
+    // Repeat direction
+    if repeat_start {
         let mut repeat = BytesStart::new("repeat");
-        repeat.push_attribute(("direction", direction));
+        repeat.push_attribute(("direction", "forward"));
+        writer.write_event(Event::Empty(repeat)).unwrap();
+    }
+
+    writer
+        .write_event(Event::End(BytesEnd::new("barline")))
+        .unwrap();
+}
+
+/// Write a right barline element with optional repeat and ending
+fn write_right_barline<W: std::io::Write>(
+    writer: &mut Writer<W>,
+    repeat_end: bool,
+    ending: Option<Ending>,
+) {
+    let mut barline = BytesStart::new("barline");
+    barline.push_attribute(("location", "right"));
+    writer.write_event(Event::Start(barline)).unwrap();
+
+    // Bar style: light-heavy for repeat end, otherwise regular
+    if repeat_end {
+        write_text_element(writer, "bar-style", "light-heavy");
+    }
+
+    // Ending element - for first ending, type is "stop" at the right barline
+    // For second ending, we also use "stop" to close it
+    if let Some(ending_type) = ending {
+        let mut ending_elem = BytesStart::new("ending");
+        let number = match ending_type {
+            Ending::First => "1",
+            Ending::Second => "2",
+        };
+        ending_elem.push_attribute(("number", number));
+        // First ending with repeat uses "stop", second ending uses "stop" too
+        ending_elem.push_attribute(("type", "stop"));
+        writer.write_event(Event::Empty(ending_elem)).unwrap();
+    }
+
+    // Repeat direction
+    if repeat_end {
+        let mut repeat = BytesStart::new("repeat");
+        repeat.push_attribute(("direction", "backward"));
         writer.write_event(Event::Empty(repeat)).unwrap();
     }
 
@@ -825,5 +888,37 @@ C"#;
 
         assert_eq!(slur_starts, 1, "Should have exactly 1 slur start");
         assert_eq!(slur_stops, 1, "Should have exactly 1 slur stop");
+    }
+
+    #[test]
+    fn test_musicxml_first_ending() {
+        let score = parse("1st: C C C C :||").unwrap();
+        let xml = to_musicxml(&score);
+
+        // Should contain ending element with number 1
+        assert!(xml.contains("<ending number=\"1\" type=\"start\">"));
+        assert!(xml.contains("1."));
+        assert!(xml.contains("<ending number=\"1\" type=\"stop\"/>"));
+    }
+
+    #[test]
+    fn test_musicxml_second_ending() {
+        let score = parse("2nd: C C C C").unwrap();
+        let xml = to_musicxml(&score);
+
+        // Should contain ending element with number 2
+        assert!(xml.contains("<ending number=\"2\" type=\"start\">"));
+        assert!(xml.contains("2."));
+        assert!(xml.contains("<ending number=\"2\" type=\"stop\"/>"));
+    }
+
+    #[test]
+    fn test_musicxml_first_and_second_endings() {
+        let score = parse("||: C C C C\n1st: D D D D :||\n2nd: E E E E").unwrap();
+        let xml = to_musicxml(&score);
+
+        // Should contain both ending types
+        assert!(xml.contains("<ending number=\"1\" type=\"start\">"));
+        assert!(xml.contains("<ending number=\"2\" type=\"start\">"));
     }
 }
