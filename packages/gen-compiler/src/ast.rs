@@ -23,12 +23,46 @@ pub struct Pitch {
     pub octave_offset: i8, // ^ = +1, ^^ = +2, _ = -1, __ = -2
 }
 
+/// Key signature (number of sharps/flats)
+/// Positive = sharps, Negative = flats, Zero = C major / A minor
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct KeySignature {
+    pub fifths: i8, // -7 to +7 (flats to sharps)
+}
+
+impl KeySignature {
+    /// Parse a key signature string like "G", "D", "F", "Bb", "Eb", etc.
+    pub fn from_str(s: &str) -> Option<Self> {
+        let fifths = match s.trim() {
+            // Major keys
+            "C" => 0,
+            "G" => 1,
+            "D" => 2,
+            "A" => 3,
+            "E" => 4,
+            "B" => 5,
+            "F#" | "Fs" => 6,
+            "C#" | "Cs" => 7,
+            "F" => -1,
+            "Bb" | "Bf" => -2,
+            "Eb" | "Ef" => -3,
+            "Ab" | "Af" => -4,
+            "Db" | "Df" => -5,
+            "Gb" | "Gf" => -6,
+            "Cb" | "Cf" => -7,
+            _ => return None,
+        };
+        Some(Self { fifths })
+    }
+}
+
 /// Document metadata from YAML header
 #[derive(Debug, Clone, Default)]
 pub struct Metadata {
     pub title: Option<String>,
     pub composer: Option<String>,
     pub time_signature: TimeSignature,
+    pub key_signature: KeySignature,
     pub written_pitch: Pitch,
 }
 
@@ -39,6 +73,7 @@ pub struct RawMetadata {
     pub title: Option<String>,
     pub composer: Option<String>,
     pub time_signature: Option<String>,
+    pub key_signature: Option<String>,
     pub written_pitch: Option<String>,
 }
 

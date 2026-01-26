@@ -42,7 +42,13 @@ pub fn to_musicxml(score: &Score) -> String {
     xml.push_str("  <part id=\"P1\">\n");
 
     for (i, measure) in score.measures.iter().enumerate() {
-        xml.push_str(&measure_to_xml(measure, i + 1, &score.metadata.time_signature, i == 0));
+        xml.push_str(&measure_to_xml(
+            measure,
+            i + 1,
+            &score.metadata.time_signature,
+            &score.metadata.key_signature,
+            i == 0,
+        ));
     }
 
     xml.push_str("  </part>\n");
@@ -55,16 +61,20 @@ fn measure_to_xml(
     measure: &Measure,
     number: usize,
     time_signature: &TimeSignature,
+    key_signature: &KeySignature,
     include_attributes: bool,
 ) -> String {
     let mut xml = String::new();
 
     xml.push_str(&format!("    <measure number=\"{}\">\n", number));
 
-    // Include time signature and clef on first measure
+    // Include time signature, key signature, and clef on first measure
     if include_attributes {
         xml.push_str("      <attributes>\n");
         xml.push_str("        <divisions>4</divisions>\n"); // 4 divisions per quarter note
+        xml.push_str("        <key>\n");
+        xml.push_str(&format!("          <fifths>{}</fifths>\n", key_signature.fifths));
+        xml.push_str("        </key>\n");
         xml.push_str("        <time>\n");
         xml.push_str(&format!("          <beats>{}</beats>\n", time_signature.beats));
         xml.push_str(&format!(

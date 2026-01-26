@@ -98,6 +98,14 @@ impl Parser {
             TimeSignature::default()
         };
 
+        let key_signature = if let Some(ks) = &raw.key_signature {
+            KeySignature::from_str(ks).ok_or_else(|| {
+                GenError::MetadataError(format!("Invalid key signature: {}", ks))
+            })?
+        } else {
+            KeySignature::default()
+        };
+
         let written_pitch = if let Some(wp) = &raw.written_pitch {
             self.parse_pitch(wp)?
         } else {
@@ -108,6 +116,7 @@ impl Parser {
             title: raw.title,
             composer: raw.composer,
             time_signature,
+            key_signature,
             written_pitch,
         })
     }
