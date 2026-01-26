@@ -9,7 +9,8 @@ node_modules/
 dist/
 .DS_Store
 
-# WASM build output (pkg is committed for Vercel deployment)
+# WASM build output
+**/pkg/
 
 # Tauri generated files
 **/src-tauri/gen/
