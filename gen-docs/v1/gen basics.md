@@ -25,7 +25,42 @@ all available fields for metadata are
 | title          | What the title of the song is (purely stylistic)                      |         |
 | composer       | composer of the song (purely stylistic)                               |         |
 | time-signature | Time signature that the song defaults to if none explicitly specified | `4/4`   |
+| key-signature  | Key signature of the piece (see table below)                          | `C`     |
 | written-pitch  | What the document is written in. Defaults to concert pitch (C)        | `C`     |
+
+### Key Signatures
+
+The `key-signature` field accepts the following values:
+
+| Key    | Sharps/Flats |
+| ------ | ------------ |
+| `C`    | 0 (none)     |
+| `G`    | 1 sharp      |
+| `D`    | 2 sharps     |
+| `A`    | 3 sharps     |
+| `E`    | 4 sharps     |
+| `B`    | 5 sharps     |
+| `F#`   | 6 sharps     |
+| `C#`   | 7 sharps     |
+| `F`    | 1 flat       |
+| `Bb`   | 2 flats      |
+| `Eb`   | 3 flats      |
+| `Ab`   | 4 flats      |
+| `Db`   | 5 flats      |
+| `Gb`   | 6 flats      |
+| `Cb`   | 7 flats      |
+
+Example with key signature:
+```
+---
+title: My Song in G Major
+key-signature: G
+time-signature: 4/4
+---
+
+G A B C^
+D^ E^ F#^ G^
+```
 Each line is its own measure. If you do a new line, it will do a new measure.
 # Anatomy of a note
 
