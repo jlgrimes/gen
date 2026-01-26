@@ -26,6 +26,10 @@ const TRANSPOSE_OPTIONS = [
   { label: 'F (French Horn)', halftones: 7 }, // Up a perfect 5th
 ] as const;
 
+// Letter size in millimeters
+const LETTER_WIDTH_MM = 215.9; // 8.5 inches
+const LETTER_HEIGHT_MM = 279.4; // 11 inches
+
 // Initialize OSMD's transpose calculator
 MusicSheetCalculator.transposeCalculator = new TransposeCalculator();
 
@@ -43,6 +47,7 @@ function App() {
   const [isCompiling, setIsCompiling] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [transposeIndex, setTransposeIndex] = useState(0); // Index into TRANSPOSE_OPTIONS
+  const [zoom, setZoom] = useState(0.75); // Zoom level for sheet music
   const sheetMusicRef = useRef<HTMLDivElement>(null);
   const osmdRef = useRef<OpenSheetMusicDisplay | null>(null);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
@@ -90,8 +95,11 @@ function App() {
         if (result.xml && sheetMusicRef.current) {
           if (!osmdRef.current) {
             osmdRef.current = new OpenSheetMusicDisplay(sheetMusicRef.current, {
-              autoResize: true,
+              autoResize: false,
               backend: 'svg',
+              pageFormat: 'Letter P',
+              pageBackgroundColor: '#FFFFFF',
+              drawingParameters: 'default',
             });
           }
           await osmdRef.current.load(result.xml);
@@ -102,6 +110,8 @@ function App() {
             osmdRef.current.updateGraphic();
           }
 
+          // Scale down the notation to fit more measures per page
+          osmdRef.current.Zoom = zoom;
           osmdRef.current.render();
         }
       } catch (e) {
@@ -129,14 +139,22 @@ function App() {
     };
   }, [genSource, transposeIndex, compileAndRender]);
 
+  // Update zoom without recompiling
+  useEffect(() => {
+    if (osmdRef.current) {
+      osmdRef.current.Zoom = zoom;
+      osmdRef.current.render();
+    }
+  }, [zoom]);
+
   const handleScoreSelect = (score: ScoreInfo) => {
     setGenSource(score.content);
     setSelectedScore(score.name);
   };
 
   const exportToPdf = useCallback(async () => {
-    const svg = sheetMusicRef.current?.querySelector('svg');
-    if (!svg) return;
+    const svgs = sheetMusicRef.current?.querySelectorAll('svg');
+    if (!svgs || svgs.length === 0) return;
 
     // Show save dialog
     const baseName = selectedScore?.replace(/\.gen$/, '') || 'score';
@@ -147,16 +165,25 @@ function App() {
 
     if (!filePath) return; // User cancelled
 
-    const svgWidth = svg.clientWidth || svg.getBoundingClientRect().width;
-    const svgHeight = svg.clientHeight || svg.getBoundingClientRect().height;
-
+    // Create PDF with letter size in mm (like OSMD demo does)
     const pdf = new jsPDF({
-      orientation: svgWidth > svgHeight ? 'landscape' : 'portrait',
-      unit: 'pt',
-      format: [svgWidth, svgHeight],
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'letter',
     });
 
-    await pdf.svg(svg, { width: svgWidth, height: svgHeight });
+    // Add each SVG as a page, scaling to fit letter size
+    for (let i = 0; i < svgs.length; i++) {
+      if (i > 0) {
+        pdf.addPage('letter', 'portrait');
+      }
+      await pdf.svg(svgs[i], {
+        x: 0,
+        y: 0,
+        width: LETTER_WIDTH_MM,
+        height: LETTER_HEIGHT_MM,
+      });
+    }
 
     // Get PDF as array buffer and write to file
     const pdfData = pdf.output('arraybuffer');
@@ -222,22 +249,41 @@ function App() {
                 Export PDF
               </button>
             </div>
-            {/* Transpose Toolbar */}
-            <div className='px-4 py-2 border-b border-border bg-gray-50 flex items-center gap-3'>
-              <label className='text-xs font-medium text-gray-600'>
-                Transpose:
-              </label>
-              <select
-                value={transposeIndex}
-                onChange={e => setTransposeIndex(Number(e.target.value))}
-                className='px-2 py-1 text-xs border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
-              >
-                {TRANSPOSE_OPTIONS.map((option, index) => (
-                  <option key={option.label} value={index}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
+            {/* Toolbar */}
+            <div className='px-4 py-2 border-b border-border bg-gray-50 flex items-center gap-6'>
+              <div className='flex items-center gap-2'>
+                <label className='text-xs font-medium text-gray-600'>
+                  Transpose:
+                </label>
+                <select
+                  value={transposeIndex}
+                  onChange={e => setTransposeIndex(Number(e.target.value))}
+                  className='px-2 py-1 text-xs border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
+                >
+                  {TRANSPOSE_OPTIONS.map((option, index) => (
+                    <option key={option.label} value={index}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className='flex items-center gap-2'>
+                <label className='text-xs font-medium text-gray-600'>
+                  Zoom:
+                </label>
+                <input
+                  type='range'
+                  min='0.3'
+                  max='1.5'
+                  step='0.05'
+                  value={zoom}
+                  onChange={e => setZoom(Number(e.target.value))}
+                  className='w-24 h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer'
+                />
+                <span className='text-xs text-gray-500 w-10'>
+                  {Math.round(zoom * 100)}%
+                </span>
+              </div>
             </div>
             <div className='flex-1 overflow-auto p-4'>
               <div ref={sheetMusicRef} className='w-full' />
