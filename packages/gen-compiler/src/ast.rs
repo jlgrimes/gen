@@ -205,6 +205,8 @@ pub enum Element {
 #[derive(Debug, Clone)]
 pub struct Measure {
     pub elements: Vec<Element>,
+    pub repeat_start: bool,  // ||: at the beginning of the measure
+    pub repeat_end: bool,    // :|| at the end of the measure
 }
 
 /// A complete musical score

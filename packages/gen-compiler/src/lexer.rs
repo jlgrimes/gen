@@ -33,6 +33,10 @@ pub enum Token {
     // Ties
     Hyphen,         // -
 
+    // Repeats
+    RepeatStart,    // ||:
+    RepeatEnd,      // :||
+
     // Structure
     Newline,
     Whitespace,
@@ -155,7 +159,52 @@ impl<'a> Lexer<'a> {
                 }
                 '|' => {
                     self.advance();
-                    Token::Pipe
+                    // Check for ||: (repeat start)
+                    if let Some(&'|') = self.peek() {
+                        self.advance();
+                        if let Some(&':') = self.peek() {
+                            self.advance();
+                            Token::RepeatStart
+                        } else {
+                            // Just ||, treat as two pipes - push one back conceptually
+                            // Actually, we need to emit two Pipe tokens
+                            // For simplicity, emit Pipe and let the next iteration handle the second |
+                            // But we already consumed the second |, so push Pipe token and continue
+                            tokens.push(LocatedToken {
+                                token: Token::Pipe,
+                                line,
+                                column,
+                            });
+                            Token::Pipe
+                        }
+                    } else {
+                        Token::Pipe
+                    }
+                }
+                ':' => {
+                    self.advance();
+                    // Check for :|| (repeat end)
+                    if let Some(&'|') = self.peek() {
+                        self.advance();
+                        if let Some(&'|') = self.peek() {
+                            self.advance();
+                            Token::RepeatEnd
+                        } else {
+                            // Just :|, invalid - return error
+                            return Err(GenError::ParseError {
+                                line,
+                                column,
+                                message: "Unexpected ':' followed by single '|'. Did you mean ':||'?".to_string(),
+                            });
+                        }
+                    } else {
+                        // Standalone : is not valid in Gen syntax
+                        return Err(GenError::ParseError {
+                            line,
+                            column,
+                            message: "Unexpected ':'. Did you mean ':||' for repeat end?".to_string(),
+                        });
+                    }
                 }
                 'o' => {
                     self.advance();
@@ -292,6 +341,59 @@ mod tests {
                 &Token::Pipe,
                 &Token::SmallO,
                 &Token::NoteD,
+            ]
+        );
+    }
+
+    #[test]
+    fn test_repeat_start() {
+        let mut lexer = Lexer::new("||: C D");
+        let tokens = lexer.tokenize().unwrap();
+        let token_types: Vec<_> = tokens.iter().map(|t| &t.token).collect();
+        assert_eq!(
+            token_types,
+            vec![
+                &Token::RepeatStart,
+                &Token::Whitespace,
+                &Token::NoteC,
+                &Token::Whitespace,
+                &Token::NoteD,
+            ]
+        );
+    }
+
+    #[test]
+    fn test_repeat_end() {
+        let mut lexer = Lexer::new("C D :||");
+        let tokens = lexer.tokenize().unwrap();
+        let token_types: Vec<_> = tokens.iter().map(|t| &t.token).collect();
+        assert_eq!(
+            token_types,
+            vec![
+                &Token::NoteC,
+                &Token::Whitespace,
+                &Token::NoteD,
+                &Token::Whitespace,
+                &Token::RepeatEnd,
+            ]
+        );
+    }
+
+    #[test]
+    fn test_repeat_both() {
+        let mut lexer = Lexer::new("||: C D :||");
+        let tokens = lexer.tokenize().unwrap();
+        let token_types: Vec<_> = tokens.iter().map(|t| &t.token).collect();
+        assert_eq!(
+            token_types,
+            vec![
+                &Token::RepeatStart,
+                &Token::Whitespace,
+                &Token::NoteC,
+                &Token::Whitespace,
+                &Token::NoteD,
+                &Token::Whitespace,
+                &Token::RepeatEnd,
             ]
         );
     }

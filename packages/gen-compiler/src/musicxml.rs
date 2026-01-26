@@ -226,6 +226,11 @@ fn write_measure<W: std::io::Write>(
     measure_elem.push_attribute(("number", number.to_string().as_str()));
     writer.write_event(Event::Start(measure_elem)).unwrap();
 
+    // Write repeat start barline if present (before attributes and notes)
+    if measure.repeat_start {
+        write_barline(writer, "left", "heavy-light", Some("forward"));
+    }
+
     // Include time signature, key signature, and clef on first measure
     if include_attributes {
         writer
@@ -272,8 +277,37 @@ fn write_measure<W: std::io::Write>(
         write_element(writer, element, *beam_state);
     }
 
+    // Write repeat end barline if present (after notes)
+    if measure.repeat_end {
+        write_barline(writer, "right", "light-heavy", Some("backward"));
+    }
+
     writer
         .write_event(Event::End(BytesEnd::new("measure")))
+        .unwrap();
+}
+
+/// Write a barline element with optional repeat
+fn write_barline<W: std::io::Write>(
+    writer: &mut Writer<W>,
+    location: &str,
+    bar_style: &str,
+    repeat_direction: Option<&str>,
+) {
+    let mut barline = BytesStart::new("barline");
+    barline.push_attribute(("location", location));
+    writer.write_event(Event::Start(barline)).unwrap();
+
+    write_text_element(writer, "bar-style", bar_style);
+
+    if let Some(direction) = repeat_direction {
+        let mut repeat = BytesStart::new("repeat");
+        repeat.push_attribute(("direction", direction));
+        writer.write_event(Event::Empty(repeat)).unwrap();
+    }
+
+    writer
+        .write_event(Event::End(BytesEnd::new("barline")))
         .unwrap();
 }
 
@@ -640,5 +674,39 @@ C"#;
         // First note: start only, Second note: both, Third note: stop only
         assert_eq!(tie_starts, 2, "Should have 2 tie starts (C and D)");
         assert_eq!(tie_stops, 2, "Should have 2 tie stops (D and E)");
+    }
+
+    #[test]
+    fn test_musicxml_repeat_start() {
+        let score = parse("||: C D E F").unwrap();
+        let xml = to_musicxml(&score);
+
+        // Should contain barline with repeat forward
+        assert!(xml.contains("<barline location=\"left\">"));
+        assert!(xml.contains("<bar-style>heavy-light</bar-style>"));
+        assert!(xml.contains("<repeat direction=\"forward\"/>"));
+    }
+
+    #[test]
+    fn test_musicxml_repeat_end() {
+        let score = parse("C D E F :||").unwrap();
+        let xml = to_musicxml(&score);
+
+        // Should contain barline with repeat backward
+        assert!(xml.contains("<barline location=\"right\">"));
+        assert!(xml.contains("<bar-style>light-heavy</bar-style>"));
+        assert!(xml.contains("<repeat direction=\"backward\"/>"));
+    }
+
+    #[test]
+    fn test_musicxml_repeat_both() {
+        let score = parse("||: C D E F :||").unwrap();
+        let xml = to_musicxml(&score);
+
+        // Should contain both repeat barlines
+        assert!(xml.contains("<barline location=\"left\">"));
+        assert!(xml.contains("<repeat direction=\"forward\"/>"));
+        assert!(xml.contains("<barline location=\"right\">"));
+        assert!(xml.contains("<repeat direction=\"backward\"/>"));
     }
 }

@@ -6,6 +6,47 @@ pub fn validate(score: &Score) -> Result<(), GenError> {
     for (i, measure) in score.measures.iter().enumerate() {
         validate_measure(measure, &score.metadata.time_signature, i + 1)?;
     }
+    validate_repeats(score)?;
+    Ok(())
+}
+
+/// Validate that repeat markers are properly matched
+fn validate_repeats(score: &Score) -> Result<(), GenError> {
+    let mut repeat_start_measure: Option<usize> = None;
+
+    for (i, measure) in score.measures.iter().enumerate() {
+        let measure_number = i + 1;
+
+        if measure.repeat_start {
+            if repeat_start_measure.is_some() {
+                // Nested repeat start without closing the previous one
+                return Err(GenError::SemanticError {
+                    measure: measure_number,
+                    message: "Repeat start (||:) found without closing the previous repeat. Close the previous repeat with :|| first.".to_string(),
+                });
+            }
+            repeat_start_measure = Some(measure_number);
+        }
+
+        if measure.repeat_end {
+            if repeat_start_measure.is_none() {
+                return Err(GenError::SemanticError {
+                    measure: measure_number,
+                    message: "Repeat end (:||) found without a matching repeat start (||:)".to_string(),
+                });
+            }
+            repeat_start_measure = None;
+        }
+    }
+
+    // Check if there's an unclosed repeat
+    if let Some(start_measure) = repeat_start_measure {
+        return Err(GenError::SemanticError {
+            measure: start_measure,
+            message: "Repeat start (||:) at this measure has no matching repeat end (:||)".to_string(),
+        });
+    }
+
     Ok(())
 }
 
@@ -109,5 +150,49 @@ mod tests {
         // Eighth note triplet (3 eighths in time of 2 eighths = 1 quarter) + 3 regular quarters = 4 beats
         let score = parse("[C D E]/3 C C C").unwrap();
         assert!(validate(&score).is_ok());
+    }
+
+    #[test]
+    fn test_valid_repeat() {
+        // Valid repeat: start and end markers
+        let score = parse("||: C C C C\nD D D D :||").unwrap();
+        assert!(validate(&score).is_ok());
+    }
+
+    #[test]
+    fn test_repeat_same_measure() {
+        // Valid: repeat start and end in same measure
+        let score = parse("||: C C C C :||").unwrap();
+        assert!(validate(&score).is_ok());
+    }
+
+    #[test]
+    fn test_repeat_missing_end() {
+        // Invalid: repeat start without end
+        let score = parse("||: C C C C\nD D D D").unwrap();
+        let result = validate(&score);
+        assert!(result.is_err());
+        if let Err(GenError::SemanticError { message, .. }) = result {
+            assert!(message.contains("no matching repeat end"));
+        }
+    }
+
+    #[test]
+    fn test_repeat_missing_start() {
+        // Invalid: repeat end without start
+        let score = parse("C C C C\nD D D D :||").unwrap();
+        let result = validate(&score);
+        assert!(result.is_err());
+        if let Err(GenError::SemanticError { message, .. }) = result {
+            assert!(message.contains("without a matching repeat start"));
+        }
+    }
+
+    #[test]
+    fn test_nested_repeat_error() {
+        // Invalid: nested repeat (start without closing previous)
+        let score = parse("||: C C C C\n||: D D D D :||").unwrap();
+        let result = validate(&score);
+        assert!(result.is_err());
     }
 }

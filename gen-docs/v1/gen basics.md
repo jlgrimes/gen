@@ -145,7 +145,15 @@ Other tuplets can be specified using the respective numbers:
 | `[...]5`  | quintuplet              |
 | `[...]6`  | sextuplet               |
 | and so on |                         |
+# Other notation
 
+## Repeats
+
+Repeats can be notated by putting `||:` alone where you want to start, and `:||` at the end.
+a compiler error will be thrown if:
+- Repeat start is not at beginning of measure
+- repeat end is not at end of measure
+- repeat start does not have a matching repeat end
 
 # gen viewer specifics
 the gen viewer will be a tauri app that renders the gen file into real sheet music you can read.

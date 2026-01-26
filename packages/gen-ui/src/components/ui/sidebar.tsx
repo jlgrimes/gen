@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
-import { File, Music, Folder, ChevronRight } from "lucide-react";
+import { File, Music, Folder, ChevronRight, PanelLeftClose, PanelLeft } from "lucide-react";
 
 interface ScoreInfo {
   name: string;
@@ -11,6 +11,8 @@ interface SidebarProps {
   scores: ScoreInfo[];
   onScoreSelect: (score: ScoreInfo) => void;
   selectedScore: string | null;
+  isCollapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
 interface FolderNode {
@@ -111,7 +113,7 @@ function FolderItem({
   );
 }
 
-export function Sidebar({ scores, onScoreSelect, selectedScore }: SidebarProps) {
+export function Sidebar({ scores, onScoreSelect, selectedScore, isCollapsed, onToggleCollapse }: SidebarProps) {
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(() => new Set());
   const tree = buildFolderTree(scores);
 
@@ -145,11 +147,34 @@ export function Sidebar({ scores, onScoreSelect, selectedScore }: SidebarProps) 
   const sortedFolders = [...tree.folders.entries()].sort((a, b) => a[0].localeCompare(b[0]));
   const sortedRootFiles = [...tree.files].sort((a, b) => a.name.localeCompare(b.name));
 
+  if (isCollapsed) {
+    return (
+      <div className="h-full bg-sidebar border-r border-sidebar-border flex flex-col items-center py-3 px-1">
+        <button
+          onClick={onToggleCollapse}
+          className="p-2 rounded-md hover:bg-sidebar-accent text-sidebar-foreground"
+          title="Expand sidebar"
+        >
+          <PanelLeft className="h-4 w-4" />
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="w-64 h-full bg-sidebar border-r border-sidebar-border flex flex-col">
-      <div className="p-3 border-b border-sidebar-border flex items-center gap-2">
-        <Music className="h-4 w-4" />
-        <h2 className="font-semibold text-sm text-sidebar-foreground">Scores</h2>
+      <div className="p-3 border-b border-sidebar-border flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Music className="h-4 w-4" />
+          <h2 className="font-semibold text-sm text-sidebar-foreground">Scores</h2>
+        </div>
+        <button
+          onClick={onToggleCollapse}
+          className="p-1 rounded-md hover:bg-sidebar-accent text-sidebar-foreground"
+          title="Collapse sidebar"
+        >
+          <PanelLeftClose className="h-4 w-4" />
+        </button>
       </div>
       <div className="flex-1 overflow-auto p-2">
         <ul className="space-y-0.5">

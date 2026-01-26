@@ -1,8 +1,18 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { save } from "@tauri-apps/plugin-dialog";
+import { writeFile } from "@tauri-apps/plugin-fs";
 import { OpenSheetMusicDisplay } from "opensheetmusicdisplay";
+import { jsPDF } from "jspdf";
+import "svg2pdf.js";
+import { Download } from "lucide-react";
 import { Sidebar, type ScoreInfo } from "@/components/ui/sidebar";
 import { GenEditor, type CompileError } from "@/components/GenEditor";
+import {
+  ResizablePanelGroup,
+  ResizablePanel,
+  ResizableHandle,
+} from "@/components/ui/resizable";
 
 interface CompileResult {
   status: "success" | "error";
@@ -16,9 +26,14 @@ function App() {
   const [selectedScore, setSelectedScore] = useState<string | null>(null);
   const [error, setError] = useState<CompileError | null>(null);
   const [isCompiling, setIsCompiling] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const sheetMusicRef = useRef<HTMLDivElement>(null);
   const osmdRef = useRef<OpenSheetMusicDisplay | null>(null);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
+
+  const toggleSidebar = useCallback(() => {
+    setIsSidebarCollapsed(prev => !prev);
+  }, []);
 
   // Load embedded scores on mount
   useEffect(() => {
@@ -90,47 +105,94 @@ function App() {
     setSelectedScore(score.name);
   };
 
+  const exportToPdf = useCallback(async () => {
+    const svg = sheetMusicRef.current?.querySelector("svg");
+    if (!svg) return;
+
+    // Show save dialog
+    const filePath = await save({
+      defaultPath: `${selectedScore || "score"}.pdf`,
+      filters: [{ name: "PDF", extensions: ["pdf"] }],
+    });
+
+    if (!filePath) return; // User cancelled
+
+    const svgWidth = svg.clientWidth || svg.getBoundingClientRect().width;
+    const svgHeight = svg.clientHeight || svg.getBoundingClientRect().height;
+
+    const pdf = new jsPDF({
+      orientation: svgWidth > svgHeight ? "landscape" : "portrait",
+      unit: "pt",
+      format: [svgWidth, svgHeight],
+    });
+
+    await pdf.svg(svg, { width: svgWidth, height: svgHeight });
+
+    // Get PDF as array buffer and write to file
+    const pdfData = pdf.output("arraybuffer");
+    await writeFile(filePath, new Uint8Array(pdfData));
+  }, [selectedScore]);
+
   return (
     <div className="flex h-screen w-screen">
-      {/* Sidebar */}
+      {/* Sidebar - outside of resizable panels */}
       <Sidebar
         scores={scores}
         onScoreSelect={handleScoreSelect}
         selectedScore={selectedScore}
+        isCollapsed={isSidebarCollapsed}
+        onToggleCollapse={toggleSidebar}
       />
 
-      {/* Editor Panel */}
-      <div className="w-80 border-r border-border flex flex-col bg-white">
-        <div className="p-3 border-b border-border flex items-center justify-between">
-          <h2 className="font-semibold text-sm">
-            {selectedScore || "Editor"}
-            {isCompiling && <span className="ml-2 text-xs text-muted-foreground">compiling...</span>}
-          </h2>
-        </div>
-        <div className="flex-1 overflow-hidden">
-          <GenEditor
-            value={genSource}
-            onChange={setGenSource}
-            error={error}
-            placeholder="Select a score or start typing..."
-          />
-        </div>
-        {error && (
-          <div className="p-3 text-sm text-red-600 border-t border-border bg-red-50 max-h-24 overflow-auto">
-            {error.line !== null ? `Line ${error.line}: ` : ""}{error.message}
+      {/* Main content area with resizable panels */}
+      <ResizablePanelGroup orientation="horizontal" className="flex-1 h-full">
+        {/* Editor Panel */}
+        <ResizablePanel defaultSize={35} minSize={20}>
+          <div className="h-full border-r border-border flex flex-col bg-white">
+            <div className="p-3 border-b border-border flex items-center justify-between">
+              <h2 className="font-semibold text-sm">
+                {selectedScore || "Editor"}
+                {isCompiling && <span className="ml-2 text-xs text-muted-foreground">compiling...</span>}
+              </h2>
+            </div>
+            <div className="flex-1 overflow-hidden">
+              <GenEditor
+                value={genSource}
+                onChange={setGenSource}
+                error={error}
+                placeholder="Select a score or start typing..."
+              />
+            </div>
+            {error && (
+              <div className="p-3 text-sm text-red-600 border-t border-border bg-red-50 max-h-24 overflow-auto">
+                {error.line !== null ? `Line ${error.line}: ` : ""}{error.message}
+              </div>
+            )}
           </div>
-        )}
-      </div>
+        </ResizablePanel>
 
-      {/* Sheet Music Panel */}
-      <div className="flex-1 flex flex-col bg-white min-w-0">
-        <div className="p-3 border-b border-border">
-          <h2 className="font-semibold text-sm">Sheet Music</h2>
-        </div>
-        <div className="flex-1 overflow-auto p-4">
-          <div ref={sheetMusicRef} className="w-full" />
-        </div>
-      </div>
+        <ResizableHandle />
+
+        {/* Sheet Music Panel */}
+        <ResizablePanel defaultSize={65} minSize={30}>
+          <div className="h-full flex flex-col bg-white min-w-0">
+            <div className="p-3 border-b border-border flex items-center justify-between">
+              <h2 className="font-semibold text-sm">Sheet Music</h2>
+              <button
+                onClick={exportToPdf}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
+                title="Export to PDF"
+              >
+                <Download size={14} />
+                Export PDF
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto p-4">
+              <div ref={sheetMusicRef} className="w-full" />
+            </div>
+          </div>
+        </ResizablePanel>
+      </ResizablePanelGroup>
     </div>
   );
 }

@@ -11,3 +11,4 @@ dist/
 
 # Tauri
 packages/gen-ui/src-tauri/target/
+packages/gen-ui/src-tauri/gen/schemas/

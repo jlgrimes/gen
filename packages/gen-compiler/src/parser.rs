@@ -177,6 +177,16 @@ impl Parser {
     fn parse_measure(&mut self) -> Result<Option<Measure>, GenError> {
         let mut elements = Vec::new();
         let mut next_note_has_tie_stop = false;
+        let mut repeat_start = false;
+        let mut repeat_end = false;
+
+        // Check for repeat start at beginning of measure (||:)
+        if let Some(t) = self.current() {
+            if t.token == Token::RepeatStart {
+                repeat_start = true;
+                self.advance();
+            }
+        }
 
         while let Some(t) = self.current() {
             if t.token == Token::Newline {
@@ -187,6 +197,30 @@ impl Parser {
             if t.token == Token::Whitespace {
                 self.advance();
                 continue;
+            }
+
+            // Check for repeat end (:||)
+            if t.token == Token::RepeatEnd {
+                repeat_end = true;
+                self.advance();
+                // After repeat end, we should only see whitespace or newline
+                while let Some(t) = self.current() {
+                    if t.token == Token::Whitespace {
+                        self.advance();
+                        continue;
+                    }
+                    if t.token == Token::Newline {
+                        self.advance();
+                        break;
+                    }
+                    // Anything else after :|| is an error
+                    return Err(GenError::ParseError {
+                        line: t.line,
+                        column: t.column,
+                        message: "Repeat end (:||) must be at the end of a measure".to_string(),
+                    });
+                }
+                break;
             }
 
             // Check for tuplet group starting with [
@@ -239,10 +273,10 @@ impl Parser {
             }
         }
 
-        if elements.is_empty() {
+        if elements.is_empty() && !repeat_start && !repeat_end {
             Ok(None)
         } else {
-            Ok(Some(Measure { elements }))
+            Ok(Some(Measure { elements, repeat_start, repeat_end }))
         }
     }
 
@@ -737,5 +771,49 @@ C D E"#;
             assert!(!n.tie_start);
             assert!(!n.tie_stop);
         }
+    }
+
+    #[test]
+    fn test_repeat_start() {
+        let score = parse("||: C D E F").unwrap();
+        assert_eq!(score.measures.len(), 1);
+        assert!(score.measures[0].repeat_start);
+        assert!(!score.measures[0].repeat_end);
+        assert_eq!(score.measures[0].elements.len(), 4);
+    }
+
+    #[test]
+    fn test_repeat_end() {
+        let score = parse("C D E F :||").unwrap();
+        assert_eq!(score.measures.len(), 1);
+        assert!(!score.measures[0].repeat_start);
+        assert!(score.measures[0].repeat_end);
+        assert_eq!(score.measures[0].elements.len(), 4);
+    }
+
+    #[test]
+    fn test_repeat_both_same_measure() {
+        let score = parse("||: C D E F :||").unwrap();
+        assert_eq!(score.measures.len(), 1);
+        assert!(score.measures[0].repeat_start);
+        assert!(score.measures[0].repeat_end);
+        assert_eq!(score.measures[0].elements.len(), 4);
+    }
+
+    #[test]
+    fn test_repeat_across_measures() {
+        let score = parse("||: C D E F\nG A B C^ :||").unwrap();
+        assert_eq!(score.measures.len(), 2);
+        assert!(score.measures[0].repeat_start);
+        assert!(!score.measures[0].repeat_end);
+        assert!(!score.measures[1].repeat_start);
+        assert!(score.measures[1].repeat_end);
+    }
+
+    #[test]
+    fn test_repeat_error_end_not_at_end() {
+        // This should fail because :|| is not at the end
+        let result = parse("C :|| D E F");
+        assert!(result.is_err());
     }
 }
