@@ -74,12 +74,36 @@ fn is_beamable(duration: Duration) -> bool {
     )
 }
 
-/// Calculate beam states for all elements in a measure
-fn calculate_beam_states(elements: &[Element]) -> Vec<BeamState> {
+/// Get the duration of an element in divisions (12 per quarter note for internal beam calculations)
+/// Using 12 divisions allows clean representation of triplets (divisible by 3)
+fn element_divisions_for_beaming(element: &Element) -> u32 {
+    match element {
+        Element::Note(note) => duration_to_divisions_high_res(note.duration, note.dotted, note.tuplet),
+        Element::Rest { duration, dotted, tuplet } => duration_to_divisions_high_res(*duration, *dotted, *tuplet),
+    }
+}
+
+/// Calculate beam states for all elements in a measure, respecting beat boundaries
+fn calculate_beam_states(elements: &[Element], time_signature: &TimeSignature) -> Vec<BeamState> {
     let mut states = vec![BeamState::None; elements.len()];
 
+    // Calculate beat size in high-res divisions (12 divisions = 1 quarter note)
+    // This allows clean representation of triplets (12 is divisible by 3)
+    // For 4/4: beat = 12 divisions (quarter note)
+    // For 6/8: beat = 6 divisions (eighth note beat, typical for compound time)
+    // For 2/4: beat = 12 divisions (quarter note)
+    let beat_divisions = 48 / time_signature.beat_type as u32;
+
+    // Track position in measure and group notes by beat
+    let mut position: u32 = 0;
     let mut i = 0;
+
     while i < elements.len() {
+        // Find which beat we're currently in
+        let current_beat = position / beat_divisions;
+        let beat_start_pos = current_beat * beat_divisions;
+        let beat_end_pos = beat_start_pos + beat_divisions;
+
         // Check if current element is a beamable note
         let is_current_beamable = match &elements[i] {
             Element::Note(note) => is_beamable(note.duration),
@@ -87,11 +111,22 @@ fn calculate_beam_states(elements: &[Element]) -> Vec<BeamState> {
         };
 
         if is_current_beamable {
-            // Find the extent of consecutive beamable notes
+            // Find consecutive beamable notes within the same beat
             let start = i;
-            while i < elements.len() {
+            let mut group_position = position;
+
+            while i < elements.len() && group_position < beat_end_pos {
                 match &elements[i] {
-                    Element::Note(note) if is_beamable(note.duration) => i += 1,
+                    Element::Note(note) if is_beamable(note.duration) => {
+                        let note_divs = element_divisions_for_beaming(&elements[i]);
+                        // Check if adding this note would cross the beat boundary
+                        if group_position + note_divs > beat_end_pos && i > start {
+                            // Don't include this note, it would cross the beat
+                            break;
+                        }
+                        group_position += note_divs;
+                        i += 1;
+                    }
                     _ => break,
                 }
             }
@@ -105,7 +140,11 @@ fn calculate_beam_states(elements: &[Element]) -> Vec<BeamState> {
                 }
                 states[end - 1] = BeamState::End;
             }
+
+            // Update position to where we ended up
+            position = group_position;
         } else {
+            position += element_divisions_for_beaming(&elements[i]);
             i += 1;
         }
     }
@@ -146,7 +185,7 @@ fn measure_to_xml(
     }
 
     // Calculate beam states for all elements
-    let beam_states = calculate_beam_states(&measure.elements);
+    let beam_states = calculate_beam_states(&measure.elements, time_signature);
 
     for (element, beam_state) in measure.elements.iter().zip(beam_states.iter()) {
         xml.push_str(&element_to_xml(element, *beam_state));
@@ -313,6 +352,33 @@ fn duration_to_divisions(duration: Duration, dotted: bool) -> u32 {
         base + (base / 2)
     } else {
         base
+    }
+}
+
+/// Convert duration to high-resolution divisions (12 per quarter note) for beam calculations
+/// Using 12 divisions allows clean representation of triplets (divisible by 2, 3, 4, 6)
+fn duration_to_divisions_high_res(duration: Duration, dotted: bool, tuplet: Option<TupletInfo>) -> u32 {
+    let base = match duration {
+        Duration::Whole => 48,
+        Duration::Half => 24,
+        Duration::Quarter => 12,
+        Duration::Eighth => 6,
+        Duration::Sixteenth => 3,
+        Duration::ThirtySecond => 2, // Approximate, but fine for beaming
+    };
+
+    let with_dot = if dotted {
+        base + (base / 2)
+    } else {
+        base
+    };
+
+    if let Some(tuplet_info) = tuplet {
+        // For tuplets, actual duration = base * (normal_notes / actual_notes)
+        // e.g., triplet = base * 2/3
+        (with_dot * tuplet_info.normal_notes as u32) / tuplet_info.actual_notes as u32
+    } else {
+        with_dot
     }
 }
 
