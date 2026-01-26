@@ -11,7 +11,7 @@ fn main() {
     code.push_str("/// Embedded score files\n");
     code.push_str("pub static SCORES: &[(&str, &str)] = &[\n");
 
-    let scores_dir = Path::new("examples");
+    let scores_dir = Path::new("lib");
 
     if scores_dir.exists() {
         for entry in WalkDir::new(scores_dir)
@@ -35,5 +35,5 @@ fn main() {
 
     fs::write(&dest_path, code).unwrap();
 
-    println!("cargo:rerun-if-changed=examples");
+    println!("cargo:rerun-if-changed=lib");
 }

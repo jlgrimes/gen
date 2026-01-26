@@ -57,6 +57,62 @@ pub fn to_musicxml(score: &Score) -> String {
     xml
 }
 
+/// Beam state for a note
+#[derive(Clone, Copy, PartialEq)]
+enum BeamState {
+    None,
+    Begin,
+    Continue,
+    End,
+}
+
+/// Check if a duration is beamable (eighth note or shorter)
+fn is_beamable(duration: Duration) -> bool {
+    matches!(
+        duration,
+        Duration::Eighth | Duration::Sixteenth | Duration::ThirtySecond
+    )
+}
+
+/// Calculate beam states for all elements in a measure
+fn calculate_beam_states(elements: &[Element]) -> Vec<BeamState> {
+    let mut states = vec![BeamState::None; elements.len()];
+
+    let mut i = 0;
+    while i < elements.len() {
+        // Check if current element is a beamable note
+        let is_current_beamable = match &elements[i] {
+            Element::Note(note) => is_beamable(note.duration),
+            Element::Rest { .. } => false,
+        };
+
+        if is_current_beamable {
+            // Find the extent of consecutive beamable notes
+            let start = i;
+            while i < elements.len() {
+                match &elements[i] {
+                    Element::Note(note) if is_beamable(note.duration) => i += 1,
+                    _ => break,
+                }
+            }
+            let end = i;
+
+            // Only beam if we have 2 or more consecutive beamable notes
+            if end - start >= 2 {
+                states[start] = BeamState::Begin;
+                for j in (start + 1)..(end - 1) {
+                    states[j] = BeamState::Continue;
+                }
+                states[end - 1] = BeamState::End;
+            }
+        } else {
+            i += 1;
+        }
+    }
+
+    states
+}
+
 fn measure_to_xml(
     measure: &Measure,
     number: usize,
@@ -89,22 +145,25 @@ fn measure_to_xml(
         xml.push_str("      </attributes>\n");
     }
 
-    for element in &measure.elements {
-        xml.push_str(&element_to_xml(element));
+    // Calculate beam states for all elements
+    let beam_states = calculate_beam_states(&measure.elements);
+
+    for (element, beam_state) in measure.elements.iter().zip(beam_states.iter()) {
+        xml.push_str(&element_to_xml(element, *beam_state));
     }
 
     xml.push_str("    </measure>\n");
     xml
 }
 
-fn element_to_xml(element: &Element) -> String {
+fn element_to_xml(element: &Element, beam_state: BeamState) -> String {
     match element {
-        Element::Note(note) => note_to_xml(note),
+        Element::Note(note) => note_to_xml(note, beam_state),
         Element::Rest { duration, dotted } => rest_to_xml(*duration, *dotted),
     }
 }
 
-fn note_to_xml(note: &Note) -> String {
+fn note_to_xml(note: &Note, beam_state: BeamState) -> String {
     let mut xml = String::new();
 
     xml.push_str("      <note>\n");
@@ -141,6 +200,14 @@ fn note_to_xml(note: &Note) -> String {
     // Dot if dotted
     if note.dotted {
         xml.push_str("        <dot/>\n");
+    }
+
+    // Beam (for eighth notes and shorter)
+    match beam_state {
+        BeamState::Begin => xml.push_str("        <beam number=\"1\">begin</beam>\n"),
+        BeamState::Continue => xml.push_str("        <beam number=\"1\">continue</beam>\n"),
+        BeamState::End => xml.push_str("        <beam number=\"1\">end</beam>\n"),
+        BeamState::None => {}
     }
 
     // Accidental display
