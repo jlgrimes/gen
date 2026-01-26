@@ -37,6 +37,16 @@ fn compile_gen_unchecked(source: &str) -> CompileResult {
     }
 }
 
+#[command]
+fn compile_gen_transposed(source: &str, viewed_key: &str) -> CompileResult {
+    match gen::compile_transposed(source, viewed_key) {
+        Ok(xml) => CompileResult::Success { xml },
+        Err(e) => CompileResult::Error {
+            error: error_to_compile_error(e),
+        },
+    }
+}
+
 fn error_to_compile_error(e: gen::GenError) -> CompileError {
     match e {
         gen::GenError::ParseError { line, column, message } => CompileError {
@@ -90,6 +100,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             compile_gen,
             compile_gen_unchecked,
+            compile_gen_transposed,
             list_scores,
             get_score
         ])
