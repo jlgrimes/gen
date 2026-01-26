@@ -34,7 +34,7 @@ export const wasmCompiler: CompilerAdapter = {
 
 export const browserFiles: FileAdapter = {
   async savePdf(data, suggestedName) {
-    const blob = new Blob([data], { type: 'application/pdf' });
+    const blob = new Blob([new Uint8Array(data)], { type: 'application/pdf' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
