@@ -234,6 +234,14 @@ fn note_to_xml(note: &Note, beam_state: BeamState) -> String {
     let divisions = duration_to_divisions_with_tuplet(note.duration, note.dotted, note.tuplet);
     xml.push_str(&format!("        <duration>{}</duration>\n", divisions));
 
+    // Ties (for playback - must come before <type>)
+    if note.tie_start {
+        xml.push_str("        <tie type=\"start\"/>\n");
+    }
+    if note.tie_stop {
+        xml.push_str("        <tie type=\"stop\"/>\n");
+    }
+
     // Type
     xml.push_str(&format!("        <type>{}</type>\n", note.duration.musicxml_type()));
 
@@ -258,10 +266,19 @@ fn note_to_xml(note: &Note, beam_state: BeamState) -> String {
         BeamState::None => {}
     }
 
-    // Notations (tuplet markers and accidentals display)
+    // Notations (tuplet markers, ties, and accidentals display)
     let has_tuplet_notation = note.tuplet.map(|t| t.is_start || t.is_stop).unwrap_or(false);
-    if has_tuplet_notation {
+    let has_tie_notation = note.tie_start || note.tie_stop;
+    if has_tuplet_notation || has_tie_notation {
         xml.push_str("        <notations>\n");
+        // Tied notations (for visual display)
+        if note.tie_start {
+            xml.push_str("          <tied type=\"start\"/>\n");
+        }
+        if note.tie_stop {
+            xml.push_str("          <tied type=\"stop\"/>\n");
+        }
+        // Tuplet notations
         if let Some(tuplet_info) = note.tuplet {
             if tuplet_info.is_start {
                 xml.push_str("          <tuplet type=\"start\" bracket=\"yes\"/>\n");
@@ -444,5 +461,33 @@ C"#;
         // Should contain tuplet notation markers
         assert!(xml.contains("<tuplet type=\"start\""));
         assert!(xml.contains("<tuplet type=\"stop\""));
+    }
+
+    #[test]
+    fn test_musicxml_tie_output() {
+        let score = parse("C-D").unwrap();
+        let xml = to_musicxml(&score);
+
+        // Should contain tie elements (for playback)
+        assert!(xml.contains("<tie type=\"start\"/>"));
+        assert!(xml.contains("<tie type=\"stop\"/>"));
+
+        // Should contain tied elements (for display)
+        assert!(xml.contains("<tied type=\"start\"/>"));
+        assert!(xml.contains("<tied type=\"stop\"/>"));
+    }
+
+    #[test]
+    fn test_musicxml_chained_ties() {
+        let score = parse("C-D-E").unwrap();
+        let xml = to_musicxml(&score);
+
+        // Count tie start/stop occurrences
+        let tie_starts = xml.matches("<tie type=\"start\"/>").count();
+        let tie_stops = xml.matches("<tie type=\"stop\"/>").count();
+
+        // First note: start only, Second note: both, Third note: stop only
+        assert_eq!(tie_starts, 2, "Should have 2 tie starts (C and D)");
+        assert_eq!(tie_stops, 2, "Should have 2 tie stops (D and E)");
     }
 }

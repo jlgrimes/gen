@@ -116,6 +116,14 @@ there are two different modifiers to pitch.
 ## Group modifiers
 Sometimes, you want to modify more than one note at a time. For this you can use group modifiers. All you need to do is put a group of notes in brackets [], and specify what you'd like to add to the grouping in the beginning.
 
+## Ties
+
+Ties can be indicated with hyphen between the notes. For example:
+
+`C-D`
+
+is a C tied with a D. Ties can only be between individual notes.
+
 ## Triplets
 
 The first obvious use case of this is triplets, where you want to play three notes as triplets. To make triplets with Gen, it looks like this

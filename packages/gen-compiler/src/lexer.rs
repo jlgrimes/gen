@@ -30,6 +30,9 @@ pub enum Token {
     RightBracket,   // ]
     Number(u8),     // 2, 3, 4, 5, 6, etc.
 
+    // Ties
+    Hyphen,         // -
+
     // Structure
     Newline,
     Whitespace,
@@ -221,6 +224,10 @@ impl<'a> Lexer<'a> {
                 '0'..='9' => {
                     self.advance();
                     Token::Number(c.to_digit(10).unwrap() as u8)
+                }
+                '-' => {
+                    self.advance();
+                    Token::Hyphen
                 }
                 '\n' => {
                     self.advance();

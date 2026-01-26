@@ -190,6 +190,8 @@ pub struct Note {
     pub duration: Duration,
     pub dotted: bool,
     pub tuplet: Option<TupletInfo>,
+    pub tie_start: bool,  // This note starts a tie (to the next note)
+    pub tie_stop: bool,   // This note ends a tie (from the previous note)
 }
 
 /// An element in a measure: either a note or a rest

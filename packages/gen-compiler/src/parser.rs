@@ -176,6 +176,7 @@ impl Parser {
     /// Parse a single measure (one line)
     fn parse_measure(&mut self) -> Result<Option<Measure>, GenError> {
         let mut elements = Vec::new();
+        let mut next_note_has_tie_stop = false;
 
         while let Some(t) = self.current() {
             if t.token == Token::Newline {
@@ -190,10 +191,50 @@ impl Parser {
 
             // Check for tuplet group starting with [
             if t.token == Token::LeftBracket {
-                let tuplet_elements = self.parse_tuplet_group()?;
+                let mut tuplet_elements = self.parse_tuplet_group()?;
+
+                // If there's a pending tie_stop, apply it to the first note in the tuplet
+                if next_note_has_tie_stop {
+                    if let Some(Element::Note(note)) = tuplet_elements.first_mut() {
+                        note.tie_stop = true;
+                    }
+                    next_note_has_tie_stop = false;
+                }
+
+                // Check if there's a hyphen after the tuplet (tie from last note)
+                if let Some(t) = self.current() {
+                    if t.token == Token::Hyphen {
+                        self.advance();
+                        if let Some(Element::Note(note)) = tuplet_elements.last_mut() {
+                            note.tie_start = true;
+                        }
+                        next_note_has_tie_stop = true;
+                    }
+                }
+
                 elements.extend(tuplet_elements);
             } else {
-                let element = self.parse_element(None)?;
+                let mut element = self.parse_element(None)?;
+
+                // Apply tie_stop if pending from previous hyphen
+                if next_note_has_tie_stop {
+                    if let Element::Note(note) = &mut element {
+                        note.tie_stop = true;
+                    }
+                    next_note_has_tie_stop = false;
+                }
+
+                // Check if there's a hyphen after this note (tie to next note)
+                if let Some(t) = self.current() {
+                    if t.token == Token::Hyphen {
+                        self.advance();
+                        if let Element::Note(note) = &mut element {
+                            note.tie_start = true;
+                        }
+                        next_note_has_tie_stop = true;
+                    }
+                }
+
                 elements.push(element);
             }
         }
@@ -358,6 +399,8 @@ impl Parser {
                     duration,
                     dotted,
                     tuplet: tuplet_info,
+                    tie_start: false,
+                    tie_stop: false,
                 }))
             }
             _ => Err(GenError::ParseError {
@@ -597,6 +640,102 @@ C D E"#;
         }
         if let Element::Note(n) = &elements[1] {
             assert_eq!(n.duration, Duration::Quarter);
+        }
+    }
+
+    #[test]
+    fn test_simple_tie() {
+        // C tied to D
+        let score = parse("C-D").unwrap();
+        let elements = &score.measures[0].elements;
+
+        assert_eq!(elements.len(), 2);
+
+        if let Element::Note(n) = &elements[0] {
+            assert_eq!(n.name, NoteName::C);
+            assert!(n.tie_start, "First note should have tie_start");
+            assert!(!n.tie_stop, "First note should not have tie_stop");
+        } else {
+            panic!("Expected note");
+        }
+
+        if let Element::Note(n) = &elements[1] {
+            assert_eq!(n.name, NoteName::D);
+            assert!(!n.tie_start, "Second note should not have tie_start");
+            assert!(n.tie_stop, "Second note should have tie_stop");
+        } else {
+            panic!("Expected note");
+        }
+    }
+
+    #[test]
+    fn test_chained_ties() {
+        // C tied to D tied to E
+        let score = parse("C-D-E").unwrap();
+        let elements = &score.measures[0].elements;
+
+        assert_eq!(elements.len(), 3);
+
+        if let Element::Note(n) = &elements[0] {
+            assert!(n.tie_start);
+            assert!(!n.tie_stop);
+        }
+
+        if let Element::Note(n) = &elements[1] {
+            assert!(n.tie_start, "Middle note should have tie_start");
+            assert!(n.tie_stop, "Middle note should have tie_stop");
+        }
+
+        if let Element::Note(n) = &elements[2] {
+            assert!(!n.tie_start);
+            assert!(n.tie_stop);
+        }
+    }
+
+    #[test]
+    fn test_tie_with_rhythm_modifiers() {
+        // Eighth note C tied to quarter note D
+        let score = parse("/C-D").unwrap();
+        let elements = &score.measures[0].elements;
+
+        assert_eq!(elements.len(), 2);
+
+        if let Element::Note(n) = &elements[0] {
+            assert_eq!(n.duration, Duration::Eighth);
+            assert!(n.tie_start);
+        }
+
+        if let Element::Note(n) = &elements[1] {
+            assert_eq!(n.duration, Duration::Quarter);
+            assert!(n.tie_stop);
+        }
+    }
+
+    #[test]
+    fn test_tie_mixed_with_regular_notes() {
+        // Tie followed by regular notes
+        let score = parse("C-D E F").unwrap();
+        let elements = &score.measures[0].elements;
+
+        assert_eq!(elements.len(), 4);
+
+        if let Element::Note(n) = &elements[0] {
+            assert!(n.tie_start);
+        }
+
+        if let Element::Note(n) = &elements[1] {
+            assert!(n.tie_stop);
+        }
+
+        // E and F should have no ties
+        if let Element::Note(n) = &elements[2] {
+            assert!(!n.tie_start);
+            assert!(!n.tie_stop);
+        }
+
+        if let Element::Note(n) = &elements[3] {
+            assert!(!n.tie_start);
+            assert!(!n.tie_stop);
         }
     }
 }
