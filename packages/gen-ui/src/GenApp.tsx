@@ -106,6 +106,14 @@ const INSTRUMENT_PRESETS: InstrumentPreset[] = [
     clef: 'bass',
   },
   {
+    id: 'flute',
+    label: 'C Flute/Piccolo',
+    transposeIndex: 1,
+    octaveShift: 1,
+    clef: 'treble',
+    instrumentGroup: 'bb',
+  },
+  {
     id: 'bb',
     label: 'Bb Trumpet/Clarinet/Tenor Sax',
     transposeIndex: 1,
@@ -121,7 +129,13 @@ const INSTRUMENT_PRESETS: InstrumentPreset[] = [
     clef: 'treble',
     instrumentGroup: 'eb',
   },
-  { id: 'f-horn', label: 'F French Horn', transposeIndex: 3, octaveShift: 0, clef: 'treble' },
+  {
+    id: 'f-horn',
+    label: 'F French Horn',
+    transposeIndex: 3,
+    octaveShift: 0,
+    clef: 'treble',
+  },
 ];
 
 // Parse mod points from source text
@@ -151,7 +165,7 @@ function updateSourceWithModPoint(
   source: string,
   lineNum: number,
   group: InstrumentGroup,
-  newShift: number | null
+  newShift: number | null,
 ): string {
   const lines = source.split('\n');
   const lineIndex = lineNum - 1;
@@ -198,12 +212,16 @@ export function GenApp({ compiler, files, scores }: GenAppProps) {
   const initialParams = useMemo(() => getUrlParams(), []);
 
   const [genSource, setGenSource] = useState('');
-  const [selectedScore, setSelectedScore] = useState<string | null>(initialParams.score);
+  const [selectedScore, setSelectedScore] = useState<string | null>(
+    initialParams.score,
+  );
   const [error, setError] = useState<CompileError | null>(null);
   const [isCompiling, setIsCompiling] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(isMobile); // Collapsed by default on mobile
   const [mobileTab, setMobileTab] = useState<MobileTab>('sheet'); // Default to sheet view on mobile
-  const [instrumentIndex, setInstrumentIndex] = useState(() => getInstrumentIndexById(initialParams.instrument)); // Index into INSTRUMENT_PRESETS, or CUSTOM_PRESET_INDEX for custom
+  const [instrumentIndex, setInstrumentIndex] = useState(() =>
+    getInstrumentIndexById(initialParams.instrument),
+  ); // Index into INSTRUMENT_PRESETS, or CUSTOM_PRESET_INDEX for custom
   const [transposeIndex, setTransposeIndex] = useState(() => {
     // Initialize from preset if instrument was in URL
     const idx = getInstrumentIndexById(initialParams.instrument);
@@ -238,7 +256,10 @@ export function GenApp({ compiler, files, scores }: GenAppProps) {
   }, [instrumentIndex]);
 
   // Parse mod points from source
-  const modPoints = useMemo(() => parseModPointsFromSource(genSource), [genSource]);
+  const modPoints = useMemo(
+    () => parseModPointsFromSource(genSource),
+    [genSource],
+  );
 
   // Get mod points for current instrument group as a Map (for the editor)
   const modPointsForGroup = useMemo((): Map<number, number> => {
@@ -266,12 +287,12 @@ export function GenApp({ compiler, files, scores }: GenAppProps) {
         genSource,
         line,
         currentInstrumentGroup,
-        newShift
+        newShift,
       );
       console.log('Mod point toggle:', { line, newShift, updatedSource });
       setGenSource(updatedSource);
     },
-    [genSource, currentInstrumentGroup]
+    [genSource, currentInstrumentGroup],
   );
 
   const toggleSidebar = useCallback(() => {
@@ -305,9 +326,10 @@ export function GenApp({ compiler, files, scores }: GenAppProps) {
 
   // Sync URL when score or instrument changes
   useEffect(() => {
-    const instrumentId = instrumentIndex < INSTRUMENT_PRESETS.length
-      ? INSTRUMENT_PRESETS[instrumentIndex].id
-      : null;
+    const instrumentId =
+      instrumentIndex < INSTRUMENT_PRESETS.length
+        ? INSTRUMENT_PRESETS[instrumentIndex].id
+        : null;
     updateUrl(selectedScore, instrumentId);
   }, [selectedScore, instrumentIndex]);
 
@@ -324,7 +346,12 @@ export function GenApp({ compiler, files, scores }: GenAppProps) {
       setIsCompiling(true);
       try {
         // Compile with clef and instrument group parameters
-        console.log('Compiling with:', { octave, instrumentGroup, sourceHasModPoint: source.includes('@'), sourceFirstLine: source.split('\n')[0] });
+        console.log('Compiling with:', {
+          octave,
+          instrumentGroup,
+          sourceHasModPoint: source.includes('@'),
+          sourceFirstLine: source.split('\n')[0],
+        });
         const result = await compiler.compile(source, {
           clef: selectedClef,
           octaveShift: octave,
@@ -340,9 +367,14 @@ export function GenApp({ compiler, files, scores }: GenAppProps) {
 
         if (result.xml && sheetMusicRef.current) {
           // Check if octave changed in XML
-          const octave5Count = (result.xml.match(/<octave>5<\/octave>/g) || []).length;
-          const octave4Count = (result.xml.match(/<octave>4<\/octave>/g) || []).length;
-          console.log('XML octave counts:', { octave5: octave5Count, octave4: octave4Count });
+          const octave5Count = (result.xml.match(/<octave>5<\/octave>/g) || [])
+            .length;
+          const octave4Count = (result.xml.match(/<octave>4<\/octave>/g) || [])
+            .length;
+          console.log('XML octave counts:', {
+            octave5: octave5Count,
+            octave4: octave4Count,
+          });
 
           if (!osmdRef.current) {
             osmdRef.current = new OpenSheetMusicDisplay(sheetMusicRef.current, {
@@ -394,7 +426,14 @@ export function GenApp({ compiler, files, scores }: GenAppProps) {
         clearTimeout(debounceRef.current);
       }
     };
-  }, [genSource, transposeIndex, octaveShift, clef, currentInstrumentGroup, compileAndRender]);
+  }, [
+    genSource,
+    transposeIndex,
+    octaveShift,
+    clef,
+    currentInstrumentGroup,
+    compileAndRender,
+  ]);
 
   // Update zoom without recompiling
   useEffect(() => {
@@ -553,9 +592,7 @@ export function GenApp({ compiler, files, scores }: GenAppProps) {
               </select>
             </div>
             <div className='flex items-center gap-2'>
-              <label className='text-xs font-medium text-gray-600'>
-                Clef:
-              </label>
+              <label className='text-xs font-medium text-gray-600'>Clef:</label>
               <select
                 value={clef}
                 onChange={e => setClef(e.target.value as Clef)}
@@ -628,10 +665,18 @@ export function GenApp({ compiler, files, scores }: GenAppProps) {
               Sheet Music
             </TabsTrigger>
           </TabsList>
-          <TabsContent value='editor' keepMounted className='flex-1 mt-0 overflow-hidden'>
+          <TabsContent
+            value='editor'
+            keepMounted
+            className='flex-1 mt-0 overflow-hidden'
+          >
             {editorPanel}
           </TabsContent>
-          <TabsContent value='sheet' keepMounted className='flex-1 mt-0 overflow-hidden'>
+          <TabsContent
+            value='sheet'
+            keepMounted
+            className='flex-1 mt-0 overflow-hidden'
+          >
             {sheetMusicPanel}
           </TabsContent>
         </Tabs>
