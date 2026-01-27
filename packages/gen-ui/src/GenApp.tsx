@@ -6,7 +6,7 @@ import {
 } from 'opensheetmusicdisplay';
 import { jsPDF } from 'jspdf';
 import 'svg2pdf.js';
-import { Download } from 'lucide-react';
+import { Download, Code, Music2 } from 'lucide-react';
 import { Sidebar } from '@/components/ui/sidebar';
 import { GenEditor } from '@/components/GenEditor';
 import {
@@ -14,12 +14,17 @@ import {
   ResizablePanel,
   ResizableHandle,
 } from '@/components/ui/resizable';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { useIsMobile } from '@/hooks/useIsMobile';
 import type {
   CompilerAdapter,
   FileAdapter,
   ScoreInfo,
   CompileError,
 } from './types';
+
+// Mobile view tabs
+type MobileTab = 'editor' | 'sheet';
 
 // Clef options
 type Clef = 'treble' | 'bass';
@@ -99,11 +104,13 @@ export interface GenAppProps {
 }
 
 export function GenApp({ compiler, files, scores }: GenAppProps) {
+  const isMobile = useIsMobile();
   const [genSource, setGenSource] = useState('');
   const [selectedScore, setSelectedScore] = useState<string | null>(null);
   const [error, setError] = useState<CompileError | null>(null);
   const [isCompiling, setIsCompiling] = useState(false);
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(isMobile); // Collapsed by default on mobile
+  const [mobileTab, setMobileTab] = useState<MobileTab>('sheet'); // Default to sheet view on mobile
   const [instrumentIndex, setInstrumentIndex] = useState(0); // Index into INSTRUMENT_PRESETS, or CUSTOM_PRESET_INDEX for custom
   const [transposeIndex, setTransposeIndex] = useState(0); // Index into TRANSPOSE_OPTIONS
   const [octaveShift, setOctaveShift] = useState(0); // Octave shift (-2 to +2)
@@ -116,6 +123,13 @@ export function GenApp({ compiler, files, scores }: GenAppProps) {
   const toggleSidebar = useCallback(() => {
     setIsSidebarCollapsed(prev => !prev);
   }, []);
+
+  // Collapse sidebar when switching to mobile
+  useEffect(() => {
+    if (isMobile) {
+      setIsSidebarCollapsed(true);
+    }
+  }, [isMobile]);
 
   // Auto-select first score on mount
   useEffect(() => {
@@ -245,6 +259,157 @@ export function GenApp({ compiler, files, scores }: GenAppProps) {
     await files.savePdf(new Uint8Array(pdfData), `${baseName}.pdf`);
   }, [selectedScore, files]);
 
+  // Editor panel content (shared between mobile and desktop)
+  const editorPanel = (
+    <div className='h-full border-r border-border flex flex-col bg-white'>
+      <div className='p-3 border-b border-border flex items-center justify-between'>
+        <h2 className='font-semibold text-sm'>
+          {selectedScore || 'Editor'}
+          {isCompiling && (
+            <span className='ml-2 text-xs text-muted-foreground'>
+              compiling...
+            </span>
+          )}
+        </h2>
+      </div>
+      <div className='flex-1 overflow-hidden'>
+        <GenEditor
+          value={genSource}
+          onChange={setGenSource}
+          error={error}
+          placeholder='Select a score or start typing...'
+        />
+      </div>
+      {error && (
+        <div className='p-3 text-sm text-red-600 border-t border-border bg-red-50 max-h-24 overflow-auto'>
+          {error.line !== null ? `Line ${error.line}: ` : ''}
+          {error.message}
+        </div>
+      )}
+    </div>
+  );
+
+  // Sheet music panel content (shared between mobile and desktop)
+  const sheetMusicPanel = (
+    <div className='h-full flex flex-col bg-white min-w-0'>
+      <div className='p-3 border-b border-border flex items-center justify-between'>
+        <h2 className='font-semibold text-sm'>Sheet Music</h2>
+        <button
+          onClick={exportToPdf}
+          className='flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors'
+          title='Export to PDF'
+        >
+          <Download size={14} />
+          Export PDF
+        </button>
+      </div>
+      {/* Toolbar */}
+      <div className='px-4 py-2 border-b border-border bg-gray-50 flex items-center gap-4 md:gap-6 flex-wrap'>
+        {/* Instrument preset dropdown */}
+        <div className='flex items-center gap-2'>
+          <label className='text-xs font-medium text-gray-600'>
+            Instrument:
+          </label>
+          <select
+            value={instrumentIndex}
+            onChange={e => {
+              const idx = Number(e.target.value);
+              setInstrumentIndex(idx);
+              if (idx < INSTRUMENT_PRESETS.length) {
+                const preset = INSTRUMENT_PRESETS[idx];
+                setTransposeIndex(preset.transposeIndex);
+                setOctaveShift(preset.octaveShift);
+                setClef(preset.clef);
+              }
+            }}
+            className='px-2 py-1 text-xs border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
+          >
+            {INSTRUMENT_PRESETS.map((preset, index) => (
+              <option key={preset.label} value={index}>
+                {preset.label}
+              </option>
+            ))}
+            <option value={CUSTOM_PRESET_INDEX}>Custom</option>
+          </select>
+        </div>
+
+        {/* Custom controls - only shown when Custom is selected */}
+        {instrumentIndex === CUSTOM_PRESET_INDEX && (
+          <>
+            <div className='flex items-center gap-2'>
+              <label className='text-xs font-medium text-gray-600'>
+                Transpose:
+              </label>
+              <select
+                value={transposeIndex}
+                onChange={e => setTransposeIndex(Number(e.target.value))}
+                className='px-2 py-1 text-xs border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
+              >
+                {TRANSPOSE_OPTIONS.map((option, index) => (
+                  <option key={option.label} value={index}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className='flex items-center gap-2'>
+              <label className='text-xs font-medium text-gray-600'>
+                Octave:
+              </label>
+              <select
+                value={octaveShift}
+                onChange={e => setOctaveShift(Number(e.target.value))}
+                className='px-2 py-1 text-xs border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
+              >
+                {OCTAVE_OPTIONS.map(option => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className='flex items-center gap-2'>
+              <label className='text-xs font-medium text-gray-600'>
+                Clef:
+              </label>
+              <select
+                value={clef}
+                onChange={e => setClef(e.target.value as Clef)}
+                className='px-2 py-1 text-xs border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
+              >
+                {CLEF_OPTIONS.map(option => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </>
+        )}
+
+        {/* Zoom control - always visible */}
+        <div className='flex items-center gap-2'>
+          <label className='text-xs font-medium text-gray-600'>Zoom:</label>
+          <input
+            type='range'
+            min='0.3'
+            max='1.5'
+            step='0.05'
+            value={zoom}
+            onChange={e => setZoom(Number(e.target.value))}
+            className='w-20 md:w-24 h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer'
+          />
+          <span className='text-xs text-gray-500 w-10'>
+            {Math.round(zoom * 100)}%
+          </span>
+        </div>
+      </div>
+      <div className='flex-1 overflow-auto p-4'>
+        <div ref={sheetMusicRef} className='w-full' />
+      </div>
+    </div>
+  );
+
   return (
     <div className='flex h-screen w-screen'>
       {/* Sidebar - outside of resizable panels */}
@@ -256,163 +421,52 @@ export function GenApp({ compiler, files, scores }: GenAppProps) {
         onToggleCollapse={toggleSidebar}
       />
 
-      {/* Main content area with resizable panels */}
-      <ResizablePanelGroup orientation='horizontal' className='flex-1 h-full'>
-        {/* Editor Panel */}
-        <ResizablePanel defaultSize={35} minSize={20}>
-          <div className='h-full border-r border-border flex flex-col bg-white'>
-            <div className='p-3 border-b border-border flex items-center justify-between'>
-              <h2 className='font-semibold text-sm'>
-                {selectedScore || 'Editor'}
-                {isCompiling && (
-                  <span className='ml-2 text-xs text-muted-foreground'>
-                    compiling...
-                  </span>
-                )}
-              </h2>
-            </div>
-            <div className='flex-1 overflow-hidden'>
-              <GenEditor
-                value={genSource}
-                onChange={setGenSource}
-                error={error}
-                placeholder='Select a score or start typing...'
-              />
-            </div>
-            {error && (
-              <div className='p-3 text-sm text-red-600 border-t border-border bg-red-50 max-h-24 overflow-auto'>
-                {error.line !== null ? `Line ${error.line}: ` : ''}
-                {error.message}
-              </div>
-            )}
-          </div>
-        </ResizablePanel>
+      {/* Mobile layout with tabs */}
+      {isMobile ? (
+        <Tabs
+          value={mobileTab}
+          onValueChange={(value: string) => setMobileTab(value as MobileTab)}
+          className='flex-1 flex flex-col h-full'
+        >
+          <TabsList className='w-full rounded-none border-b border-border h-12 bg-muted p-0'>
+            <TabsTrigger
+              value='editor'
+              className='flex-1 h-full rounded-none data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary gap-2'
+            >
+              <Code size={16} />
+              Editor
+            </TabsTrigger>
+            <TabsTrigger
+              value='sheet'
+              className='flex-1 h-full rounded-none data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary gap-2'
+            >
+              <Music2 size={16} />
+              Sheet Music
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value='editor' keepMounted className='flex-1 mt-0 overflow-hidden'>
+            {editorPanel}
+          </TabsContent>
+          <TabsContent value='sheet' keepMounted className='flex-1 mt-0 overflow-hidden'>
+            {sheetMusicPanel}
+          </TabsContent>
+        </Tabs>
+      ) : (
+        /* Desktop layout with resizable panels */
+        <ResizablePanelGroup orientation='horizontal' className='flex-1 h-full'>
+          {/* Editor Panel */}
+          <ResizablePanel defaultSize={35} minSize={20}>
+            {editorPanel}
+          </ResizablePanel>
 
-        <ResizableHandle />
+          <ResizableHandle />
 
-        {/* Sheet Music Panel */}
-        <ResizablePanel defaultSize={65} minSize={30}>
-          <div className='h-full flex flex-col bg-white min-w-0'>
-            <div className='p-3 border-b border-border flex items-center justify-between'>
-              <h2 className='font-semibold text-sm'>Sheet Music</h2>
-              <button
-                onClick={exportToPdf}
-                className='flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors'
-                title='Export to PDF'
-              >
-                <Download size={14} />
-                Export PDF
-              </button>
-            </div>
-            {/* Toolbar */}
-            <div className='px-4 py-2 border-b border-border bg-gray-50 flex items-center gap-6 flex-wrap'>
-              {/* Instrument preset dropdown */}
-              <div className='flex items-center gap-2'>
-                <label className='text-xs font-medium text-gray-600'>
-                  Instrument:
-                </label>
-                <select
-                  value={instrumentIndex}
-                  onChange={e => {
-                    const idx = Number(e.target.value);
-                    setInstrumentIndex(idx);
-                    if (idx < INSTRUMENT_PRESETS.length) {
-                      const preset = INSTRUMENT_PRESETS[idx];
-                      setTransposeIndex(preset.transposeIndex);
-                      setOctaveShift(preset.octaveShift);
-                      setClef(preset.clef);
-                    }
-                  }}
-                  className='px-2 py-1 text-xs border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
-                >
-                  {INSTRUMENT_PRESETS.map((preset, index) => (
-                    <option key={preset.label} value={index}>
-                      {preset.label}
-                    </option>
-                  ))}
-                  <option value={CUSTOM_PRESET_INDEX}>Custom</option>
-                </select>
-              </div>
-
-              {/* Custom controls - only shown when Custom is selected */}
-              {instrumentIndex === CUSTOM_PRESET_INDEX && (
-                <>
-                  <div className='flex items-center gap-2'>
-                    <label className='text-xs font-medium text-gray-600'>
-                      Transpose:
-                    </label>
-                    <select
-                      value={transposeIndex}
-                      onChange={e => setTransposeIndex(Number(e.target.value))}
-                      className='px-2 py-1 text-xs border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
-                    >
-                      {TRANSPOSE_OPTIONS.map((option, index) => (
-                        <option key={option.label} value={index}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className='flex items-center gap-2'>
-                    <label className='text-xs font-medium text-gray-600'>
-                      Octave:
-                    </label>
-                    <select
-                      value={octaveShift}
-                      onChange={e => setOctaveShift(Number(e.target.value))}
-                      className='px-2 py-1 text-xs border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
-                    >
-                      {OCTAVE_OPTIONS.map(option => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className='flex items-center gap-2'>
-                    <label className='text-xs font-medium text-gray-600'>
-                      Clef:
-                    </label>
-                    <select
-                      value={clef}
-                      onChange={e => setClef(e.target.value as Clef)}
-                      className='px-2 py-1 text-xs border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
-                    >
-                      {CLEF_OPTIONS.map(option => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </>
-              )}
-
-              {/* Zoom control - always visible */}
-              <div className='flex items-center gap-2'>
-                <label className='text-xs font-medium text-gray-600'>
-                  Zoom:
-                </label>
-                <input
-                  type='range'
-                  min='0.3'
-                  max='1.5'
-                  step='0.05'
-                  value={zoom}
-                  onChange={e => setZoom(Number(e.target.value))}
-                  className='w-24 h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer'
-                />
-                <span className='text-xs text-gray-500 w-10'>
-                  {Math.round(zoom * 100)}%
-                </span>
-              </div>
-            </div>
-            <div className='flex-1 overflow-auto p-4'>
-              <div ref={sheetMusicRef} className='w-full' />
-            </div>
-          </div>
-        </ResizablePanel>
-      </ResizablePanelGroup>
+          {/* Sheet Music Panel */}
+          <ResizablePanel defaultSize={65} minSize={30}>
+            {sheetMusicPanel}
+          </ResizablePanel>
+        </ResizablePanelGroup>
+      )}
     </div>
   );
 }
