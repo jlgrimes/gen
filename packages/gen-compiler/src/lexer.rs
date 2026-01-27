@@ -334,27 +334,17 @@ impl<'a> Lexer<'a> {
                     self.advance();
                     Token::Whitespace
                 }
-                '\\' => {
+                '@' => {
+                    // Annotation/mod point - skip to end of line
                     self.advance();
-                    // Check for \\ (comment start)
-                    if let Some(&'\\') = self.peek() {
-                        // Comment - skip to end of line
-                        self.advance();
-                        while let Some(&ch) = self.peek() {
-                            if ch == '\n' {
-                                break;
-                            }
-                            self.advance();
+                    while let Some(&ch) = self.peek() {
+                        if ch == '\n' {
+                            break;
                         }
-                        // Don't emit a token, let the newline be handled normally
-                        continue;
-                    } else {
-                        return Err(GenError::ParseError {
-                            line,
-                            column,
-                            message: "Unexpected '\\'. Did you mean '\\\\' for a comment?".to_string(),
-                        });
+                        self.advance();
                     }
+                    // Don't emit a token, let the newline be handled normally
+                    continue;
                 }
                 _ => {
                     return Err(GenError::ParseError {
@@ -506,7 +496,7 @@ mod tests {
 
     #[test]
     fn test_comment_skipped() {
-        let mut lexer = Lexer::new("C D E \\\\Eb:^");
+        let mut lexer = Lexer::new("C D E @Eb:^");
         let tokens = lexer.tokenize().unwrap();
         let token_types: Vec<_> = tokens.iter().map(|t| &t.token).collect();
         assert_eq!(
@@ -524,7 +514,7 @@ mod tests {
 
     #[test]
     fn test_comment_with_newline() {
-        let mut lexer = Lexer::new("C D E \\\\Eb:^\nF G A");
+        let mut lexer = Lexer::new("C D E @Eb:^\nF G A");
         let tokens = lexer.tokenize().unwrap();
         let token_types: Vec<_> = tokens.iter().map(|t| &t.token).collect();
         assert_eq!(
@@ -548,7 +538,7 @@ mod tests {
 
     #[test]
     fn test_multiple_comments() {
-        let mut lexer = Lexer::new("C D \\\\Eb:^ \\\\Bb:_");
+        let mut lexer = Lexer::new("C D @Eb:^ @Bb:_");
         let tokens = lexer.tokenize().unwrap();
         let token_types: Vec<_> = tokens.iter().map(|t| &t.token).collect();
         // After first \\, everything is skipped until newline

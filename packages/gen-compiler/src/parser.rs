@@ -646,8 +646,8 @@ fn extract_metadata(source: &str) -> (Option<String>, String) {
     }
 }
 
-/// Extract mod points from inline comments in the source.
-/// Comments are in the format: \\Eb:^ or \\Bb:_
+/// Extract mod points from inline annotations in the source.
+/// Annotations are in the format: @Eb:^ or @Bb:_
 /// Returns (ModPoints, line_to_measure mapping)
 /// The line_to_measure maps 1-indexed source line numbers to measure indices.
 fn extract_mod_points(source: &str) -> (ModPoints, HashMap<usize, usize>) {
@@ -671,43 +671,47 @@ fn extract_mod_points(source: &str) -> (ModPoints, HashMap<usize, usize>) {
             continue;
         }
 
-        // Check if this line has any music content (not just whitespace/comments)
-        let content_before_comment = if let Some(comment_start) = line.find("\\\\") {
-            &line[..comment_start]
+        // Check if this line has any music content (not just whitespace/annotations)
+        // Find the first @ that starts a mod point annotation
+        let content_before_annotation = if let Some(at_pos) = line.find('@') {
+            // Check if this @ is followed by Eb: or Bb: pattern
+            let rest = &line[at_pos..];
+            if rest.len() >= 4 && (rest[1..].to_lowercase().starts_with("eb:") || rest[1..].to_lowercase().starts_with("bb:")) {
+                &line[..at_pos]
+            } else {
+                line
+            }
         } else {
             line
         };
 
         // Skip lines that are only whitespace
-        let content_trimmed = content_before_comment.trim();
+        let content_trimmed = content_before_annotation.trim();
         if !content_trimmed.is_empty() {
             line_to_measure.insert(line_num, measure_index);
             measure_index += 1;
         }
 
-        // Parse mod points from comments
-        // Look for patterns like \\Eb:^ or \\Bb:_
-        if let Some(comment_start) = line.find("\\\\") {
-            let comment = &line[comment_start + 2..]; // Skip the \\
+        // Parse mod points from annotations
+        // Look for patterns like @Eb:^ or @Bb:_
+        for (i, _) in line.match_indices('@') {
+            let rest = &line[i + 1..]; // Skip the @
 
-            // Parse each mod point in the comment (there could be multiple: \\Eb:^ \\Bb:_)
-            // But since \\ starts the comment, subsequent \\ are just part of the comment text
-            // So we parse the entire comment for Group:modifier patterns
-            for part in comment.split_whitespace() {
-                // Also handle chained mod points like \\Eb:^ separated by space or \\
-                let part = part.trim_start_matches('\\');
-                if let Some((group_str, modifier)) = part.split_once(':') {
-                    if let Some(group) = InstrumentGroup::from_str(group_str) {
-                        let shift = match modifier {
-                            "^" => Some(1i8),
-                            "_" => Some(-1i8),
-                            "^^" => Some(2i8),
-                            "__" => Some(-2i8),
-                            _ => None,
-                        };
-                        if let Some(shift) = shift {
-                            mod_points.set_shift(line_num, group, shift);
-                        }
+            // Parse Group:modifier pattern
+            if let Some((group_str, remainder)) = rest.split_once(':') {
+                let group_str = group_str.trim();
+                if let Some(group) = InstrumentGroup::from_str(group_str) {
+                    // Get the modifier (first non-whitespace chars after :)
+                    let modifier = remainder.split_whitespace().next().unwrap_or("");
+                    let shift = match modifier {
+                        "^" => Some(1i8),
+                        "_" => Some(-1i8),
+                        "^^" => Some(2i8),
+                        "__" => Some(-2i8),
+                        _ => None,
+                    };
+                    if let Some(shift) = shift {
+                        mod_points.set_shift(line_num, group, shift);
                     }
                 }
             }
@@ -1330,7 +1334,7 @@ time-signature: 6/8
     #[test]
     fn test_mod_points_single() {
         // Single mod point on line 1
-        let score = parse("C D E F \\\\Eb:^").unwrap();
+        let score = parse("C D E F @Eb:^").unwrap();
 
         assert_eq!(score.measures.len(), 1);
         assert_eq!(score.measures[0].elements.len(), 4);
@@ -1343,7 +1347,7 @@ time-signature: 6/8
     #[test]
     fn test_mod_points_multiple_groups() {
         // Multiple mod points on same line
-        let score = parse("C D E F \\\\Eb:^ Bb:_").unwrap();
+        let score = parse("C D E F @Eb:^ @Bb:_").unwrap();
 
         assert_eq!(score.measures.len(), 1);
 
@@ -1355,7 +1359,7 @@ time-signature: 6/8
     #[test]
     fn test_mod_points_multiple_lines() {
         // Mod points on different lines
-        let score = parse("C D E F \\\\Eb:^\nG A B C \\\\Bb:_").unwrap();
+        let score = parse("C D E F @Eb:^\nG A B C @Bb:_").unwrap();
 
         assert_eq!(score.measures.len(), 2);
 
@@ -1370,7 +1374,7 @@ time-signature: 6/8
 
     #[test]
     fn test_mod_points_down_octave() {
-        let score = parse("C D E F \\\\Eb:_").unwrap();
+        let score = parse("C D E F @Eb:_").unwrap();
 
         assert_eq!(score.mod_points.get_shift(1, InstrumentGroup::Eb), Some(-1));
     }
@@ -1394,5 +1398,20 @@ time-signature: 6/8
         // Lines 1-3 are metadata, so music starts at line 4
         assert_eq!(score.line_to_measure.get(&4), Some(&0));
         assert_eq!(score.line_to_measure.get(&5), Some(&1));
+    }
+
+    #[test]
+    fn test_mod_points_with_metadata_at_bottom() {
+        // Like spain.gen - metadata at bottom, mod points on music lines
+        let source = "C D E F @Eb:^\nG A B C\n---\ntitle: Test\n---";
+        let score = parse(source).unwrap();
+
+        assert_eq!(score.measures.len(), 2);
+        // Line 1 has music and mod point
+        assert_eq!(score.line_to_measure.get(&1), Some(&0));
+        assert_eq!(score.mod_points.get_shift(1, InstrumentGroup::Eb), Some(1));
+        // Line 2 has music, no mod point
+        assert_eq!(score.line_to_measure.get(&2), Some(&1));
+        assert_eq!(score.mod_points.get_shift(2, InstrumentGroup::Eb), None);
     }
 }

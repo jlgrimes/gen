@@ -101,16 +101,10 @@ function parseModPointsFromSource(source: string): ModPoints {
     const line = lines[i];
     const lineNum = i + 1; // 1-indexed
 
-    // Look for \\Group:modifier patterns
-    const commentMatch = line.indexOf('\\\\');
-    if (commentMatch === -1) continue;
-
-    const comment = line.slice(commentMatch + 2);
-
-    // Parse patterns like Eb:^ or Bb:_
-    const modPointRegex = /(eb|bb):(\^|_)/gi;
+    // Look for @Group:modifier patterns (e.g., @Eb:^ or @Bb:_)
+    const modPointRegex = /@(eb|bb):(\^|_)/gi;
     let match;
-    while ((match = modPointRegex.exec(comment)) !== null) {
+    while ((match = modPointRegex.exec(line)) !== null) {
       const group = match[1].toLowerCase() as 'eb' | 'bb';
       const shift = match[2] === '^' ? 1 : -1;
       result[group].push({ line: lineNum, octaveShift: shift });
@@ -134,39 +128,15 @@ function updateSourceWithModPoint(
 
   let line = lines[lineIndex];
 
-  // Find if there's already a comment on this line
-  const commentIndex = line.indexOf('\\\\');
+  // Remove existing mod point for this group (e.g., @Eb:^ or @Bb:_)
+  const groupRegex = new RegExp(`\\s*@${group}:[\\^_]`, 'gi');
+  line = line.replace(groupRegex, '');
 
-  if (commentIndex !== -1) {
-    // Line has a comment - update or remove the mod point for this group
-    const beforeComment = line.slice(0, commentIndex);
-    let comment = line.slice(commentIndex + 2);
-
-    // Remove existing mod point for this group
-    const groupRegex = new RegExp(`\\s*${group}:[\\^_]`, 'gi');
-    comment = comment.replace(groupRegex, '');
-
-    // Add new mod point if shift is not null
-    if (newShift !== null) {
-      const modifier = newShift > 0 ? '^' : '_';
-      comment = comment.trim();
-      if (comment) {
-        comment = `${group.charAt(0).toUpperCase() + group.slice(1)}:${modifier} ${comment}`;
-      } else {
-        comment = `${group.charAt(0).toUpperCase() + group.slice(1)}:${modifier}`;
-      }
-    }
-
-    // Reconstruct line
-    if (comment.trim()) {
-      line = `${beforeComment.trimEnd()} \\\\${comment.trim()}`;
-    } else {
-      line = beforeComment.trimEnd();
-    }
-  } else if (newShift !== null) {
-    // No comment yet, add one
+  // Add new mod point if shift is not null
+  if (newShift !== null) {
     const modifier = newShift > 0 ? '^' : '_';
-    line = `${line.trimEnd()} \\\\${group.charAt(0).toUpperCase() + group.slice(1)}:${modifier}`;
+    const groupLabel = group.charAt(0).toUpperCase() + group.slice(1);
+    line = `${line.trimEnd()} @${groupLabel}:${modifier}`;
   }
 
   lines[lineIndex] = line;
@@ -243,6 +213,7 @@ export function GenApp({ compiler, files, scores }: GenAppProps) {
         currentInstrumentGroup,
         newShift
       );
+      console.log('Mod point toggle:', { line, newShift, updatedSource });
       setGenSource(updatedSource);
     },
     [genSource, currentInstrumentGroup]
@@ -280,6 +251,7 @@ export function GenApp({ compiler, files, scores }: GenAppProps) {
       setIsCompiling(true);
       try {
         // Compile with clef and instrument group parameters
+        console.log('Compiling with:', { octave, instrumentGroup, sourceHasModPoint: source.includes('@'), sourceFirstLine: source.split('\n')[0] });
         const result = await compiler.compile(source, {
           clef: selectedClef,
           octaveShift: octave,
@@ -294,6 +266,11 @@ export function GenApp({ compiler, files, scores }: GenAppProps) {
         setError(null);
 
         if (result.xml && sheetMusicRef.current) {
+          // Check if octave changed in XML
+          const octave5Count = (result.xml.match(/<octave>5<\/octave>/g) || []).length;
+          const octave4Count = (result.xml.match(/<octave>4<\/octave>/g) || []).length;
+          console.log('XML octave counts:', { octave5: octave5Count, octave4: octave4Count });
+
           if (!osmdRef.current) {
             osmdRef.current = new OpenSheetMusicDisplay(sheetMusicRef.current, {
               autoResize: false,

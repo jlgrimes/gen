@@ -1163,7 +1163,7 @@ F F%"#;
         // Test that mod points apply per-line octave shifts
         // Line 1 has C at octave 4 (middle), with Eb:^ mod point -> octave 5
         // Line 2 has C at octave 4 (middle), no mod point -> octave 4
-        let source = "C D E F \\\\Eb:^\nC D E F";
+        let source = "C D E F @Eb:^\nC D E F";
         let score = parse(source).unwrap();
 
         // Without instrument group, both should be at octave 4
@@ -1187,7 +1187,7 @@ F F%"#;
     #[test]
     fn test_mod_points_down_octave() {
         // Test octave down modifier
-        let source = "C D E F \\\\Eb:_";
+        let source = "C D E F @Eb:_";
         let score = parse(source).unwrap();
 
         let xml = to_musicxml_with_mod_points(&score, None, Clef::Treble, 0, Some(InstrumentGroup::Eb));
@@ -1199,11 +1199,25 @@ F F%"#;
     fn test_mod_points_combined_with_base_shift() {
         // Test that mod points combine with base octave shift
         // Base shift: +1, Mod point: +1, Result: +2 (octave 6)
-        let source = "C D E F \\\\Eb:^";
+        let source = "C D E F @Eb:^";
         let score = parse(source).unwrap();
 
         let xml = to_musicxml_with_mod_points(&score, None, Clef::Treble, 1, Some(InstrumentGroup::Eb));
         let octave_6_count = xml.matches("<octave>6</octave>").count();
         assert_eq!(octave_6_count, 4, "All 4 notes should be at octave 6 with base +1 and mod +1");
+    }
+
+    #[test]
+    fn test_mod_points_with_metadata_at_bottom() {
+        // Like spain.gen - metadata at bottom of file
+        let source = "C D E F @Eb:^\nG A B C\n---\ntitle: Test\n---";
+        let score = parse(source).unwrap();
+
+        // With Eb instrument group, line 1 should be at octave 5, line 2 at octave 4
+        let xml = to_musicxml_with_mod_points(&score, None, Clef::Treble, 0, Some(InstrumentGroup::Eb));
+        let octave_5_count = xml.matches("<octave>5</octave>").count();
+        let octave_4_count = xml.matches("<octave>4</octave>").count();
+        assert_eq!(octave_5_count, 4, "First 4 notes (line 1) should be at octave 5 with Eb:^ mod point");
+        assert_eq!(octave_4_count, 4, "Last 4 notes (line 2) should be at octave 4 (no mod point)");
     }
 }
