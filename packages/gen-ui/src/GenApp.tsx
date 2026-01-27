@@ -25,6 +25,33 @@ import type {
   ModPoints,
 } from './types';
 
+// URL parameter helpers
+function getUrlParams() {
+  const params = new URLSearchParams(window.location.search);
+  const path = window.location.pathname.slice(1); // Remove leading /
+  return {
+    score: path || params.get('score') || null,
+    instrument: params.get('instrument') || null,
+  };
+}
+
+function getInstrumentIndexById(id: string | null): number {
+  if (!id) return 0;
+  const index = INSTRUMENT_PRESETS.findIndex(p => p.id === id);
+  return index >= 0 ? index : 0;
+}
+
+function updateUrl(score: string | null, instrumentId: string | null) {
+  const path = score ? `/${score}` : '/';
+  const params = new URLSearchParams();
+  if (instrumentId && instrumentId !== 'concert') {
+    params.set('instrument', instrumentId);
+  }
+  const search = params.toString();
+  const url = path + (search ? `?${search}` : '');
+  window.history.replaceState({}, '', url);
+}
+
 // Mobile view tabs
 type MobileTab = 'editor' | 'sheet';
 
@@ -55,6 +82,7 @@ const OCTAVE_OPTIONS = [
 
 // Instrument presets that set transpose, octave, and clef together
 interface InstrumentPreset {
+  id: string; // URL-friendly identifier
   label: string;
   transposeIndex: number; // Index into TRANSPOSE_OPTIONS
   octaveShift: number;
@@ -64,18 +92,21 @@ interface InstrumentPreset {
 
 const INSTRUMENT_PRESETS: InstrumentPreset[] = [
   {
+    id: 'concert',
     label: 'Treble Clef (Concert)',
     transposeIndex: 0,
     octaveShift: 0,
     clef: 'treble',
   },
   {
+    id: 'bass',
     label: 'Bass Clef (Concert)',
     transposeIndex: 0,
     octaveShift: -1,
     clef: 'bass',
   },
   {
+    id: 'bb',
     label: 'Bb Trumpet/Clarinet/Tenor Sax',
     transposeIndex: 1,
     octaveShift: 0,
@@ -83,13 +114,14 @@ const INSTRUMENT_PRESETS: InstrumentPreset[] = [
     instrumentGroup: 'bb',
   },
   {
+    id: 'eb',
     label: 'Eb Alto/Baritone Sax',
     transposeIndex: 2,
     octaveShift: 0,
     clef: 'treble',
     instrumentGroup: 'eb',
   },
-  { label: 'F French Horn', transposeIndex: 3, octaveShift: 0, clef: 'treble' },
+  { id: 'f-horn', label: 'F French Horn', transposeIndex: 3, octaveShift: 0, clef: 'treble' },
 ];
 
 // Parse mod points from source text
@@ -161,16 +193,39 @@ export interface GenAppProps {
 
 export function GenApp({ compiler, files, scores }: GenAppProps) {
   const isMobile = useIsMobile();
+
+  // Get initial values from URL
+  const initialParams = useMemo(() => getUrlParams(), []);
+
   const [genSource, setGenSource] = useState('');
-  const [selectedScore, setSelectedScore] = useState<string | null>(null);
+  const [selectedScore, setSelectedScore] = useState<string | null>(initialParams.score);
   const [error, setError] = useState<CompileError | null>(null);
   const [isCompiling, setIsCompiling] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(isMobile); // Collapsed by default on mobile
   const [mobileTab, setMobileTab] = useState<MobileTab>('sheet'); // Default to sheet view on mobile
-  const [instrumentIndex, setInstrumentIndex] = useState(0); // Index into INSTRUMENT_PRESETS, or CUSTOM_PRESET_INDEX for custom
-  const [transposeIndex, setTransposeIndex] = useState(0); // Index into TRANSPOSE_OPTIONS
-  const [octaveShift, setOctaveShift] = useState(0); // Octave shift (-2 to +2)
-  const [clef, setClef] = useState<Clef>('treble'); // Clef selection
+  const [instrumentIndex, setInstrumentIndex] = useState(() => getInstrumentIndexById(initialParams.instrument)); // Index into INSTRUMENT_PRESETS, or CUSTOM_PRESET_INDEX for custom
+  const [transposeIndex, setTransposeIndex] = useState(() => {
+    // Initialize from preset if instrument was in URL
+    const idx = getInstrumentIndexById(initialParams.instrument);
+    if (idx < INSTRUMENT_PRESETS.length) {
+      return INSTRUMENT_PRESETS[idx].transposeIndex;
+    }
+    return 0;
+  });
+  const [octaveShift, setOctaveShift] = useState(() => {
+    const idx = getInstrumentIndexById(initialParams.instrument);
+    if (idx < INSTRUMENT_PRESETS.length) {
+      return INSTRUMENT_PRESETS[idx].octaveShift;
+    }
+    return 0;
+  });
+  const [clef, setClef] = useState<Clef>(() => {
+    const idx = getInstrumentIndexById(initialParams.instrument);
+    if (idx < INSTRUMENT_PRESETS.length) {
+      return INSTRUMENT_PRESETS[idx].clef;
+    }
+    return 'treble';
+  });
   const [zoom, setZoom] = useState(0.75); // Zoom level for sheet music
   const sheetMusicRef = useRef<HTMLDivElement>(null);
   const osmdRef = useRef<OpenSheetMusicDisplay | null>(null);
@@ -230,13 +285,31 @@ export function GenApp({ compiler, files, scores }: GenAppProps) {
     }
   }, [isMobile]);
 
-  // Auto-select first score on mount
+  // Load score from URL or default to first score
   useEffect(() => {
-    if (scores.length > 0) {
-      setGenSource(scores[0].content);
-      setSelectedScore(scores[0].name);
+    if (scores.length === 0) return;
+
+    // Try to find score from URL
+    if (selectedScore) {
+      const score = scores.find(s => s.name === selectedScore);
+      if (score) {
+        setGenSource(score.content);
+        return;
+      }
     }
-  }, [scores]);
+
+    // Default to first score
+    setGenSource(scores[0].content);
+    setSelectedScore(scores[0].name);
+  }, [scores, selectedScore]);
+
+  // Sync URL when score or instrument changes
+  useEffect(() => {
+    const instrumentId = instrumentIndex < INSTRUMENT_PRESETS.length
+      ? INSTRUMENT_PRESETS[instrumentIndex].id
+      : null;
+    updateUrl(selectedScore, instrumentId);
+  }, [selectedScore, instrumentIndex]);
 
   const compileAndRender = useCallback(
     async (
@@ -331,10 +404,10 @@ export function GenApp({ compiler, files, scores }: GenAppProps) {
     }
   }, [zoom]);
 
-  const handleScoreSelect = (score: ScoreInfo) => {
+  const handleScoreSelect = useCallback((score: ScoreInfo) => {
     setGenSource(score.content);
     setSelectedScore(score.name);
-  };
+  }, []);
 
   const exportToPdf = useCallback(async () => {
     const svgs = sheetMusicRef.current?.querySelectorAll('svg');
