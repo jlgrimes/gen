@@ -22,6 +22,7 @@ pub enum Token {
     // Pitch modifiers
     Sharp,          // #
     Flat,           // b
+    Natural,        // %
     Underscore,     // _
     Caret,          // ^
 
@@ -300,6 +301,10 @@ impl<'a> Lexer<'a> {
                 'b' => {
                     self.advance();
                     Token::Flat
+                }
+                '%' => {
+                    self.advance();
+                    Token::Natural
                 }
                 '_' => {
                     self.advance();

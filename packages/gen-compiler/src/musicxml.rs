@@ -344,7 +344,7 @@ fn write_measure<W: std::io::Write>(
     let beam_states = calculate_beam_states(&measure.elements, time_signature);
 
     for (element, beam_state) in measure.elements.iter().zip(beam_states.iter()) {
-        write_element(writer, element, *beam_state, octave_shift);
+        write_element(writer, element, *beam_state, octave_shift, key_signature);
     }
 
     // Write right barline (repeat end and/or ending stop)
@@ -444,9 +444,9 @@ fn write_right_barline<W: std::io::Write>(
         .unwrap();
 }
 
-fn write_element<W: std::io::Write>(writer: &mut Writer<W>, element: &Element, beam_state: BeamState, octave_shift: i8) {
+fn write_element<W: std::io::Write>(writer: &mut Writer<W>, element: &Element, beam_state: BeamState, octave_shift: i8, key_signature: &KeySignature) {
     match element {
-        Element::Note(note) => write_note(writer, note, beam_state, octave_shift),
+        Element::Note(note) => write_note(writer, note, beam_state, octave_shift, key_signature),
         Element::Rest {
             duration,
             dotted,
@@ -455,10 +455,18 @@ fn write_element<W: std::io::Write>(writer: &mut Writer<W>, element: &Element, b
     }
 }
 
-fn write_note<W: std::io::Write>(writer: &mut Writer<W>, note: &Note, beam_state: BeamState, octave_shift: i8) {
+fn write_note<W: std::io::Write>(writer: &mut Writer<W>, note: &Note, beam_state: BeamState, octave_shift: i8, key_signature: &KeySignature) {
     writer
         .write_event(Event::Start(BytesStart::new("note")))
         .unwrap();
+
+    // Determine the effective accidental: if no explicit accidental, apply key signature
+    // ForceNatural (%) explicitly cancels key signature accidentals
+    let effective_accidental = match note.accidental {
+        Accidental::Natural => key_signature.accidental_for_note(note.name),
+        Accidental::ForceNatural => Accidental::Natural, // Force natural pitch (no alter)
+        other => other,
+    };
 
     // Pitch
     writer
@@ -467,10 +475,10 @@ fn write_note<W: std::io::Write>(writer: &mut Writer<W>, note: &Note, beam_state
     write_text_element(writer, "step", note_name_to_str(note.name));
 
     // Alter for sharps/flats
-    match note.accidental {
+    match effective_accidental {
         Accidental::Sharp => write_text_element(writer, "alter", "1"),
         Accidental::Flat => write_text_element(writer, "alter", "-1"),
-        Accidental::Natural => {}
+        Accidental::Natural | Accidental::ForceNatural => {}
     }
 
     // Octave (middle C = octave 4, adjusted by octave_shift)
@@ -595,6 +603,7 @@ fn write_note<W: std::io::Write>(writer: &mut Writer<W>, note: &Note, beam_state
     match note.accidental {
         Accidental::Sharp => write_text_element(writer, "accidental", "sharp"),
         Accidental::Flat => write_text_element(writer, "accidental", "flat"),
+        Accidental::ForceNatural => write_text_element(writer, "accidental", "natural"),
         Accidental::Natural => {}
     }
 
@@ -951,5 +960,160 @@ C"#;
         // Should contain both ending types
         assert!(xml.contains("<ending number=\"1\" type=\"start\">"));
         assert!(xml.contains("<ending number=\"2\" type=\"start\">"));
+    }
+
+    #[test]
+    fn test_key_signature_sharps_f() {
+        // G major has F#, so an F without explicit accidental should be sharped
+        let source = r#"---
+key-signature: G
+---
+F"#;
+        let score = parse(source).unwrap();
+        let xml = to_musicxml(&score);
+
+        // F should be altered to F# (alter = 1)
+        assert!(xml.contains("<step>F</step>"));
+        assert!(xml.contains("<alter>1</alter>"));
+        // No accidental display element (it's part of the key signature)
+        assert!(!xml.contains("<accidental>sharp</accidental>"));
+    }
+
+    #[test]
+    fn test_key_signature_d_major() {
+        // D major has F# and C#
+        let source = r#"---
+key-signature: D
+---
+F C G"#;
+        let score = parse(source).unwrap();
+        let xml = to_musicxml(&score);
+
+        // Count alter elements - should have 2 (for F# and C#, but not G)
+        let alter_count = xml.matches("<alter>1</alter>").count();
+        assert_eq!(alter_count, 2, "D major should sharp F and C");
+    }
+
+    #[test]
+    fn test_key_signature_flats() {
+        // F major has Bb
+        let source = r#"---
+key-signature: F
+---
+B"#;
+        let score = parse(source).unwrap();
+        let xml = to_musicxml(&score);
+
+        // B should be altered to Bb (alter = -1)
+        assert!(xml.contains("<step>B</step>"));
+        assert!(xml.contains("<alter>-1</alter>"));
+    }
+
+    #[test]
+    fn test_key_signature_explicit_override() {
+        // G major has F#, but if user writes Fb explicitly, use that
+        let source = r#"---
+key-signature: G
+---
+Fb"#;
+        let score = parse(source).unwrap();
+        let xml = to_musicxml(&score);
+
+        // Should have Fb (alter = -1), not F#
+        assert!(xml.contains("<step>F</step>"));
+        assert!(xml.contains("<alter>-1</alter>"));
+        // Should show the accidental since it differs from key signature
+        assert!(xml.contains("<accidental>flat</accidental>"));
+    }
+
+    #[test]
+    fn test_key_signature_c_major_no_alterations() {
+        // C major has no sharps or flats
+        let source = r#"---
+key-signature: C
+---
+C D E F G A B"#;
+        let score = parse(source).unwrap();
+        let xml = to_musicxml(&score);
+
+        // No alter elements should be present
+        assert!(!xml.contains("<alter>"));
+    }
+
+    #[test]
+    fn test_key_signature_sharp_count_notation() {
+        // ### means 3 sharps (A major: F#, C#, G#)
+        let source = r#"---
+key-signature: ###
+---
+F C G D"#;
+        let score = parse(source).unwrap();
+        let xml = to_musicxml(&score);
+
+        // F, C, and G should be sharped, D should not
+        let alter_count = xml.matches("<alter>1</alter>").count();
+        assert_eq!(alter_count, 3, "### should sharp F, C, and G");
+    }
+
+    #[test]
+    fn test_key_signature_single_sharp() {
+        // # means 1 sharp (G major: F#)
+        let source = "---\nkey-signature: \"#\"\n---\nF G";
+        let score = parse(source).unwrap();
+        let xml = to_musicxml(&score);
+
+        // Only F should be sharped
+        let alter_count = xml.matches("<alter>1</alter>").count();
+        assert_eq!(alter_count, 1, "# should only sharp F");
+    }
+
+    #[test]
+    fn test_key_signature_flat_count_notation() {
+        // bbb means 3 flats (Eb major: B, E, A)
+        let source = r#"---
+key-signature: bbb
+---
+B E A D"#;
+        let score = parse(source).unwrap();
+        let xml = to_musicxml(&score);
+
+        // B, E, and A should be flatted, D should not
+        let alter_count = xml.matches("<alter>-1</alter>").count();
+        assert_eq!(alter_count, 3, "bbb should flat B, E, and A");
+    }
+
+    #[test]
+    fn test_force_natural_accidental() {
+        // C% should show a natural sign explicitly
+        let score = parse("C%").unwrap();
+        let xml = to_musicxml(&score);
+
+        // Should have <accidental>natural</accidental> for explicit natural
+        assert!(xml.contains("<accidental>natural</accidental>"),
+            "Force natural (%) should display natural accidental sign");
+
+        // Should NOT have any <alter> element (natural = no alteration)
+        assert!(!xml.contains("<alter>"),
+            "Force natural should not have alter element");
+    }
+
+    #[test]
+    fn test_force_natural_in_sharp_key() {
+        // In G major (1 sharp), F is normally sharped
+        // F% should force F to be natural
+        let source = r#"---
+key-signature: G
+---
+F F%"#;
+        let score = parse(source).unwrap();
+        let xml = to_musicxml(&score);
+
+        // First F should be sharped (from key signature), second F should be natural
+        let alter_count = xml.matches("<alter>1</alter>").count();
+        assert_eq!(alter_count, 1, "Only first F should be sharped");
+
+        // Second note should have explicit natural sign
+        assert!(xml.contains("<accidental>natural</accidental>"),
+            "F% should display natural accidental sign");
     }
 }

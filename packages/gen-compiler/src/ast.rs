@@ -32,8 +32,31 @@ pub struct KeySignature {
 
 impl KeySignature {
     /// Parse a key signature string like "G", "D", "F", "Bb", "Eb", etc.
+    /// Also supports sharp/flat count notation: "#", "##", "###", etc. or "b", "bb", "bbb", etc.
     pub fn from_str(s: &str) -> Option<Self> {
-        let fifths = match s.trim() {
+        let trimmed = s.trim();
+
+        // Check for sharp count notation (e.g., "#", "##", "###")
+        if !trimmed.is_empty() && trimmed.chars().all(|c| c == '#') {
+            let count = trimmed.len() as i8;
+            if count >= 1 && count <= 7 {
+                return Some(Self { fifths: count });
+            }
+            return None;
+        }
+
+        // Check for flat count notation (e.g., "b", "bb", "bbb", etc.)
+        // Note: "b" alone is ambiguous with B major, so we only accept 2+ for flat count
+        // Use "F" for 1 flat instead
+        if trimmed.len() >= 2 && trimmed.chars().all(|c| c == 'b') {
+            let count = trimmed.len() as i8;
+            if count >= 2 && count <= 7 {
+                return Some(Self { fifths: -count });
+            }
+            return None;
+        }
+
+        let fifths = match trimmed {
             // Major keys
             "C" => 0,
             "G" => 1,
@@ -53,6 +76,51 @@ impl KeySignature {
             _ => return None,
         };
         Some(Self { fifths })
+    }
+
+    /// Returns the accidental for a note based on this key signature.
+    /// Notes without explicit accidentals should use this to determine their pitch.
+    /// Order of sharps: F C G D A E B
+    /// Order of flats: B E A D G C F
+    pub fn accidental_for_note(&self, note: NoteName) -> Accidental {
+        if self.fifths > 0 {
+            // Sharp keys - sharps are added in order: F C G D A E B
+            let sharped_notes = match self.fifths {
+                1 => [NoteName::F].as_slice(),
+                2 => [NoteName::F, NoteName::C].as_slice(),
+                3 => [NoteName::F, NoteName::C, NoteName::G].as_slice(),
+                4 => [NoteName::F, NoteName::C, NoteName::G, NoteName::D].as_slice(),
+                5 => [NoteName::F, NoteName::C, NoteName::G, NoteName::D, NoteName::A].as_slice(),
+                6 => [NoteName::F, NoteName::C, NoteName::G, NoteName::D, NoteName::A, NoteName::E].as_slice(),
+                7 => [NoteName::F, NoteName::C, NoteName::G, NoteName::D, NoteName::A, NoteName::E, NoteName::B].as_slice(),
+                _ => [].as_slice(),
+            };
+            if sharped_notes.contains(&note) {
+                Accidental::Sharp
+            } else {
+                Accidental::Natural
+            }
+        } else if self.fifths < 0 {
+            // Flat keys - flats are added in order: B E A D G C F
+            let flatted_notes = match self.fifths {
+                -1 => [NoteName::B].as_slice(),
+                -2 => [NoteName::B, NoteName::E].as_slice(),
+                -3 => [NoteName::B, NoteName::E, NoteName::A].as_slice(),
+                -4 => [NoteName::B, NoteName::E, NoteName::A, NoteName::D].as_slice(),
+                -5 => [NoteName::B, NoteName::E, NoteName::A, NoteName::D, NoteName::G].as_slice(),
+                -6 => [NoteName::B, NoteName::E, NoteName::A, NoteName::D, NoteName::G, NoteName::C].as_slice(),
+                -7 => [NoteName::B, NoteName::E, NoteName::A, NoteName::D, NoteName::G, NoteName::C, NoteName::F].as_slice(),
+                _ => [].as_slice(),
+            };
+            if flatted_notes.contains(&note) {
+                Accidental::Flat
+            } else {
+                Accidental::Natural
+            }
+        } else {
+            // C major - all notes are natural
+            Accidental::Natural
+        }
     }
 }
 
@@ -90,13 +158,14 @@ pub enum NoteName {
     B,
 }
 
-/// Accidentals: sharp, flat, or natural
+/// Accidentals: sharp, flat, natural (default/unspecified), or force natural (explicit %)
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub enum Accidental {
     #[default]
-    Natural,
-    Sharp,
-    Flat,
+    Natural,      // No accidental specified - follows key signature
+    Sharp,        // #
+    Flat,         // b
+    ForceNatural, // % - explicitly show natural sign
 }
 
 /// Octave relative to middle octave

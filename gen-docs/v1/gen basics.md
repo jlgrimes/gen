@@ -30,8 +30,9 @@ all available fields for metadata are
 
 ### Key Signatures
 
-The `key-signature` field accepts the following values:
+The `key-signature` field accepts key names or sharp/flat count notation:
 
+**By key name:**
 | Key    | Sharps/Flats |
 | ------ | ------------ |
 | `C`    | 0 (none)     |
@@ -50,6 +51,27 @@ The `key-signature` field accepts the following values:
 | `Gb`   | 6 flats      |
 | `Cb`   | 7 flats      |
 
+**By sharp/flat count:**
+| Notation  | Meaning   |
+| --------- | --------- |
+| `#`       | 1 sharp   |
+| `##`      | 2 sharps  |
+| `###`     | 3 sharps  |
+| `####`    | 4 sharps  |
+| `#####`   | 5 sharps  |
+| `######`  | 6 sharps  |
+| `#######` | 7 sharps  |
+| `bb`      | 2 flats   |
+| `bbb`     | 3 flats   |
+| `bbbb`    | 4 flats   |
+| `bbbbb`   | 5 flats   |
+| `bbbbbb`  | 6 flats   |
+| `bbbbbbb` | 7 flats   |
+
+Note: For 1 flat, use `F` (key name) since `b` alone is ambiguous with B major.
+
+**How key signatures work:** Notes without explicit accidentals will automatically follow the key signature. For example, in G major (1 sharp), an `F` will sound as F#. To override this, use an explicit accidental like `Fb` for F natural.
+
 Example with key signature:
 ```
 ---
@@ -59,7 +81,20 @@ time-signature: 4/4
 ---
 
 G A B C^
-D^ E^ F#^ G^
+D^ E^ F^ G^
+```
+
+Note: The `F` in the second line will automatically be sharped because we're in G major. You don't need to write `F#`.
+
+Example using sharp count:
+```
+---
+title: My Song in D Major
+key-signature: ##
+---
+
+D E F G
+A B C D^
 ```
 Each line is its own measure. If you do a new line, it will do a new measure.
 # Anatomy of a note

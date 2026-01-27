@@ -49,11 +49,13 @@ impl Parser {
         let mut measures = Vec::new();
         let mut in_slur = false;  // Track whether we're inside a slur across measures
         let mut slur_start_marked = false;  // Track if slur_start has been marked on a note
+        let mut pending_tie_stop = false;  // Track whether next note should have tie_stop
 
         while self.current().is_some() {
-            let (measure_opt, new_slur_state, new_slur_start_marked) = self.parse_measure(in_slur, slur_start_marked)?;
+            let (measure_opt, new_slur_state, new_slur_start_marked, new_pending_tie_stop) = self.parse_measure(in_slur, slur_start_marked, pending_tie_stop)?;
             in_slur = new_slur_state;
             slur_start_marked = new_slur_start_marked;
+            pending_tie_stop = new_pending_tie_stop;
             if let Some(measure) = measure_opt {
                 measures.push(measure);
             }
@@ -181,10 +183,9 @@ impl Parser {
 
     /// Parse a single measure (one line)
     /// Takes and returns slur state to track slurs across measures
-    /// Returns: (Option<Measure>, in_slur, slur_start_marked)
-    fn parse_measure(&mut self, mut in_slur: bool, mut slur_start_marked: bool) -> Result<(Option<Measure>, bool, bool), GenError> {
+    /// Returns: (Option<Measure>, in_slur, slur_start_marked, pending_tie_stop)
+    fn parse_measure(&mut self, mut in_slur: bool, mut slur_start_marked: bool, mut next_note_has_tie_stop: bool) -> Result<(Option<Measure>, bool, bool, bool), GenError> {
         let mut elements = Vec::new();
-        let mut next_note_has_tie_stop = false;
         let mut repeat_start = false;
         let mut repeat_end = false;
         let mut ending: Option<Ending> = None;
@@ -339,9 +340,9 @@ impl Parser {
         }
 
         if elements.is_empty() && !repeat_start && !repeat_end && ending.is_none() {
-            Ok((None, in_slur, slur_start_marked))
+            Ok((None, in_slur, slur_start_marked, next_note_has_tie_stop))
         } else {
-            Ok((Some(Measure { elements, repeat_start, repeat_end, ending }), in_slur, slur_start_marked))
+            Ok((Some(Measure { elements, repeat_start, repeat_end, ending }), in_slur, slur_start_marked, next_note_has_tie_stop))
         }
     }
 
@@ -589,7 +590,7 @@ impl Parser {
     fn parse_pitch_modifiers(&mut self) -> (Accidental, Octave) {
         let mut accidental = Accidental::Natural;
 
-        // Parse accidental (# or b)
+        // Parse accidental (#, b, or %)
         if let Some(t) = self.current() {
             match &t.token {
                 Token::Sharp => {
@@ -598,6 +599,10 @@ impl Parser {
                 }
                 Token::Flat => {
                     accidental = Accidental::Flat;
+                    self.advance();
+                }
+                Token::Natural => {
+                    accidental = Accidental::ForceNatural;
                     self.advance();
                 }
                 _ => {}
@@ -905,6 +910,40 @@ C D E"#;
     }
 
     #[test]
+    fn test_tie_across_measures() {
+        // Tie that spans two measures: last note of measure 1 tied to first note of measure 2
+        let score = parse("C D E F-\nG A B C^").unwrap();
+
+        assert_eq!(score.measures.len(), 2);
+        assert_eq!(score.measures[0].elements.len(), 4);
+        assert_eq!(score.measures[1].elements.len(), 4);
+
+        // Last note of first measure (F) should have tie_start
+        if let Element::Note(n) = &score.measures[0].elements[3] {
+            assert_eq!(n.name, NoteName::F);
+            assert!(n.tie_start, "Last note of first measure should have tie_start");
+            assert!(!n.tie_stop);
+        } else {
+            panic!("Expected note");
+        }
+
+        // First note of second measure (G) should have tie_stop
+        if let Element::Note(n) = &score.measures[1].elements[0] {
+            assert_eq!(n.name, NoteName::G);
+            assert!(!n.tie_start, "First note of second measure should not have tie_start");
+            assert!(n.tie_stop, "First note of second measure should have tie_stop");
+        } else {
+            panic!("Expected note");
+        }
+
+        // Other notes should have no ties
+        if let Element::Note(n) = &score.measures[1].elements[1] {
+            assert!(!n.tie_start);
+            assert!(!n.tie_stop);
+        }
+    }
+
+    #[test]
     fn test_repeat_start() {
         let score = parse("||: C D E F").unwrap();
         assert_eq!(score.measures.len(), 1);
@@ -1140,5 +1179,41 @@ C D E"#;
         // Third measure - second ending without repeat
         assert_eq!(score.measures[2].ending, Some(Ending::Second));
         assert!(!score.measures[2].repeat_end);
+    }
+
+    #[test]
+    fn test_force_natural() {
+        // C% - C with explicit natural sign
+        let score = parse("C% D E F").unwrap();
+        let elements = &score.measures[0].elements;
+
+        assert_eq!(elements.len(), 4);
+
+        if let Element::Note(n) = &elements[0] {
+            assert_eq!(n.name, NoteName::C);
+            assert_eq!(n.accidental, Accidental::ForceNatural);
+        } else {
+            panic!("Expected note");
+        }
+
+        // Other notes should have no accidental
+        if let Element::Note(n) = &elements[1] {
+            assert_eq!(n.accidental, Accidental::Natural);
+        }
+    }
+
+    #[test]
+    fn test_force_natural_with_octave() {
+        // F%^ - F natural, octave up
+        let score = parse("F%^").unwrap();
+        let elements = &score.measures[0].elements;
+
+        if let Element::Note(n) = &elements[0] {
+            assert_eq!(n.name, NoteName::F);
+            assert_eq!(n.accidental, Accidental::ForceNatural);
+            assert_eq!(n.octave, Octave::High);
+        } else {
+            panic!("Expected note");
+        }
     }
 }
