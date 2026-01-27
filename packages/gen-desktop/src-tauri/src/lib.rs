@@ -47,6 +47,21 @@ fn compile_gen_with_options(source: &str, clef: &str, octave_shift: i8) -> Compi
     }
 }
 
+#[command]
+fn compile_gen_with_mod_points(
+    source: &str,
+    clef: &str,
+    octave_shift: i8,
+    instrument_group: Option<&str>,
+) -> CompileResult {
+    match gen::compile_with_mod_points(source, clef, octave_shift, instrument_group) {
+        Ok(xml) => CompileResult::Success { xml },
+        Err(e) => CompileResult::Error {
+            error: error_to_compile_error(e),
+        },
+    }
+}
+
 fn error_to_compile_error(e: gen::GenError) -> CompileError {
     match e {
         gen::GenError::ParseError { line, column, message } => CompileError {
@@ -76,6 +91,7 @@ pub fn run() {
             compile_gen,
             compile_gen_unchecked,
             compile_gen_with_options,
+            compile_gen_with_mod_points,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

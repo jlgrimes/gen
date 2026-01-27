@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
   OpenSheetMusicDisplay,
   TransposeCalculator,
@@ -21,6 +21,8 @@ import type {
   FileAdapter,
   ScoreInfo,
   CompileError,
+  InstrumentGroup,
+  ModPoints,
 } from './types';
 
 // Mobile view tabs
@@ -57,6 +59,7 @@ interface InstrumentPreset {
   transposeIndex: number; // Index into TRANSPOSE_OPTIONS
   octaveShift: number;
   clef: Clef;
+  instrumentGroup?: InstrumentGroup; // For mod points support
 }
 
 const INSTRUMENT_PRESETS: InstrumentPreset[] = [
@@ -77,15 +80,98 @@ const INSTRUMENT_PRESETS: InstrumentPreset[] = [
     transposeIndex: 1,
     octaveShift: 0,
     clef: 'treble',
+    instrumentGroup: 'bb',
   },
   {
     label: 'Eb Alto/Baritone Sax',
     transposeIndex: 2,
     octaveShift: 0,
     clef: 'treble',
+    instrumentGroup: 'eb',
   },
   { label: 'F French Horn', transposeIndex: 3, octaveShift: 0, clef: 'treble' },
 ];
+
+// Parse mod points from source text
+function parseModPointsFromSource(source: string): ModPoints {
+  const result: ModPoints = { eb: [], bb: [] };
+  const lines = source.split('\n');
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const lineNum = i + 1; // 1-indexed
+
+    // Look for \\Group:modifier patterns
+    const commentMatch = line.indexOf('\\\\');
+    if (commentMatch === -1) continue;
+
+    const comment = line.slice(commentMatch + 2);
+
+    // Parse patterns like Eb:^ or Bb:_
+    const modPointRegex = /(eb|bb):(\^|_)/gi;
+    let match;
+    while ((match = modPointRegex.exec(comment)) !== null) {
+      const group = match[1].toLowerCase() as 'eb' | 'bb';
+      const shift = match[2] === '^' ? 1 : -1;
+      result[group].push({ line: lineNum, octaveShift: shift });
+    }
+  }
+
+  return result;
+}
+
+// Update source with a mod point change
+function updateSourceWithModPoint(
+  source: string,
+  lineNum: number,
+  group: InstrumentGroup,
+  newShift: number | null
+): string {
+  const lines = source.split('\n');
+  const lineIndex = lineNum - 1;
+
+  if (lineIndex < 0 || lineIndex >= lines.length) return source;
+
+  let line = lines[lineIndex];
+
+  // Find if there's already a comment on this line
+  const commentIndex = line.indexOf('\\\\');
+
+  if (commentIndex !== -1) {
+    // Line has a comment - update or remove the mod point for this group
+    const beforeComment = line.slice(0, commentIndex);
+    let comment = line.slice(commentIndex + 2);
+
+    // Remove existing mod point for this group
+    const groupRegex = new RegExp(`\\s*${group}:[\\^_]`, 'gi');
+    comment = comment.replace(groupRegex, '');
+
+    // Add new mod point if shift is not null
+    if (newShift !== null) {
+      const modifier = newShift > 0 ? '^' : '_';
+      comment = comment.trim();
+      if (comment) {
+        comment = `${group.charAt(0).toUpperCase() + group.slice(1)}:${modifier} ${comment}`;
+      } else {
+        comment = `${group.charAt(0).toUpperCase() + group.slice(1)}:${modifier}`;
+      }
+    }
+
+    // Reconstruct line
+    if (comment.trim()) {
+      line = `${beforeComment.trimEnd()} \\\\${comment.trim()}`;
+    } else {
+      line = beforeComment.trimEnd();
+    }
+  } else if (newShift !== null) {
+    // No comment yet, add one
+    const modifier = newShift > 0 ? '^' : '_';
+    line = `${line.trimEnd()} \\\\${group.charAt(0).toUpperCase() + group.slice(1)}:${modifier}`;
+  }
+
+  lines[lineIndex] = line;
+  return lines.join('\n');
+}
 
 // Index for "Custom" option (after all presets)
 const CUSTOM_PRESET_INDEX = INSTRUMENT_PRESETS.length;
@@ -120,6 +206,48 @@ export function GenApp({ compiler, files, scores }: GenAppProps) {
   const osmdRef = useRef<OpenSheetMusicDisplay | null>(null);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Get current instrument group from preset
+  const currentInstrumentGroup = useMemo((): InstrumentGroup | undefined => {
+    if (instrumentIndex >= INSTRUMENT_PRESETS.length) return undefined;
+    return INSTRUMENT_PRESETS[instrumentIndex].instrumentGroup;
+  }, [instrumentIndex]);
+
+  // Parse mod points from source
+  const modPoints = useMemo(() => parseModPointsFromSource(genSource), [genSource]);
+
+  // Get mod points for current instrument group as a Map (for the editor)
+  const modPointsForGroup = useMemo((): Map<number, number> => {
+    if (!currentInstrumentGroup) return new Map();
+    const points = modPoints[currentInstrumentGroup];
+    return new Map(points.map(p => [p.line, p.octaveShift]));
+  }, [modPoints, currentInstrumentGroup]);
+
+  // Handle mod point toggle from editor gutter
+  const handleModPointToggle = useCallback(
+    (line: number, currentShift: number | null) => {
+      if (!currentInstrumentGroup) return;
+
+      // Toggle: null -> +1 -> -1 -> null
+      let newShift: number | null;
+      if (currentShift === null) {
+        newShift = 1;
+      } else if (currentShift === 1) {
+        newShift = -1;
+      } else {
+        newShift = null;
+      }
+
+      const updatedSource = updateSourceWithModPoint(
+        genSource,
+        line,
+        currentInstrumentGroup,
+        newShift
+      );
+      setGenSource(updatedSource);
+    },
+    [genSource, currentInstrumentGroup]
+  );
+
   const toggleSidebar = useCallback(() => {
     setIsSidebarCollapsed(prev => !prev);
   }, []);
@@ -145,15 +273,17 @@ export function GenApp({ compiler, files, scores }: GenAppProps) {
       halftones: number,
       octave: number,
       selectedClef: Clef,
+      instrumentGroup: InstrumentGroup | undefined,
     ) => {
       if (!source.trim()) return;
 
       setIsCompiling(true);
       try {
-        // Compile with clef parameter
+        // Compile with clef and instrument group parameters
         const result = await compiler.compile(source, {
           clef: selectedClef,
           octaveShift: octave,
+          instrumentGroup,
         });
 
         if (result.status === 'error' && result.error) {
@@ -205,6 +335,7 @@ export function GenApp({ compiler, files, scores }: GenAppProps) {
         TRANSPOSE_OPTIONS[transposeIndex].halftones,
         octaveShift,
         clef,
+        currentInstrumentGroup,
       );
     }, 150);
 
@@ -213,7 +344,7 @@ export function GenApp({ compiler, files, scores }: GenAppProps) {
         clearTimeout(debounceRef.current);
       }
     };
-  }, [genSource, transposeIndex, octaveShift, clef, compileAndRender]);
+  }, [genSource, transposeIndex, octaveShift, clef, currentInstrumentGroup, compileAndRender]);
 
   // Update zoom without recompiling
   useEffect(() => {
@@ -278,6 +409,9 @@ export function GenApp({ compiler, files, scores }: GenAppProps) {
           onChange={setGenSource}
           error={error}
           placeholder='Select a score or start typing...'
+          instrumentGroup={currentInstrumentGroup}
+          modPointsForGroup={modPointsForGroup}
+          onModPointToggle={handleModPointToggle}
         />
       </div>
       {error && (

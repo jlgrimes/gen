@@ -1,6 +1,19 @@
+export type InstrumentGroup = 'eb' | 'bb';
+
+export interface ModPoint {
+  line: number;
+  octaveShift: number;  // +1 or -1
+}
+
+export interface ModPoints {
+  eb: ModPoint[];
+  bb: ModPoint[];
+}
+
 export interface CompileOptions {
   clef: 'treble' | 'bass';
   octaveShift: number;
+  instrumentGroup?: InstrumentGroup;
 }
 
 export interface CompileResult {

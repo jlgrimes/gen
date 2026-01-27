@@ -1,4 +1,5 @@
 use serde::Deserialize;
+use std::collections::HashMap;
 
 /// Time signature (e.g., 4/4, 3/4, 6/8)
 #[derive(Debug, Clone, PartialEq)]
@@ -288,9 +289,63 @@ pub struct Measure {
     pub ending: Option<Ending>, // 1st: or 2nd: volta bracket
 }
 
+/// Instrument groups for mod points
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum InstrumentGroup {
+    Eb,  // Alto sax, Baritone sax
+    Bb,  // Trumpet, Tenor sax, Clarinet
+}
+
+impl InstrumentGroup {
+    /// Parse from string (case-insensitive)
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s.to_lowercase().as_str() {
+            "eb" => Some(InstrumentGroup::Eb),
+            "bb" => Some(InstrumentGroup::Bb),
+            _ => None,
+        }
+    }
+}
+
+/// Mod points - per-line octave shifts for instrument groups
+#[derive(Debug, Clone, Default)]
+pub struct ModPoints {
+    /// Maps line number -> (instrument group -> octave shift)
+    /// Line numbers are 1-indexed (matching editor display)
+    pub points: HashMap<usize, HashMap<InstrumentGroup, i8>>,
+}
+
+impl ModPoints {
+    /// Get the octave shift for a specific line and instrument group
+    pub fn get_shift(&self, line: usize, group: InstrumentGroup) -> Option<i8> {
+        self.points.get(&line).and_then(|groups| groups.get(&group).copied())
+    }
+
+    /// Set the octave shift for a specific line and instrument group
+    pub fn set_shift(&mut self, line: usize, group: InstrumentGroup, shift: i8) {
+        self.points
+            .entry(line)
+            .or_insert_with(HashMap::new)
+            .insert(group, shift);
+    }
+
+    /// Remove the octave shift for a specific line and instrument group
+    pub fn remove_shift(&mut self, line: usize, group: InstrumentGroup) {
+        if let Some(groups) = self.points.get_mut(&line) {
+            groups.remove(&group);
+            if groups.is_empty() {
+                self.points.remove(&line);
+            }
+        }
+    }
+}
+
 /// A complete musical score
 #[derive(Debug, Clone)]
 pub struct Score {
     pub metadata: Metadata,
     pub measures: Vec<Measure>,
+    pub mod_points: ModPoints,
+    /// Maps source line number (1-indexed) to measure index
+    pub line_to_measure: HashMap<usize, usize>,
 }

@@ -1,6 +1,7 @@
 use crate::ast::*;
 use crate::error::GenError;
 use crate::lexer::{Lexer, LocatedToken, Token};
+use std::collections::HashMap;
 
 /// Context for parsing tuplets
 struct TupletContext {
@@ -42,7 +43,8 @@ impl Parser {
     }
 
     /// Parse the music content into a Score (metadata already extracted)
-    pub fn parse_music(&mut self, metadata: Metadata) -> Result<Score, GenError> {
+    /// mod_points and line_to_measure are passed in from the outer parse function
+    pub fn parse_music(&mut self, metadata: Metadata, mod_points: ModPoints, line_to_measure: HashMap<usize, usize>) -> Result<Score, GenError> {
         self.skip_whitespace_and_newlines();
 
         let mut measures = Vec::new();
@@ -61,7 +63,7 @@ impl Parser {
             self.skip_whitespace_and_newlines();
         }
 
-        Ok(Score { metadata, measures })
+        Ok(Score { metadata, measures, mod_points, line_to_measure })
     }
 
     /// Static method to parse YAML metadata content
@@ -644,9 +646,84 @@ fn extract_metadata(source: &str) -> (Option<String>, String) {
     }
 }
 
+/// Extract mod points from inline comments in the source.
+/// Comments are in the format: \\Eb:^ or \\Bb:_
+/// Returns (ModPoints, line_to_measure mapping)
+/// The line_to_measure maps 1-indexed source line numbers to measure indices.
+fn extract_mod_points(source: &str) -> (ModPoints, HashMap<usize, usize>) {
+    let mut mod_points = ModPoints::default();
+    let mut line_to_measure: HashMap<usize, usize> = HashMap::new();
+    let mut measure_index = 0;
+    let mut in_metadata = false;
+
+    for (line_idx, line) in source.lines().enumerate() {
+        let line_num = line_idx + 1; // 1-indexed
+        let trimmed = line.trim();
+
+        // Track metadata blocks (between --- markers)
+        if trimmed == "---" {
+            in_metadata = !in_metadata;
+            continue;
+        }
+
+        // Skip lines inside metadata blocks
+        if in_metadata {
+            continue;
+        }
+
+        // Check if this line has any music content (not just whitespace/comments)
+        let content_before_comment = if let Some(comment_start) = line.find("\\\\") {
+            &line[..comment_start]
+        } else {
+            line
+        };
+
+        // Skip lines that are only whitespace
+        let content_trimmed = content_before_comment.trim();
+        if !content_trimmed.is_empty() {
+            line_to_measure.insert(line_num, measure_index);
+            measure_index += 1;
+        }
+
+        // Parse mod points from comments
+        // Look for patterns like \\Eb:^ or \\Bb:_
+        if let Some(comment_start) = line.find("\\\\") {
+            let comment = &line[comment_start + 2..]; // Skip the \\
+
+            // Parse each mod point in the comment (there could be multiple: \\Eb:^ \\Bb:_)
+            // But since \\ starts the comment, subsequent \\ are just part of the comment text
+            // So we parse the entire comment for Group:modifier patterns
+            for part in comment.split_whitespace() {
+                // Also handle chained mod points like \\Eb:^ separated by space or \\
+                let part = part.trim_start_matches('\\');
+                if let Some((group_str, modifier)) = part.split_once(':') {
+                    if let Some(group) = InstrumentGroup::from_str(group_str) {
+                        let shift = match modifier {
+                            "^" => Some(1i8),
+                            "_" => Some(-1i8),
+                            "^^" => Some(2i8),
+                            "__" => Some(-2i8),
+                            _ => None,
+                        };
+                        if let Some(shift) = shift {
+                            mod_points.set_shift(line_num, group, shift);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    (mod_points, line_to_measure)
+}
+
 /// Main parsing function
 pub fn parse(source: &str) -> Result<Score, GenError> {
-    // Extract metadata block first (can be anywhere in the file)
+    // Extract mod points from comments first (before any other processing)
+    // This needs the original source to get correct line numbers
+    let (mod_points, line_to_measure) = extract_mod_points(source);
+
+    // Extract metadata block (can be anywhere in the file)
     let (metadata_content, music_source) = extract_metadata(source);
 
     // Parse metadata
@@ -660,7 +737,7 @@ pub fn parse(source: &str) -> Result<Score, GenError> {
     let mut lexer = Lexer::new(&music_source);
     let tokens = lexer.tokenize()?;
     let mut parser = Parser::new(tokens);
-    parser.parse_music(metadata)
+    parser.parse_music(metadata, mod_points, line_to_measure)
 }
 
 #[cfg(test)]
@@ -1248,5 +1325,74 @@ time-signature: 6/8
         } else {
             panic!("Expected note");
         }
+    }
+
+    #[test]
+    fn test_mod_points_single() {
+        // Single mod point on line 1
+        let score = parse("C D E F \\\\Eb:^").unwrap();
+
+        assert_eq!(score.measures.len(), 1);
+        assert_eq!(score.measures[0].elements.len(), 4);
+
+        // Check mod point was extracted
+        assert_eq!(score.mod_points.get_shift(1, InstrumentGroup::Eb), Some(1));
+        assert_eq!(score.mod_points.get_shift(1, InstrumentGroup::Bb), None);
+    }
+
+    #[test]
+    fn test_mod_points_multiple_groups() {
+        // Multiple mod points on same line
+        let score = parse("C D E F \\\\Eb:^ Bb:_").unwrap();
+
+        assert_eq!(score.measures.len(), 1);
+
+        // Check both mod points
+        assert_eq!(score.mod_points.get_shift(1, InstrumentGroup::Eb), Some(1));
+        assert_eq!(score.mod_points.get_shift(1, InstrumentGroup::Bb), Some(-1));
+    }
+
+    #[test]
+    fn test_mod_points_multiple_lines() {
+        // Mod points on different lines
+        let score = parse("C D E F \\\\Eb:^\nG A B C \\\\Bb:_").unwrap();
+
+        assert_eq!(score.measures.len(), 2);
+
+        // Line 1 has Eb up
+        assert_eq!(score.mod_points.get_shift(1, InstrumentGroup::Eb), Some(1));
+        assert_eq!(score.mod_points.get_shift(1, InstrumentGroup::Bb), None);
+
+        // Line 2 has Bb down
+        assert_eq!(score.mod_points.get_shift(2, InstrumentGroup::Eb), None);
+        assert_eq!(score.mod_points.get_shift(2, InstrumentGroup::Bb), Some(-1));
+    }
+
+    #[test]
+    fn test_mod_points_down_octave() {
+        let score = parse("C D E F \\\\Eb:_").unwrap();
+
+        assert_eq!(score.mod_points.get_shift(1, InstrumentGroup::Eb), Some(-1));
+    }
+
+    #[test]
+    fn test_line_to_measure_mapping() {
+        let score = parse("C D E F\nG A B C").unwrap();
+
+        // Line 1 maps to measure 0
+        assert_eq!(score.line_to_measure.get(&1), Some(&0));
+        // Line 2 maps to measure 1
+        assert_eq!(score.line_to_measure.get(&2), Some(&1));
+    }
+
+    #[test]
+    fn test_line_to_measure_with_metadata() {
+        let source = "---\ntitle: Test\n---\nC D E F\nG A B C";
+        let score = parse(source).unwrap();
+
+        assert_eq!(score.measures.len(), 2);
+        // Lines 1-3 are metadata, so music starts at line 4
+        assert_eq!(score.line_to_measure.get(&4), Some(&0));
+        assert_eq!(score.line_to_measure.get(&5), Some(&1));
     }
 }

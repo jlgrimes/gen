@@ -34,21 +34,39 @@ impl Transposition {
 
 /// Convert a Score to MusicXML format
 pub fn to_musicxml(score: &Score) -> String {
-    to_musicxml_full(score, None, Clef::Treble, 0)
+    to_musicxml_full(score, None, Clef::Treble, 0, None)
 }
 
 /// Convert a Score to MusicXML format with optional transposition
 pub fn to_musicxml_transposed(score: &Score, transposition: Option<Transposition>) -> String {
-    to_musicxml_full(score, transposition, Clef::Treble, 0)
+    to_musicxml_full(score, transposition, Clef::Treble, 0, None)
 }
 
 /// Convert a Score to MusicXML format with clef and octave shift options
 pub fn to_musicxml_with_options(score: &Score, transposition: Option<Transposition>, clef: Clef, octave_shift: i8) -> String {
-    to_musicxml_full(score, transposition, clef, octave_shift)
+    to_musicxml_full(score, transposition, clef, octave_shift, None)
+}
+
+/// Convert a Score to MusicXML format with mod points support
+/// When an instrument_group is specified, per-line octave shifts from mod_points are applied
+pub fn to_musicxml_with_mod_points(
+    score: &Score,
+    transposition: Option<Transposition>,
+    clef: Clef,
+    octave_shift: i8,
+    instrument_group: Option<InstrumentGroup>,
+) -> String {
+    to_musicxml_full(score, transposition, clef, octave_shift, instrument_group)
 }
 
 /// Convert a Score to MusicXML format with all options
-fn to_musicxml_full(score: &Score, transposition: Option<Transposition>, clef: Clef, octave_shift: i8) -> String {
+fn to_musicxml_full(
+    score: &Score,
+    transposition: Option<Transposition>,
+    clef: Clef,
+    octave_shift: i8,
+    instrument_group: Option<InstrumentGroup>,
+) -> String {
     let mut writer = Writer::new(Cursor::new(Vec::new()));
 
     // XML declaration
@@ -123,6 +141,29 @@ fn to_musicxml_full(score: &Score, transposition: Option<Transposition>, clef: C
     writer.write_event(Event::Start(part)).unwrap();
 
     for (i, measure) in score.measures.iter().enumerate() {
+        // Calculate effective octave shift for this measure
+        // If we have an instrument group, check if there's a mod point for this measure's source line
+        let effective_octave_shift = if let Some(group) = instrument_group {
+            // Find the source line for this measure
+            let source_line = score.line_to_measure
+                .iter()
+                .find(|(_, &measure_idx)| measure_idx == i)
+                .map(|(&line, _)| line);
+
+            if let Some(line) = source_line {
+                // Check for mod point on this line
+                if let Some(mod_shift) = score.mod_points.get_shift(line, group) {
+                    octave_shift + mod_shift
+                } else {
+                    octave_shift
+                }
+            } else {
+                octave_shift
+            }
+        } else {
+            octave_shift
+        };
+
         write_measure(
             &mut writer,
             measure,
@@ -132,7 +173,7 @@ fn to_musicxml_full(score: &Score, transposition: Option<Transposition>, clef: C
             i == 0,
             transposition,
             clef,
-            octave_shift,
+            effective_octave_shift,
         );
     }
 
@@ -1043,10 +1084,10 @@ C D E F G A B"#;
     #[test]
     fn test_key_signature_sharp_count_notation() {
         // ### means 3 sharps (A major: F#, C#, G#)
-        let source = r#"---
-key-signature: ###
+        let source = r####"---
+key-signature: "###"
 ---
-F C G D"#;
+F C G D"####;
         let score = parse(source).unwrap();
         let xml = to_musicxml(&score);
 
@@ -1115,5 +1156,54 @@ F F%"#;
         // Second note should have explicit natural sign
         assert!(xml.contains("<accidental>natural</accidental>"),
             "F% should display natural accidental sign");
+    }
+
+    #[test]
+    fn test_mod_points_octave_shift() {
+        // Test that mod points apply per-line octave shifts
+        // Line 1 has C at octave 4 (middle), with Eb:^ mod point -> octave 5
+        // Line 2 has C at octave 4 (middle), no mod point -> octave 4
+        let source = "C D E F \\\\Eb:^\nC D E F";
+        let score = parse(source).unwrap();
+
+        // Without instrument group, both should be at octave 4
+        let xml_no_group = to_musicxml(&score);
+        let octave_4_count = xml_no_group.matches("<octave>4</octave>").count();
+        assert_eq!(octave_4_count, 8, "All 8 notes should be at octave 4 without instrument group");
+
+        // With Eb instrument group, line 1 should be at octave 5
+        let xml_with_eb = to_musicxml_with_mod_points(&score, None, Clef::Treble, 0, Some(InstrumentGroup::Eb));
+        let octave_5_count = xml_with_eb.matches("<octave>5</octave>").count();
+        let octave_4_count = xml_with_eb.matches("<octave>4</octave>").count();
+        assert_eq!(octave_5_count, 4, "First 4 notes (line 1) should be at octave 5 with Eb group");
+        assert_eq!(octave_4_count, 4, "Last 4 notes (line 2) should be at octave 4 with Eb group");
+
+        // With Bb instrument group, no mod points, all should be at octave 4
+        let xml_with_bb = to_musicxml_with_mod_points(&score, None, Clef::Treble, 0, Some(InstrumentGroup::Bb));
+        let octave_4_count_bb = xml_with_bb.matches("<octave>4</octave>").count();
+        assert_eq!(octave_4_count_bb, 8, "All 8 notes should be at octave 4 with Bb group (no mod points)");
+    }
+
+    #[test]
+    fn test_mod_points_down_octave() {
+        // Test octave down modifier
+        let source = "C D E F \\\\Eb:_";
+        let score = parse(source).unwrap();
+
+        let xml = to_musicxml_with_mod_points(&score, None, Clef::Treble, 0, Some(InstrumentGroup::Eb));
+        let octave_3_count = xml.matches("<octave>3</octave>").count();
+        assert_eq!(octave_3_count, 4, "All 4 notes should be at octave 3 with Eb:_ mod point");
+    }
+
+    #[test]
+    fn test_mod_points_combined_with_base_shift() {
+        // Test that mod points combine with base octave shift
+        // Base shift: +1, Mod point: +1, Result: +2 (octave 6)
+        let source = "C D E F \\\\Eb:^";
+        let score = parse(source).unwrap();
+
+        let xml = to_musicxml_with_mod_points(&score, None, Clef::Treble, 1, Some(InstrumentGroup::Eb));
+        let octave_6_count = xml.matches("<octave>6</octave>").count();
+        assert_eq!(octave_6_count, 4, "All 4 notes should be at octave 6 with base +1 and mod +1");
     }
 }

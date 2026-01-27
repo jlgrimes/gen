@@ -7,7 +7,7 @@ pub mod semantic;
 
 pub use ast::*;
 pub use error::*;
-pub use musicxml::{to_musicxml, to_musicxml_with_options, Clef};
+pub use musicxml::{to_musicxml, to_musicxml_with_options, to_musicxml_with_mod_points, Clef};
 pub use parser::parse;
 pub use semantic::validate;
 
@@ -33,4 +33,21 @@ pub fn compile_with_options(source: &str, clef: &str, octave_shift: i8) -> Resul
         _ => Clef::Treble,
     };
     Ok(to_musicxml_with_options(&score, None, clef, octave_shift))
+}
+
+/// Compile with mod points support for instrument-specific octave shifts
+/// instrument_group: "eb" for Eb instruments, "bb" for Bb instruments, or None
+pub fn compile_with_mod_points(
+    source: &str,
+    clef: &str,
+    octave_shift: i8,
+    instrument_group: Option<&str>,
+) -> Result<String, GenError> {
+    let score = parse(source)?;
+    let clef = match clef {
+        "bass" => Clef::Bass,
+        _ => Clef::Treble,
+    };
+    let group = instrument_group.and_then(InstrumentGroup::from_str);
+    Ok(to_musicxml_with_mod_points(&score, None, clef, octave_shift, group))
 }

@@ -5,10 +5,11 @@ import type { CompilerAdapter, FileAdapter, CompileResult } from 'gen-ui';
 
 export const tauriCompiler: CompilerAdapter = {
   async compile(source, options) {
-    return invoke<CompileResult>('compile_gen_with_options', {
+    return invoke<CompileResult>('compile_gen_with_mod_points', {
       source,
       clef: options.clef,
       octaveShift: options.octaveShift,
+      instrumentGroup: options.instrumentGroup ?? null,
     });
   },
 };
