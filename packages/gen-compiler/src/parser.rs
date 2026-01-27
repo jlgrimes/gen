@@ -41,9 +41,8 @@ impl Parser {
         }
     }
 
-    /// Parse the entire source into a Score
-    pub fn parse(&mut self) -> Result<Score, GenError> {
-        let metadata = self.parse_metadata()?;
+    /// Parse the music content into a Score (metadata already extracted)
+    pub fn parse_music(&mut self, metadata: Metadata) -> Result<Score, GenError> {
         self.skip_whitespace_and_newlines();
 
         let mut measures = Vec::new();
@@ -65,40 +64,10 @@ impl Parser {
         Ok(Score { metadata, measures })
     }
 
-    /// Parse YAML metadata block if present
-    fn parse_metadata(&mut self) -> Result<Metadata, GenError> {
-        // Check for metadata start
-        if let Some(t) = self.current() {
-            if t.token == Token::MetadataStart {
-                self.advance(); // consume first ---
-
-                // Get metadata content
-                if let Some(t) = self.current() {
-                    if let Token::MetadataContent(content) = &t.token {
-                        let content = content.clone();
-                        self.advance();
-
-                        // Consume closing ---
-                        if let Some(t) = self.current() {
-                            if t.token == Token::MetadataStart {
-                                self.advance();
-                            }
-                        }
-
-                        return self.parse_yaml_metadata(&content);
-                    }
-                }
-
-                // Consume closing --- if no content
-                if let Some(t) = self.current() {
-                    if t.token == Token::MetadataStart {
-                        self.advance();
-                    }
-                }
-            }
-        }
-
-        Ok(Metadata::default())
+    /// Static method to parse YAML metadata content
+    fn parse_yaml_metadata_static(content: &str) -> Result<Metadata, GenError> {
+        let parser = Parser::new(vec![]);
+        parser.parse_yaml_metadata(content)
     }
 
     fn parse_yaml_metadata(&self, content: &str) -> Result<Metadata, GenError> {
@@ -637,12 +606,61 @@ impl Parser {
     }
 }
 
+/// Extract metadata block from source (can be at top or bottom)
+/// Returns (metadata_content, remaining_source)
+fn extract_metadata(source: &str) -> (Option<String>, String) {
+    let lines: Vec<&str> = source.lines().collect();
+
+    // Find the metadata block (between --- markers)
+    let mut start_idx = None;
+    let mut end_idx = None;
+
+    for (i, line) in lines.iter().enumerate() {
+        if line.trim() == "---" {
+            if start_idx.is_none() {
+                start_idx = Some(i);
+            } else {
+                end_idx = Some(i);
+                break;
+            }
+        }
+    }
+
+    match (start_idx, end_idx) {
+        (Some(start), Some(end)) => {
+            // Extract metadata content (between the --- markers)
+            let metadata_content: String = lines[start + 1..end].join("\n");
+
+            // Remove metadata lines from the source
+            let remaining: Vec<&str> = lines[..start]
+                .iter()
+                .chain(lines[end + 1..].iter())
+                .copied()
+                .collect();
+
+            (Some(metadata_content), remaining.join("\n"))
+        }
+        _ => (None, source.to_string()),
+    }
+}
+
 /// Main parsing function
 pub fn parse(source: &str) -> Result<Score, GenError> {
-    let mut lexer = Lexer::new(source);
+    // Extract metadata block first (can be anywhere in the file)
+    let (metadata_content, music_source) = extract_metadata(source);
+
+    // Parse metadata
+    let metadata = if let Some(content) = metadata_content {
+        Parser::parse_yaml_metadata_static(&content)?
+    } else {
+        Metadata::default()
+    };
+
+    // Parse music content
+    let mut lexer = Lexer::new(&music_source);
     let tokens = lexer.tokenize()?;
     let mut parser = Parser::new(tokens);
-    parser.parse()
+    parser.parse_music(metadata)
 }
 
 #[cfg(test)]
@@ -667,6 +685,21 @@ C D E"#;
         assert_eq!(score.metadata.title, Some("Test Song".to_string()));
         assert_eq!(score.metadata.time_signature.beats, 3);
         assert_eq!(score.metadata.time_signature.beat_type, 4);
+    }
+
+    #[test]
+    fn test_with_metadata_at_bottom() {
+        let source = r#"C D E
+G A B
+---
+title: Bottom Metadata
+time-signature: 6/8
+---"#;
+        let score = parse(source).unwrap();
+        assert_eq!(score.metadata.title, Some("Bottom Metadata".to_string()));
+        assert_eq!(score.metadata.time_signature.beats, 6);
+        assert_eq!(score.metadata.time_signature.beat_type, 8);
+        assert_eq!(score.measures.len(), 2);
     }
 
     #[test]

@@ -4,7 +4,8 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "cd ../gen-wasm && wasm-pack build --target web && cd ../gen-web && vite",
+    "dev:fast": "vite",
     "build": "cd ../gen-wasm && wasm-pack build --target web && cd ../gen-web && tsc && vite build",
     "build:web": "tsc && vite build",
     "preview": "vite preview"

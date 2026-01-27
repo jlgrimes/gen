@@ -115,19 +115,6 @@ impl<'a> Lexer<'a> {
         remaining.starts_with("2nd:")
     }
 
-    fn consume_metadata_content(&mut self) -> String {
-        let start = self.position;
-
-        // Consume until we hit another ---
-        while self.peek().is_some() {
-            if self.check_metadata_marker() {
-                break;
-            }
-            self.advance();
-        }
-
-        self.input[start..self.position].to_string()
-    }
 
     pub fn tokenize(&mut self) -> Result<Vec<LocatedToken>, GenError> {
         let mut tokens = Vec::new();
@@ -137,35 +124,36 @@ impl<'a> Lexer<'a> {
             let line = self.line;
             let column = self.column;
 
-            // Check for metadata markers
+            // Check for metadata markers - skip entire metadata block
             if self.check_metadata_marker() {
                 // Consume the three dashes
                 self.advance(); // -
                 self.advance(); // -
                 self.advance(); // -
 
-                tokens.push(LocatedToken {
-                    token: Token::MetadataStart,
-                    line,
-                    column,
-                });
+                // Skip the newline after ---
+                if let Some(&'\n') = self.peek() {
+                    self.advance();
+                }
 
+                // If this is the opening ---, skip until the closing ---
                 if !metadata_started {
                     metadata_started = true;
 
-                    // Skip the newline after ---
-                    if let Some(&'\n') = self.peek() {
+                    // Consume everything until the closing ---
+                    while self.peek().is_some() {
+                        if self.check_metadata_marker() {
+                            // Consume the closing ---
+                            self.advance(); // -
+                            self.advance(); // -
+                            self.advance(); // -
+                            // Skip trailing newline
+                            if let Some(&'\n') = self.peek() {
+                                self.advance();
+                            }
+                            break;
+                        }
                         self.advance();
-                    }
-
-                    // Consume metadata content
-                    let content = self.consume_metadata_content();
-                    if !content.trim().is_empty() {
-                        tokens.push(LocatedToken {
-                            token: Token::MetadataContent(content),
-                            line: line + 1,
-                            column: 1,
-                        });
                     }
                 }
                 continue;

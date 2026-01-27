@@ -1,23 +1,18 @@
----
-title: Spain
-composer: Chick Corea
-time-signature: 4/4
-key-signature: D
----
 D^ /F^ /D^ /E^ /D^ /B /D^
-/$ /C^ /A_ /C^ /$ /B_ /G_
+/$ /C^ /A /C^ /$ /B /G
 *A /A $ A-
 |oA *F /F
 $ *|oF-
 |oF $ F
 *G /A-A B
 *C^ /D^-D^ E^
-*D^ /C^-|oC-
+*D^ /C^-|oC^-
 C^ $ $ F
 *G /A-A B
 *C^ /D^-D^ E^
 D^ /E^ /F^-|oF^
-|o$ /$ /E^ /$ /D^ *C^ /D^_D^ E^
+|o$ /$ /E^ /$ /D^
+*C^ /D^-D^ E^
 |oD^ |oC^
 *C^ /B-|oB-
 |oB |o$
@@ -33,3 +28,9 @@ B /D^ /B E^ /C^ /B
 /C%^ F /F^ $ F^
 |oE^ *D^ /B-
 oB
+---
+title: Spain
+composer: Chick Corea
+time-signature: 4/4
+key-signature: D
+---
