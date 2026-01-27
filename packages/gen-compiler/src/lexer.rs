@@ -335,15 +335,48 @@ impl<'a> Lexer<'a> {
                     Token::Whitespace
                 }
                 '@' => {
-                    // Annotation/mod point - skip to end of line
+                    // Annotation/mod point - validate format: @Eb:^ or @Bb:_
                     self.advance();
+
+                    // Collect the annotation content until whitespace, @ or newline
+                    let start_pos = self.position;
                     while let Some(&ch) = self.peek() {
-                        if ch == '\n' {
+                        if ch == '\n' || ch == ' ' || ch == '\t' || ch == '@' {
                             break;
                         }
                         self.advance();
                     }
-                    // Don't emit a token, let the newline be handled normally
+                    let annotation = &self.input[start_pos..self.position];
+
+                    // Validate annotation format: should be like "Eb:^" or "Bb:_"
+                    // Format: Group (Eb or Bb) + colon + modifier (^ or _)
+                    if !annotation.is_empty() {
+                        let valid = if let Some(colon_pos) = annotation.find(':') {
+                            let group = &annotation[..colon_pos];
+                            let modifier = &annotation[colon_pos + 1..];
+                            let valid_group = group.eq_ignore_ascii_case("Eb") || group.eq_ignore_ascii_case("Bb");
+                            let valid_modifier = modifier == "^" || modifier == "_";
+                            valid_group && valid_modifier
+                        } else {
+                            false
+                        };
+
+                        if !valid {
+                            return Err(GenError::ParseError {
+                                line,
+                                column,
+                                message: format!("Invalid annotation '@{}'. Expected format: @Eb:^ or @Bb:_ (group:modifier)", annotation.trim()),
+                            });
+                        }
+                    } else {
+                        return Err(GenError::ParseError {
+                            line,
+                            column,
+                            message: "Empty annotation. Expected format: @Eb:^ or @Bb:_".to_string(),
+                        });
+                    }
+
+                    // Don't emit a token, continue to process more characters (possibly another @)
                     continue;
                 }
                 _ => {
@@ -537,11 +570,11 @@ mod tests {
     }
 
     #[test]
-    fn test_multiple_comments() {
+    fn test_multiple_annotations() {
         let mut lexer = Lexer::new("C D @Eb:^ @Bb:_");
         let tokens = lexer.tokenize().unwrap();
         let token_types: Vec<_> = tokens.iter().map(|t| &t.token).collect();
-        // After first \\, everything is skipped until newline
+        // Annotations are skipped, but whitespace between them is captured
         assert_eq!(
             token_types,
             vec![
@@ -549,7 +582,36 @@ mod tests {
                 &Token::Whitespace,
                 &Token::NoteD,
                 &Token::Whitespace,
+                &Token::Whitespace, // space between the two annotations
             ]
         );
+    }
+
+    #[test]
+    fn test_invalid_annotation_missing_modifier() {
+        let mut lexer = Lexer::new("C D E @Eb:");
+        let result = lexer.tokenize();
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        match err {
+            GenError::ParseError { message, .. } => {
+                assert!(message.contains("Invalid annotation"));
+            }
+            _ => panic!("Expected ParseError"),
+        }
+    }
+
+    #[test]
+    fn test_invalid_annotation_wrong_format() {
+        let mut lexer = Lexer::new("C D E @foo");
+        let result = lexer.tokenize();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_invalid_annotation_missing_colon() {
+        let mut lexer = Lexer::new("C D E @Eb^");
+        let result = lexer.tokenize();
+        assert!(result.is_err());
     }
 }

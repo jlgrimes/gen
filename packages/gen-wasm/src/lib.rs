@@ -48,3 +48,15 @@ pub fn compile_with_options(source: &str, clef: &str, octave_shift: i8) -> Resul
     gen::compile_with_options(source, clef, octave_shift)
         .map_err(|e| JsValue::from_str(&serde_json::to_string(&error_to_compile_error(e)).unwrap()))
 }
+
+/// Compile Gen source to MusicXML with mod points support for instrument-specific octave shifts
+#[wasm_bindgen]
+pub fn compile_with_mod_points(
+    source: &str,
+    clef: &str,
+    octave_shift: i8,
+    instrument_group: Option<String>,
+) -> Result<String, JsValue> {
+    gen::compile_with_mod_points(source, clef, octave_shift, instrument_group.as_deref())
+        .map_err(|e| JsValue::from_str(&serde_json::to_string(&error_to_compile_error(e)).unwrap()))
+}

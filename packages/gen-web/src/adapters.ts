@@ -1,4 +1,4 @@
-import init, { compile_with_options } from 'gen-wasm';
+import init, { compile_with_mod_points } from 'gen-wasm';
 import type { CompilerAdapter, FileAdapter } from 'gen-ui';
 
 let initialized = false;
@@ -14,7 +14,12 @@ export const wasmCompiler: CompilerAdapter = {
   async compile(source, options) {
     await ensureInit();
     try {
-      const xml = compile_with_options(source, options.clef, options.octaveShift);
+      const xml = compile_with_mod_points(
+        source,
+        options.clef,
+        options.octaveShift,
+        options.instrumentGroup ?? undefined
+      );
       return { status: 'success', xml };
     } catch (e: unknown) {
       // WASM throws error message as JSON string
