@@ -7,16 +7,26 @@ export const setModPointMarkers = StateEffect.define<Map<number, number>>();
 
 // Marker class for gutter display
 class ModPointMarker extends GutterMarker {
-  constructor(private shift: number) {
+  constructor(private shift: number | null) {
     super();
   }
 
   toDOM() {
     const span = document.createElement('span');
-    span.className = `mod-point-marker ${this.shift > 0 ? 'mod-point-up' : 'mod-point-down'}`;
-    span.textContent = this.shift > 0 ? '^' : '_';
-    span.title = this.shift > 0 ? 'Up one octave' : 'Down one octave';
+    if (this.shift !== null) {
+      span.className = `mod-point-marker ${this.shift > 0 ? 'mod-point-up' : 'mod-point-down'}`;
+      span.textContent = this.shift > 0 ? '^' : '_';
+      span.title = this.shift > 0 ? 'Up one octave' : 'Down one octave';
+    } else {
+      // Empty clickable element for lines without mod points
+      span.className = 'mod-point-empty';
+      span.title = 'Click to add octave shift';
+    }
     return span;
+  }
+
+  eq(other: ModPointMarker) {
+    return this.shift === other.shift;
   }
 }
 
@@ -47,7 +57,8 @@ export function createModPointGutter(
         const lineNum = view.state.doc.lineAt(line.from).number;
         const points = view.state.field(modPointsState);
         const shift = points.get(lineNum);
-        return shift !== undefined ? new ModPointMarker(shift) : null;
+        // Always return a marker (empty or with shift) so clicks work on all lines
+        return new ModPointMarker(shift ?? null);
       },
       lineMarkerChange(update) {
         return (

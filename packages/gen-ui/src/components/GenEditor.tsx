@@ -1,10 +1,20 @@
-import { useEffect, useRef, useCallback, useMemo } from "react";
-import { EditorState } from "@codemirror/state";
-import { EditorView, keymap, lineNumbers, highlightActiveLine, placeholder as cmPlaceholder } from "@codemirror/view";
-import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
-import { lintGutter, setDiagnostics, Diagnostic } from "@codemirror/lint";
-import { createModPointGutter, modPointsState, setModPointMarkers } from "./ModPointGutter";
-import type { CompileError, InstrumentGroup } from "../types";
+import { useEffect, useRef, useCallback, useMemo } from 'react';
+import { EditorState } from '@codemirror/state';
+import {
+  EditorView,
+  keymap,
+  lineNumbers,
+  highlightActiveLine,
+  placeholder as cmPlaceholder,
+} from '@codemirror/view';
+import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
+import { lintGutter, setDiagnostics, Diagnostic } from '@codemirror/lint';
+import {
+  createModPointGutter,
+  modPointsState,
+  setModPointMarkers,
+} from './ModPointGutter';
+import type { CompileError, InstrumentGroup } from '../types';
 
 interface GenEditorProps {
   value: string;
@@ -12,81 +22,99 @@ interface GenEditorProps {
   error: CompileError | null;
   placeholder?: string;
   instrumentGroup?: InstrumentGroup;
-  modPointsForGroup?: Map<number, number>;  // line -> shift for current group
+  modPointsForGroup?: Map<number, number>; // line -> shift for current group
   onModPointToggle?: (line: number, currentShift: number | null) => void;
 }
 
 const theme = EditorView.theme({
-  "&": {
-    height: "100%",
-    fontSize: "14px",
+  '&': {
+    height: '100%',
+    fontSize: '14px',
   },
-  ".cm-scroller": {
-    fontFamily: "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Monaco, Consolas, monospace",
-    overflow: "auto",
+  '.cm-scroller': {
+    fontFamily:
+      "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Monaco, Consolas, monospace",
+    overflow: 'auto',
   },
-  ".cm-content": {
-    padding: "12px 0",
+  '.cm-content': {
+    padding: '12px 0',
   },
-  ".cm-line": {
-    padding: "0 12px",
+  '.cm-line': {
+    padding: '0 12px',
   },
-  ".cm-gutters": {
-    backgroundColor: "transparent",
-    borderRight: "1px solid #e5e7eb",
-    color: "#9ca3af",
+  '.cm-gutters': {
+    backgroundColor: 'transparent',
+    borderRight: '1px solid #e5e7eb',
+    color: '#9ca3af',
   },
-  ".cm-lineNumbers .cm-gutterElement": {
-    padding: "0 8px 0 12px",
-    minWidth: "32px",
+  '.cm-lineNumbers .cm-gutterElement': {
+    padding: '0 4px 0 12px',
+    minWidth: '32px',
   },
-  ".cm-activeLine": {
-    backgroundColor: "#f9fafb",
+  '.cm-activeLine': {
+    backgroundColor: '#f9fafb',
   },
-  ".cm-activeLineGutter": {
-    backgroundColor: "#f9fafb",
+  '.cm-activeLineGutter': {
+    backgroundColor: '#f9fafb',
   },
-  "&.cm-focused .cm-cursor": {
-    borderLeftColor: "#374151",
+  '&.cm-focused .cm-cursor': {
+    borderLeftColor: '#374151',
   },
-  "&.cm-focused .cm-selectionBackground, ::selection": {
-    backgroundColor: "#dbeafe",
+  '&.cm-focused .cm-selectionBackground, ::selection': {
+    backgroundColor: '#dbeafe',
   },
-  ".cm-lintRange-error": {
-    backgroundImage: "none",
-    backgroundColor: "rgba(239, 68, 68, 0.2)",
-    borderBottom: "2px solid #ef4444",
+  '.cm-lintRange-error': {
+    backgroundImage: 'none',
+    backgroundColor: 'rgba(239, 68, 68, 0.2)',
+    borderBottom: '2px solid #ef4444',
   },
-  // Mod point gutter styles
-  ".cm-modpoints-gutter": {
-    width: "20px",
+  // Mod point gutter - zero width, markers positioned to use gutter border padding
+  '.cm-modpoints-gutter': {
+    width: '0',
+    minWidth: '0',
+    overflow: 'visible',
+    zIndex: '10',
   },
-  ".cm-modpoints-gutter .cm-gutterElement": {
-    padding: "0 2px",
-    cursor: "pointer",
+  '.cm-modpoints-gutter .cm-gutterElement': {
+    padding: '0',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    position: 'relative',
+    left: '2px',
+    width: '14px',
+    height: '100%',
+    zIndex: '10',
   },
-  ".mod-point-marker": {
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    width: "16px",
-    height: "16px",
-    fontSize: "12px",
-    fontWeight: "bold",
-    borderRadius: "3px",
+  '.mod-point-marker': {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '12px',
+    height: '12px',
+    fontSize: '9px',
+    fontWeight: 'bold',
+    borderRadius: '2px',
+    lineHeight: 1,
   },
-  ".mod-point-up": {
-    backgroundColor: "#3b82f6",
-    color: "#fff",
+  '.mod-point-up': {
+    backgroundColor: '#3b82f6',
+    color: '#fff',
   },
-  ".mod-point-down": {
-    backgroundColor: "#f97316",
-    color: "#fff",
+  '.mod-point-down': {
+    backgroundColor: '#f97316',
+    color: '#fff',
+  },
+  '.mod-point-empty': {
+    display: 'inline-block',
+    width: '12px',
+    height: '12px',
+    cursor: 'pointer',
   },
 });
 
-const placeholderExtension = (text: string) =>
-  cmPlaceholder(text);
+const placeholderExtension = (text: string) => cmPlaceholder(text);
 
 export function GenEditor({
   value,
@@ -109,14 +137,14 @@ export function GenEditor({
 
   const updateListener = useCallback(
     () =>
-      EditorView.updateListener.of((update) => {
+      EditorView.updateListener.of(update => {
         if (update.docChanged) {
           const newValue = update.state.doc.toString();
           valueRef.current = newValue;
           onChange(newValue);
         }
       }),
-    [onChange]
+    [onChange],
   );
 
   // Memoize the mod point gutter extension
@@ -135,10 +163,9 @@ export function GenEditor({
       lineNumbers(),
       highlightActiveLine(),
       history(),
-      lintGutter(),
       keymap.of([...defaultKeymap, ...historyKeymap]),
       theme,
-      placeholderExtension(placeholder ?? ""),
+      placeholderExtension(placeholder ?? ''),
       updateListener(),
     ];
 
@@ -146,6 +173,9 @@ export function GenEditor({
     if (modPointGutterExtension) {
       extensions.push(modPointGutterExtension);
     }
+
+    // Only add lint gutter if needed (adds visual space)
+    extensions.push(lintGutter());
 
     const state = EditorState.create({
       doc: value,
@@ -204,7 +234,7 @@ export function GenEditor({
           {
             from,
             to,
-            severity: "error",
+            severity: 'error',
             message: error.message,
           },
         ];
@@ -230,5 +260,5 @@ export function GenEditor({
     }
   }, [modPointsForGroup, instrumentGroup]);
 
-  return <div ref={containerRef} className="h-full w-full" />;
+  return <div ref={containerRef} className='h-full w-full' />;
 }
