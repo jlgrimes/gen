@@ -386,9 +386,11 @@ impl Parser {
         // Consume the opening bracket
         self.advance(); // [
 
-        // Parse the notes inside the bracket, tracking ties
+        // Parse the notes inside the bracket, tracking ties and slurs
         let mut raw_elements = Vec::new();
         let mut pending_tie_stop = false;
+        let mut in_slur = false;
+        let mut slur_start_marked = false;
 
         while let Some(t) = self.current() {
             if t.token == Token::RightBracket {
@@ -406,6 +408,26 @@ impl Parser {
                 });
             }
 
+            // Check for slur start
+            if t.token == Token::LeftParen {
+                self.advance();
+                in_slur = true;
+                slur_start_marked = false;  // Reset so next note gets slur_start
+                continue;
+            }
+
+            // Check for slur end
+            if t.token == Token::RightParen {
+                self.advance();
+                // Mark the last note as slur_stop
+                if let Some(Element::Note(note)) = raw_elements.last_mut() {
+                    note.slur_stop = true;
+                }
+                in_slur = false;
+                slur_start_marked = false;  // Reset for next slur
+                continue;
+            }
+
             // Parse element without tuplet context for now
             let mut element = self.parse_element(None)?;
 
@@ -415,6 +437,14 @@ impl Parser {
                     note.tie_stop = true;
                 }
                 pending_tie_stop = false;
+            }
+
+            // Mark slur_start on first note if we're in a slur and haven't marked it yet
+            if in_slur && !slur_start_marked {
+                if let Element::Note(note) = &mut element {
+                    note.slur_start = true;
+                    slur_start_marked = true;
+                }
             }
 
             // Check for tie (hyphen) after this element
@@ -1603,5 +1633,125 @@ time-signature: 6/8
         // Line 2 has music, no mod point
         assert_eq!(score.line_to_measure.get(&2), Some(&1));
         assert_eq!(score.mod_points.get_shift(2, InstrumentGroup::Eb), None);
+    }
+
+    #[test]
+    fn test_slur_in_rhythm_grouping() {
+        // Slur inside a rhythm grouping: //[(G_ F#_ G_) G]
+        let score = parse("//[(G_ F#_ G_) G]").unwrap();
+        let elements = &score.measures[0].elements;
+
+        assert_eq!(elements.len(), 4);
+
+        // All notes should be sixteenth notes
+        for element in elements.iter() {
+            if let Element::Note(n) = element {
+                assert_eq!(n.duration, Duration::Sixteenth);
+            }
+        }
+
+        // First note should have slur_start
+        if let Element::Note(n) = &elements[0] {
+            assert_eq!(n.name, NoteName::G);
+            assert_eq!(n.octave, Octave::Low);
+            assert!(n.slur_start, "First note should have slur_start");
+            assert!(!n.slur_stop);
+        }
+
+        // Second note should have neither
+        if let Element::Note(n) = &elements[1] {
+            assert_eq!(n.name, NoteName::F);
+            assert_eq!(n.accidental, Accidental::Sharp);
+            assert_eq!(n.octave, Octave::Low);
+            assert!(!n.slur_start);
+            assert!(!n.slur_stop);
+        }
+
+        // Third note should have slur_stop
+        if let Element::Note(n) = &elements[2] {
+            assert_eq!(n.name, NoteName::G);
+            assert_eq!(n.octave, Octave::Low);
+            assert!(!n.slur_start);
+            assert!(n.slur_stop, "Third note should have slur_stop");
+        }
+
+        // Fourth note should have no slur
+        if let Element::Note(n) = &elements[3] {
+            assert_eq!(n.name, NoteName::G);
+            assert_eq!(n.octave, Octave::Middle);
+            assert!(!n.slur_start);
+            assert!(!n.slur_stop);
+        }
+    }
+
+    #[test]
+    fn test_slur_in_tuplet() {
+        // Slur inside a tuplet: /3[(C D) E]
+        let score = parse("/3[(C D) E]").unwrap();
+        let elements = &score.measures[0].elements;
+
+        assert_eq!(elements.len(), 3);
+
+        // All notes should have tuplet info
+        for element in elements.iter() {
+            if let Element::Note(n) = element {
+                assert!(n.tuplet.is_some());
+                assert_eq!(n.duration, Duration::Eighth);
+            }
+        }
+
+        // First note should have slur_start
+        if let Element::Note(n) = &elements[0] {
+            assert_eq!(n.name, NoteName::C);
+            assert!(n.slur_start);
+            assert!(!n.slur_stop);
+        }
+
+        // Second note should have slur_stop
+        if let Element::Note(n) = &elements[1] {
+            assert_eq!(n.name, NoteName::D);
+            assert!(!n.slur_start);
+            assert!(n.slur_stop);
+        }
+
+        // Third note should have no slur
+        if let Element::Note(n) = &elements[2] {
+            assert_eq!(n.name, NoteName::E);
+            assert!(!n.slur_start);
+            assert!(!n.slur_stop);
+        }
+    }
+
+    #[test]
+    fn test_multiple_slurs_in_rhythm_grouping() {
+        // Multiple slurs in one rhythm grouping: //[(C D) (E F)]
+        let score = parse("//[(C D) (E F)]").unwrap();
+        let elements = &score.measures[0].elements;
+
+        assert_eq!(elements.len(), 4);
+
+        // First slur: C and D
+        if let Element::Note(n) = &elements[0] {
+            assert_eq!(n.name, NoteName::C);
+            assert!(n.slur_start);
+            assert!(!n.slur_stop);
+        }
+        if let Element::Note(n) = &elements[1] {
+            assert_eq!(n.name, NoteName::D);
+            assert!(!n.slur_start);
+            assert!(n.slur_stop);
+        }
+
+        // Second slur: E and F
+        if let Element::Note(n) = &elements[2] {
+            assert_eq!(n.name, NoteName::E);
+            assert!(n.slur_start);
+            assert!(!n.slur_stop);
+        }
+        if let Element::Note(n) = &elements[3] {
+            assert_eq!(n.name, NoteName::F);
+            assert!(!n.slur_start);
+            assert!(n.slur_stop);
+        }
     }
 }
