@@ -141,7 +141,15 @@ fn to_musicxml_full(
     part.push_attribute(("id", "P1"));
     writer.write_event(Event::Start(part)).unwrap();
 
+    // Track current key signature as it changes through the score
+    let mut current_key_signature = score.metadata.key_signature.clone();
+
     for (i, measure) in score.measures.iter().enumerate() {
+        // Update key signature if this measure has a key change
+        if let Some(ref new_key) = measure.key_change {
+            current_key_signature = new_key.clone();
+        }
+
         // Calculate effective octave shift for this measure
         // If we have an instrument group, check if there's a mod point for this measure's source line
         let effective_octave_shift = if let Some(group) = instrument_group {
@@ -198,7 +206,7 @@ fn to_musicxml_full(
             measure,
             i + 1,
             &score.metadata.time_signature,
-            &score.metadata.key_signature,
+            &current_key_signature,
             i == 0,
             transposition,
             clef,
@@ -362,6 +370,40 @@ fn write_measure<W: std::io::Write>(
     // Only write ending start if this is the first measure with this ending
     if measure.repeat_start || is_ending_start {
         write_left_barline(writer, measure.repeat_start, if is_ending_start { measure.ending } else { None });
+    }
+
+    // Write attributes for key changes in mid-score
+    if measure.key_change.is_some() && !include_attributes {
+        writer
+            .write_event(Event::Start(BytesStart::new("attributes")))
+            .unwrap();
+
+        // Transpose key signature if transposition is specified
+        let transposed_fifths = if let Some(trans) = transposition {
+            let new_fifths = key_signature.fifths + trans.fifths;
+            // Wrap around: keep in range -7 to +7 (valid key signatures)
+            if new_fifths > 7 {
+                new_fifths - 12
+            } else if new_fifths < -7 {
+                new_fifths + 12
+            } else {
+                new_fifths
+            }
+        } else {
+            key_signature.fifths
+        };
+
+        writer
+            .write_event(Event::Start(BytesStart::new("key")))
+            .unwrap();
+        write_text_element(writer, "fifths", &transposed_fifths.to_string());
+        writer
+            .write_event(Event::End(BytesEnd::new("key")))
+            .unwrap();
+
+        writer
+            .write_event(Event::End(BytesEnd::new("attributes")))
+            .unwrap();
     }
 
     // Include time signature, key signature, and clef on first measure
@@ -1891,5 +1933,69 @@ time-signature: 9/8
 
         assert_eq!(beam_begin_count, 3, "Should have 3 beam groups in 9/8");
         assert_eq!(beam_end_count, 3, "Should have 3 beam groups in 9/8");
+    }
+
+    #[test]
+    fn test_key_change_single_measure() {
+        let score = parse("@key:G C D E F").unwrap();
+        let xml = to_musicxml(&score);
+
+        // First measure should have attributes with key signature (G major = 1 sharp)
+        assert!(xml.contains("<key>"));
+        assert!(xml.contains("<fifths>1</fifths>"));
+    }
+
+    #[test]
+    fn test_key_change_multiple_measures() {
+        let source = r#"---
+key-signature: C
+---
+C D E F
+@key:D G A B C^
+@key:F D E F G"#;
+        let score = parse(source).unwrap();
+        let xml = to_musicxml(&score);
+
+        // Should have 3 key elements total: C (initial), D, and F
+        let key_count = xml.matches("<key>").count();
+        assert_eq!(key_count, 3, "Should have 3 key signature elements");
+
+        // First measure: C major (0)
+        assert!(xml.contains("<fifths>0</fifths>"));
+
+        // Second measure: D major (2 sharps)
+        assert!(xml.contains("<fifths>2</fifths>"));
+
+        // Third measure: F major (1 flat)
+        assert!(xml.contains("<fifths>-1</fifths>"));
+    }
+
+    #[test]
+    fn test_key_change_with_transposition() {
+        // Concert pitch: change to D major (2 sharps)
+        // For Bb instrument: should transpose to E major (4 sharps)
+        let source = "@key:D C D E F";
+        let score = parse(source).unwrap();
+        let transposition = Transposition { diatonic: 1, chromatic: 2, fifths: 2 };
+        let xml = to_musicxml_with_options(&score, Some(transposition), Clef::Treble, 0);
+
+        // D major (2) + Bb transposition (2) = E major (4)
+        assert!(xml.contains("<fifths>4</fifths>"));
+    }
+
+    #[test]
+    fn test_key_change_preserves_current_key() {
+        // After key change, notes should use the new key signature
+        let source = r#"---
+key-signature: C
+---
+C D E F
+@key:G F G A B"#;
+        let score = parse(source).unwrap();
+
+        // Second measure should have key change to G (1 sharp: F#)
+        assert_eq!(score.measures.len(), 2);
+        assert!(score.measures[1].key_change.is_some());
+        assert_eq!(score.measures[1].key_change.as_ref().unwrap().fifths, 1);
     }
 }

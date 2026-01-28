@@ -114,6 +114,19 @@ $           # quarter rest
 /$          # eighth rest
 ```
 
+### Key Changes
+Change the key signature in the middle of a piece:
+```
+@key:G      # Change to G major (1 sharp)
+@key:Bb     # Change to Bb major (2 flats)
+@key:##     # Change to 2 sharps (D major)
+```
+
+**Placement:** At the beginning of a measure
+**Effect:** Changes key signature from this point forward
+**Works with:** All key notation (key names or sharp/flat count)
+**Transposition:** Automatically transposes for instrument groups
+
 ### Bracket Groups
 Groups apply modifiers to multiple notes at once:
 

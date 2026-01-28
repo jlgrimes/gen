@@ -278,6 +278,51 @@ Gen accepts any chord symbol text without validation. Common formats include:
 
 The chord symbol will appear above the staff in the rendered sheet music.
 
+## Key Changes
+
+Key changes allow you to change the key signature in the middle of a piece. Place the `@key:` annotation at the beginning of the measure where you want the key change to occur.
+
+**Syntax:** `@key:KeyName`
+
+**Examples:**
+```
+---
+key-signature: C
+---
+C D E F                    # Measure 1: C major
+@key:G G A B C^            # Measure 2: changes to G major (1 sharp)
+@key:F F G A Bb            # Measure 3: changes to F major (1 flat)
+```
+
+**How key changes work:**
+- The key change applies from the measure where it appears onwards
+- All subsequent measures use the new key signature until another key change occurs
+- Notes without explicit accidentals will automatically follow the new key signature
+- Works with the same key notation as the metadata `key-signature` field (key names like `G`, `Bb`, or sharp/flat count like `##`, `bb`)
+
+**Key change with transposition:**
+Key changes work correctly with transposing instruments. The key signature will be automatically transposed to match the instrument's written pitch.
+
+**Example with modulation:**
+```
+---
+title: Modulating Song
+key-signature: C
+time-signature: 4/4
+---
+
+C E G C^                   # C major section
+G B D G^
+@key:G G A B C^            # Modulates to G major
+D E F# G                   # F is now F# due to key signature
+```
+
+**Combining with other annotations:**
+You can use key changes alongside other annotations in the same measure:
+```
+@key:D @ch:Dmaj7 D F# A D^  # Key change to D major with Dmaj7 chord
+```
+
 # Other notation
 
 ## Repeats

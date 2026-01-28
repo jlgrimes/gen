@@ -288,6 +288,7 @@ pub struct Measure {
     pub repeat_start: bool,   // ||: at the beginning of the measure
     pub repeat_end: bool,     // :|| at the end of the measure
     pub ending: Option<Ending>, // 1. or 2. volta bracket
+    pub key_change: Option<KeySignature>, // @key: annotation - changes key signature from this point forward
 }
 
 /// Instrument groups for mod points

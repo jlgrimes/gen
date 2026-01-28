@@ -70,8 +70,8 @@ impl Parser {
     }
 
     /// Parse the music content into a Score (metadata already extracted)
-    /// mod_points, line_to_measure, chord_annotations, and measure_octave_modifiers are passed in from the outer parse function
-    pub(crate) fn parse_music(&mut self, metadata: Metadata, mod_points: ModPoints, line_to_measure: HashMap<usize, usize>, chord_annotations: ChordAnnotations, measure_octave_modifiers: HashMap<usize, i8>) -> Result<Score, GenError> {
+    /// mod_points, line_to_measure, chord_annotations, key_changes, and measure_octave_modifiers are passed in from the outer parse function
+    pub(crate) fn parse_music(&mut self, metadata: Metadata, mod_points: ModPoints, line_to_measure: HashMap<usize, usize>, chord_annotations: ChordAnnotations, key_changes: HashMap<usize, KeySignature>, measure_octave_modifiers: HashMap<usize, i8>) -> Result<Score, GenError> {
         self.chord_annotations = chord_annotations;
         self.measure_octave_modifiers = measure_octave_modifiers;
         self.current_measure_index = 0;
@@ -89,7 +89,11 @@ impl Parser {
             slur_start_marked = new_slur_start_marked;
             pending_tie_stop = new_pending_tie_stop;
             current_ending = new_ending;
-            if let Some(measure) = measure_opt {
+            if let Some(mut measure) = measure_opt {
+                // Apply key change if one exists for this measure
+                if let Some(key_sig) = key_changes.get(&self.current_measure_index) {
+                    measure.key_change = Some(key_sig.clone());
+                }
                 measures.push(measure);
                 self.current_measure_index += 1;
             }
@@ -442,7 +446,7 @@ impl Parser {
         if elements.is_empty() && !repeat_start && !repeat_end && ending.is_none() {
             Ok((None, in_slur, slur_start_marked, next_note_has_tie_stop, ending))
         } else {
-            Ok((Some(Measure { elements, repeat_start, repeat_end, ending }), in_slur, slur_start_marked, next_note_has_tie_stop, ending))
+            Ok((Some(Measure { elements, repeat_start, repeat_end, ending, key_change: None }), in_slur, slur_start_marked, next_note_has_tie_stop, ending))
         }
     }
 
@@ -1075,6 +1079,60 @@ fn extract_chords(source: &str) -> ChordAnnotations {
     annotations
 }
 
+/// Extract key change annotations from @key:XXX patterns in source
+/// Returns mapping: measure index → key signature
+fn extract_key_changes(source: &str) -> HashMap<usize, KeySignature> {
+    let mut key_changes: HashMap<usize, KeySignature> = HashMap::new();
+    let mut measure_index = 0;
+    let mut in_metadata = false;
+
+    for line in source.lines() {
+        let trimmed = line.trim();
+
+        // Track metadata blocks
+        if trimmed == "---" {
+            in_metadata = !in_metadata;
+            continue;
+        }
+        if in_metadata || trimmed.is_empty() {
+            continue;
+        }
+
+        // Check if line has music content (notes or rests)
+        let has_music = line.chars().any(|c| matches!(c, 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | '$'));
+
+        // Look for @key: annotation
+        if let Some(key_pos) = line.find("@key:") {
+            let start = key_pos + 5; // Skip "@key:"
+            let rest = &line[start..];
+
+            // Extract key signature (until whitespace or @)
+            let mut end = 0;
+            for (i, ch) in rest.chars().enumerate() {
+                if ch == ' ' || ch == '\t' || ch == '\n' || ch == '@' {
+                    end = i;
+                    break;
+                }
+            }
+            if end == 0 {
+                end = rest.len();
+            }
+
+            let key_str = &rest[..end];
+            if let Some(key_sig) = KeySignature::from_str(key_str) {
+                key_changes.insert(measure_index, key_sig);
+            }
+        }
+
+        // Move to next measure if we had notes
+        if has_music {
+            measure_index += 1;
+        }
+    }
+
+    key_changes
+}
+
 /// Extract measure octave modifiers from @:^ or @:_ patterns in source
 /// Returns mapping: measure index → octave offset
 fn extract_measure_octave_modifiers(source: &str) -> HashMap<usize, i8> {
@@ -1143,6 +1201,9 @@ pub fn parse(source: &str) -> Result<Score, GenError> {
     // Extract chord annotations from source
     let chord_annotations = extract_chords(source);
 
+    // Extract key change annotations from source
+    let key_changes = extract_key_changes(source);
+
     // Extract measure octave modifiers from source
     let measure_octave_modifiers = extract_measure_octave_modifiers(source);
 
@@ -1160,7 +1221,7 @@ pub fn parse(source: &str) -> Result<Score, GenError> {
     let mut lexer = Lexer::new(&music_source);
     let tokens = lexer.tokenize()?;
     let mut parser = Parser::new(tokens);
-    parser.parse_music(metadata, mod_points, line_to_measure, chord_annotations, measure_octave_modifiers)
+    parser.parse_music(metadata, mod_points, line_to_measure, chord_annotations, key_changes, measure_octave_modifiers)
 }
 
 #[cfg(test)]
@@ -2454,5 +2515,59 @@ time-signature: 6/8
                 panic!("Expected notes at position {}", i);
             }
         }
+    }
+
+    #[test]
+    fn test_key_change_single_measure() {
+        let score = parse("@key:G C D E F").unwrap();
+        assert_eq!(score.measures.len(), 1);
+        assert!(score.measures[0].key_change.is_some());
+        assert_eq!(score.measures[0].key_change.as_ref().unwrap().fifths, 1); // G major = 1 sharp
+    }
+
+    #[test]
+    fn test_key_change_multiple_measures() {
+        let source = "C D E F\n@key:D G A B C^\n@key:F D E F G";
+        let score = parse(source).unwrap();
+        assert_eq!(score.measures.len(), 3);
+
+        // First measure: no key change
+        assert!(score.measures[0].key_change.is_none());
+
+        // Second measure: changes to D major (2 sharps)
+        assert!(score.measures[1].key_change.is_some());
+        assert_eq!(score.measures[1].key_change.as_ref().unwrap().fifths, 2);
+
+        // Third measure: changes to F major (1 flat)
+        assert!(score.measures[2].key_change.is_some());
+        assert_eq!(score.measures[2].key_change.as_ref().unwrap().fifths, -1);
+    }
+
+    #[test]
+    fn test_key_change_with_flats() {
+        let score = parse("@key:Bb C D E F").unwrap();
+        assert_eq!(score.measures.len(), 1);
+        assert!(score.measures[0].key_change.is_some());
+        assert_eq!(score.measures[0].key_change.as_ref().unwrap().fifths, -2); // Bb major = 2 flats
+    }
+
+    #[test]
+    fn test_key_change_notation_styles() {
+        // Test sharp count notation
+        let score1 = parse("@key:## C D E F").unwrap();
+        assert_eq!(score1.measures[0].key_change.as_ref().unwrap().fifths, 2);
+
+        // Test flat count notation
+        let score2 = parse("@key:bb C D E F").unwrap();
+        assert_eq!(score2.measures[0].key_change.as_ref().unwrap().fifths, -2);
+    }
+
+    #[test]
+    fn test_key_change_invalid() {
+        let result = parse("@key:InvalidKey C D E F");
+        assert!(result.is_ok()); // Should parse but key change will be ignored if invalid
+        // The invalid key simply won't set a key_change
+        let score = result.unwrap();
+        assert!(score.measures[0].key_change.is_none());
     }
 }

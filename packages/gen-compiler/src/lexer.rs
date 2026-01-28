@@ -362,6 +362,19 @@ impl<'a> Lexer<'a> {
                         continue;
                     }
 
+                    // Check if this is a key change annotation (@key:XXX)
+                    if annotation.starts_with("key:") {
+                        if annotation.len() <= 4 {
+                            return Err(GenError::ParseError {
+                                line,
+                                column,
+                                message: "Key change annotation '@key:' requires a key signature".to_string(),
+                            });
+                        }
+                        // Valid key change annotation - skip it (will be extracted by parser)
+                        continue;
+                    }
+
                     // Check if this is a measure octave modifier (@:^, @:_, @:^^, @:__)
                     if annotation.starts_with(':') {
                         let modifier = &annotation[1..];
@@ -394,14 +407,14 @@ impl<'a> Lexer<'a> {
                             return Err(GenError::ParseError {
                                 line,
                                 column,
-                                message: format!("Invalid annotation '@{}'. Expected: @ch:ChordName, @Eb:^, @Bb:_, or @:^", annotation.trim()),
+                                message: format!("Invalid annotation '@{}'. Expected: @ch:ChordName, @key:KeySig, @Eb:^, @Bb:_, or @:^", annotation.trim()),
                             });
                         }
                     } else {
                         return Err(GenError::ParseError {
                             line,
                             column,
-                            message: "Empty annotation. Expected: @ch:ChordName, @Eb:^, @Bb:_, or @:^".to_string(),
+                            message: "Empty annotation. Expected: @ch:ChordName, @key:KeySig, @Eb:^, @Bb:_, or @:^".to_string(),
                         });
                     }
 
