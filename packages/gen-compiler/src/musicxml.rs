@@ -14,8 +14,9 @@ pub enum Clef {
 /// Transposition info for MusicXML
 #[derive(Clone, Copy, Default)]
 pub struct Transposition {
-    pub diatonic: i8,   // Number of diatonic steps (letter names)
-    pub chromatic: i8,  // Number of chromatic half steps
+    pub diatonic: i8,   // Number of diatonic steps (letter names) for note transposition
+    pub chromatic: i8,  // Number of chromatic half steps for note transposition
+    pub fifths: i8,     // Position change on circle of fifths for key signature transposition
 }
 
 impl Transposition {
@@ -24,9 +25,9 @@ impl Transposition {
     pub fn for_key(viewed_key: &str) -> Option<Self> {
         match viewed_key.trim() {
             "C" => None, // Concert pitch, no transposition needed
-            "Bb" => Some(Transposition { diatonic: 1, chromatic: 2 }),   // Up a major 2nd
-            "Eb" => Some(Transposition { diatonic: 5, chromatic: 9 }),   // Up a major 6th
-            "F" => Some(Transposition { diatonic: 4, chromatic: 5 }),    // Up a perfect 4th (or down a 5th)
+            "Bb" => Some(Transposition { diatonic: 1, chromatic: 2, fifths: 2 }),   // Up a major 2nd
+            "Eb" => Some(Transposition { diatonic: 5, chromatic: 9, fifths: 3 }),   // Up a major 6th
+            "F" => Some(Transposition { diatonic: 4, chromatic: 5, fifths: -1 }),    // Up a perfect 4th (or down a 5th)
             _ => None,
         }
     }
@@ -364,10 +365,25 @@ fn write_measure<W: std::io::Write>(
 
         write_text_element(writer, "divisions", "4");
 
+        // Transpose key signature if transposition is specified
+        let transposed_fifths = if let Some(trans) = transposition {
+            let new_fifths = key_signature.fifths + trans.fifths;
+            // Wrap around: keep in range -7 to +7 (valid key signatures)
+            if new_fifths > 7 {
+                new_fifths - 12
+            } else if new_fifths < -7 {
+                new_fifths + 12
+            } else {
+                new_fifths
+            }
+        } else {
+            key_signature.fifths
+        };
+
         writer
             .write_event(Event::Start(BytesStart::new("key")))
             .unwrap();
-        write_text_element(writer, "fifths", &key_signature.fifths.to_string());
+        write_text_element(writer, "fifths", &transposed_fifths.to_string());
         writer
             .write_event(Event::End(BytesEnd::new("key")))
             .unwrap();
@@ -538,6 +554,67 @@ fn write_element<W: std::io::Write>(writer: &mut Writer<W>, element: &Element, b
     }
 }
 
+/// Transpose a note's pitch based on diatonic and chromatic intervals
+/// Returns (new_step, new_alter, octave_adjustment)
+fn transpose_pitch(note_name: NoteName, accidental: Accidental, diatonic: i8, chromatic: i8) -> (NoteName, i8, i8) {
+    // Map note names to their position in the scale (C=0, D=1, E=2, F=3, G=4, A=5, B=6)
+    let note_to_index = |n: NoteName| match n {
+        NoteName::C => 0,
+        NoteName::D => 1,
+        NoteName::E => 2,
+        NoteName::F => 3,
+        NoteName::G => 4,
+        NoteName::A => 5,
+        NoteName::B => 6,
+    };
+
+    let index_to_note = |i: i8| match i.rem_euclid(7) {
+        0 => NoteName::C,
+        1 => NoteName::D,
+        2 => NoteName::E,
+        3 => NoteName::F,
+        4 => NoteName::G,
+        5 => NoteName::A,
+        6 => NoteName::B,
+        _ => unreachable!(),
+    };
+
+    // Get the current pitch in semitones (C=0, C#=1, D=2, etc.)
+    let note_to_semitone = |n: NoteName| match n {
+        NoteName::C => 0,
+        NoteName::D => 2,
+        NoteName::E => 4,
+        NoteName::F => 5,
+        NoteName::G => 7,
+        NoteName::A => 9,
+        NoteName::B => 11,
+    };
+
+    let alter_value = match accidental {
+        Accidental::Sharp => 1,
+        Accidental::Flat => -1,
+        Accidental::Natural | Accidental::ForceNatural => 0,
+    };
+
+    let current_semitone = note_to_semitone(note_name) + alter_value;
+
+    // Apply transposition
+    let new_note_index = note_to_index(note_name) + diatonic;
+    let new_semitone = current_semitone + chromatic;
+
+    // Calculate octave change from diatonic steps (wrapping C-D-E-F-G-A-B)
+    let octave_adjustment = new_note_index.div_euclid(7);
+
+    // Get the new note name
+    let new_note = index_to_note(new_note_index);
+
+    // Calculate what alteration is needed
+    let expected_semitone = note_to_semitone(new_note);
+    let new_alter = new_semitone.rem_euclid(12) - expected_semitone;
+
+    (new_note, new_alter, octave_adjustment)
+}
+
 fn write_note<W: std::io::Write>(writer: &mut Writer<W>, note: &Note, beam_state: BeamState, octave_shift: i8, key_signature: &KeySignature, transposition: Option<&Transposition>) {
     // Write harmony BEFORE note element if chord symbol exists
     if let Some(ref chord_symbol) = note.chord {
@@ -556,20 +633,30 @@ fn write_note<W: std::io::Write>(writer: &mut Writer<W>, note: &Note, beam_state
         other => other,
     };
 
+    // Apply transposition if specified
+    let (final_note_name, final_alter, transpose_octave_adj) = if let Some(trans) = transposition {
+        transpose_pitch(note.name, effective_accidental, trans.diatonic, trans.chromatic)
+    } else {
+        let alter_value = match effective_accidental {
+            Accidental::Sharp => 1,
+            Accidental::Flat => -1,
+            Accidental::Natural | Accidental::ForceNatural => 0,
+        };
+        (note.name, alter_value, 0)
+    };
+
     // Pitch
     writer
         .write_event(Event::Start(BytesStart::new("pitch")))
         .unwrap();
-    write_text_element(writer, "step", note_name_to_str(note.name));
+    write_text_element(writer, "step", note_name_to_str(final_note_name));
 
     // Alter for sharps/flats
-    match effective_accidental {
-        Accidental::Sharp => write_text_element(writer, "alter", "1"),
-        Accidental::Flat => write_text_element(writer, "alter", "-1"),
-        Accidental::Natural | Accidental::ForceNatural => {}
+    if final_alter != 0 {
+        write_text_element(writer, "alter", &final_alter.to_string());
     }
 
-    // Octave (middle C = octave 4, adjusted by octave_shift)
+    // Octave (middle C = octave 4, adjusted by octave_shift and transposition)
     let base_octave: i8 = match note.octave {
         Octave::DoubleLow => 2,
         Octave::Low => 3,
@@ -577,7 +664,7 @@ fn write_note<W: std::io::Write>(writer: &mut Writer<W>, note: &Note, beam_state
         Octave::High => 5,
         Octave::DoubleHigh => 6,
     };
-    let octave = (base_octave + octave_shift).max(0).min(9);
+    let octave = (base_octave + octave_shift + transpose_octave_adj).max(0).min(9);
     write_text_element(writer, "octave", &octave.to_string());
     writer
         .write_event(Event::End(BytesEnd::new("pitch")))
@@ -1106,7 +1193,7 @@ C"#;
     #[test]
     fn test_transposition_xml() {
         let score = parse("C D E F").unwrap();
-        let trans = Transposition { diatonic: 1, chromatic: 2 };
+        let trans = Transposition { diatonic: 1, chromatic: 2, fifths: 2 };
         let xml = to_musicxml_transposed(&score, Some(trans));
         assert!(xml.contains("<transpose>"));
         assert!(xml.contains("<diatonic>1</diatonic>"));
@@ -1496,7 +1583,7 @@ F F%"#;
         // Bb instrument (Clarinet): transposes up a major 2nd
         // Concert C -> D, Concert G7 -> A7
         let score = parse("@ch:C C @ch:G7 G").unwrap();
-        let transposition = Transposition { diatonic: 1, chromatic: 2 };
+        let transposition = Transposition { diatonic: 1, chromatic: 2, fifths: 2 };
         let xml = to_musicxml_with_options(&score, Some(transposition), Clef::Treble, 0);
 
         assert!(xml.contains("text=\"D\""), "Concert C should transpose to D for Bb instrument");
@@ -1508,7 +1595,7 @@ F F%"#;
         // Eb instrument (Alto Sax): transposes up a major 6th
         // Concert C -> A, Concert F -> D, Concert G7 -> E7
         let score = parse("@ch:C C @ch:F F @ch:G7 G").unwrap();
-        let transposition = Transposition { diatonic: 5, chromatic: 9 };
+        let transposition = Transposition { diatonic: 5, chromatic: 9, fifths: 3 };
         let xml = to_musicxml_with_options(&score, Some(transposition), Clef::Treble, 0);
 
         assert!(xml.contains("text=\"A\""), "Concert C should transpose to A for Eb instrument");
@@ -1520,7 +1607,7 @@ F F%"#;
     fn test_chord_transposition_with_accidentals() {
         // Bb instrument: Concert Bb7 -> C7, Concert Eb -> F
         let score = parse("@ch:Bb7 B @ch:Eb E").unwrap();
-        let transposition = Transposition { diatonic: 1, chromatic: 2 };
+        let transposition = Transposition { diatonic: 1, chromatic: 2, fifths: 2 };
         let xml = to_musicxml_with_options(&score, Some(transposition), Clef::Treble, 0);
 
         assert!(xml.contains("text=\"C7\""), "Concert Bb7 should transpose to C7 for Bb instrument");
@@ -1531,7 +1618,7 @@ F F%"#;
     fn test_chord_transposition_preserves_quality() {
         // Ensure quality (maj7, m7, dim, etc.) is preserved
         let score = parse("@ch:Cmaj7 C @ch:Dm7 D @ch:Bdim B").unwrap();
-        let transposition = Transposition { diatonic: 1, chromatic: 2 }; // Bb instrument
+        let transposition = Transposition { diatonic: 1, chromatic: 2, fifths: 2 }; // Bb instrument
         let xml = to_musicxml_with_options(&score, Some(transposition), Clef::Treble, 0);
 
         assert!(xml.contains("text=\"Dmaj7\""), "Cmaj7 should become Dmaj7");
@@ -1547,5 +1634,53 @@ F F%"#;
 
         assert!(xml.contains("text=\"Cmaj7\""), "Concert pitch should not transpose");
         assert!(xml.contains("text=\"G7\""), "Concert pitch should not transpose");
+    }
+
+    #[test]
+    fn test_key_signature_transposition_bb_instrument() {
+        // Gb major (6 flats, fifths=-6) for Bb instrument (fifths=+2)
+        // -6 + 2 = -4 (Ab major, 4 flats)
+        let source = r#"---
+key-signature: Gb
+---
+C"#;
+        let score = parse(source).unwrap();
+        let transposition = Transposition { diatonic: 1, chromatic: 2, fifths: 2 };
+        let xml = to_musicxml_with_options(&score, Some(transposition), Clef::Treble, 0);
+
+        // Check that key signature is transposed to -4 (Ab major)
+        assert!(xml.contains("<fifths>-4</fifths>"), "Gb major (-6) + Bb transposition (+2) = Ab major (-4)");
+    }
+
+    #[test]
+    fn test_key_signature_transposition_eb_instrument() {
+        // Gb major (6 flats, fifths=-6) for Eb instrument (fifths=+3)
+        // -6 + 3 = -3 (Eb major, 3 flats)
+        let source = r#"---
+key-signature: Gb
+---
+C"#;
+        let score = parse(source).unwrap();
+        let transposition = Transposition { diatonic: 5, chromatic: 9, fifths: 3 };
+        let xml = to_musicxml_with_options(&score, Some(transposition), Clef::Treble, 0);
+
+        // -6 + 3 = -3 (Eb major, 3 flats)
+        assert!(xml.contains("<fifths>-3</fifths>"), "Gb major (-6) + Eb transposition (+3) = Eb major (-3)");
+    }
+
+    #[test]
+    fn test_key_signature_transposition_wraparound() {
+        // Test wraparound: B major (5 sharps, fifths=+5) for Eb instrument (fifths=+3)
+        // +5 + +3 = +8, which should wrap to -4 (Ab major, 4 flats)
+        let source = r#"---
+key-signature: B
+---
+C"#;
+        let score = parse(source).unwrap();
+        let transposition = Transposition { diatonic: 5, chromatic: 9, fifths: 3 };
+        let xml = to_musicxml_with_options(&score, Some(transposition), Clef::Treble, 0);
+
+        // +5 + +3 = +8, wrap to -4 (8 - 12 = -4)
+        assert!(xml.contains("<fifths>-4</fifths>"), "B major (+5) + Eb transposition (+3) = Ab major (-4, wrapped from +8)");
     }
 }

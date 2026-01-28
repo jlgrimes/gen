@@ -337,19 +337,21 @@ export function GenApp({ compiler, files, scores }: GenAppProps) {
   const compileAndRender = useCallback(
     async (
       source: string,
-      halftones: number,
       octave: number,
       selectedClef: Clef,
       instrumentGroup: InstrumentGroup | undefined,
+      currentTransposeIndex: number,
     ) => {
       if (!source.trim()) return;
 
       setIsCompiling(true);
       try {
         // Compile with clef and instrument group parameters
+        const transposeKey = TRANSPOSE_OPTIONS[currentTransposeIndex]?.label as 'C' | 'Bb' | 'Eb' | 'F' | undefined;
         console.log('Compiling with:', {
           octave,
           instrumentGroup,
+          transposeKey,
           sourceHasModPoint: source.includes('@'),
           sourceFirstLine: source.split('\n')[0],
         });
@@ -357,6 +359,7 @@ export function GenApp({ compiler, files, scores }: GenAppProps) {
           clef: selectedClef,
           octaveShift: octave,
           instrumentGroup,
+          transposeKey,
         });
 
         if (result.status === 'error' && result.error) {
@@ -392,11 +395,8 @@ export function GenApp({ compiler, files, scores }: GenAppProps) {
           }
           await osmdRef.current.load(result.xml);
 
-          // Set transposition on the sheet
-          if (osmdRef.current.Sheet) {
-            osmdRef.current.Sheet.Transpose = halftones;
-            osmdRef.current.updateGraphic();
-          }
+          // Transposition is handled server-side in Rust
+          // Do NOT set Sheet.Transpose here
 
           // Scale down the notation to fit more measures per page
           osmdRef.current.Zoom = zoom;
@@ -419,10 +419,10 @@ export function GenApp({ compiler, files, scores }: GenAppProps) {
     debounceRef.current = setTimeout(() => {
       compileAndRender(
         genSource,
-        TRANSPOSE_OPTIONS[transposeIndex].halftones,
         octaveShift,
         clef,
         currentInstrumentGroup,
+        transposeIndex,
       );
     }, 150);
 

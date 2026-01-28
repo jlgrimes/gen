@@ -7,7 +7,7 @@ pub mod semantic;
 
 pub use ast::*;
 pub use error::*;
-pub use musicxml::{to_musicxml, to_musicxml_with_options, to_musicxml_with_mod_points, Clef};
+pub use musicxml::{to_musicxml, to_musicxml_with_options, to_musicxml_with_mod_points, Clef, Transposition};
 pub use parser::parse;
 pub use semantic::validate;
 
@@ -26,22 +26,24 @@ pub fn compile_unchecked(source: &str) -> Result<String, GenError> {
 }
 
 /// Compile with custom clef and octave shift options
-pub fn compile_with_options(source: &str, clef: &str, octave_shift: i8) -> Result<String, GenError> {
+pub fn compile_with_options(source: &str, clef: &str, octave_shift: i8, transposition: Option<Transposition>) -> Result<String, GenError> {
     let score = parse(source)?;
     let clef = match clef {
         "bass" => Clef::Bass,
         _ => Clef::Treble,
     };
-    Ok(to_musicxml_with_options(&score, None, clef, octave_shift))
+    Ok(to_musicxml_with_options(&score, transposition, clef, octave_shift))
 }
 
 /// Compile with mod points support for instrument-specific octave shifts
 /// instrument_group: "eb" for Eb instruments, "bb" for Bb instruments, or None
+/// transpose_key: "C" (concert), "Bb", "Eb", or "F" for transposing instruments
 pub fn compile_with_mod_points(
     source: &str,
     clef: &str,
     octave_shift: i8,
     instrument_group: Option<&str>,
+    transpose_key: Option<&str>,
 ) -> Result<String, GenError> {
     let score = parse(source)?;
     let clef = match clef {
@@ -49,7 +51,8 @@ pub fn compile_with_mod_points(
         _ => Clef::Treble,
     };
     let group = instrument_group.and_then(InstrumentGroup::from_str);
-    Ok(to_musicxml_with_mod_points(&score, None, clef, octave_shift, group))
+    let transposition = transpose_key.and_then(Transposition::for_key);
+    Ok(to_musicxml_with_mod_points(&score, transposition, clef, octave_shift, group))
 }
 
 #[cfg(test)]

@@ -44,8 +44,9 @@ pub fn compile_unchecked(source: &str) -> Result<String, JsValue> {
 
 /// Compile Gen source to MusicXML with custom clef and octave shift
 #[wasm_bindgen]
-pub fn compile_with_options(source: &str, clef: &str, octave_shift: i8) -> Result<String, JsValue> {
-    gen::compile_with_options(source, clef, octave_shift)
+pub fn compile_with_options(source: &str, clef: &str, octave_shift: i8, transpose_key: Option<String>) -> Result<String, JsValue> {
+    let transposition = transpose_key.as_deref().and_then(gen::Transposition::for_key);
+    gen::compile_with_options(source, clef, octave_shift, transposition)
         .map_err(|e| JsValue::from_str(&serde_json::to_string(&error_to_compile_error(e)).unwrap()))
 }
 
@@ -56,7 +57,8 @@ pub fn compile_with_mod_points(
     clef: &str,
     octave_shift: i8,
     instrument_group: Option<String>,
+    transpose_key: Option<String>,
 ) -> Result<String, JsValue> {
-    gen::compile_with_mod_points(source, clef, octave_shift, instrument_group.as_deref())
+    gen::compile_with_mod_points(source, clef, octave_shift, instrument_group.as_deref(), transpose_key.as_deref())
         .map_err(|e| JsValue::from_str(&serde_json::to_string(&error_to_compile_error(e)).unwrap()))
 }

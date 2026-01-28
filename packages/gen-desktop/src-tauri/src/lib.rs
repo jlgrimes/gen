@@ -38,8 +38,9 @@ fn compile_gen_unchecked(source: &str) -> CompileResult {
 }
 
 #[command]
-fn compile_gen_with_options(source: &str, clef: &str, octave_shift: i8) -> CompileResult {
-    match gen::compile_with_options(source, clef, octave_shift) {
+fn compile_gen_with_options(source: &str, clef: &str, octave_shift: i8, transpose_key: Option<&str>) -> CompileResult {
+    let transposition = transpose_key.and_then(gen::Transposition::for_key);
+    match gen::compile_with_options(source, clef, octave_shift, transposition) {
         Ok(xml) => CompileResult::Success { xml },
         Err(e) => CompileResult::Error {
             error: error_to_compile_error(e),
@@ -53,8 +54,9 @@ fn compile_gen_with_mod_points(
     clef: &str,
     octave_shift: i8,
     instrument_group: Option<&str>,
+    transpose_key: Option<&str>,
 ) -> CompileResult {
-    match gen::compile_with_mod_points(source, clef, octave_shift, instrument_group) {
+    match gen::compile_with_mod_points(source, clef, octave_shift, instrument_group, transpose_key) {
         Ok(xml) => CompileResult::Success { xml },
         Err(e) => CompileResult::Error {
             error: error_to_compile_error(e),

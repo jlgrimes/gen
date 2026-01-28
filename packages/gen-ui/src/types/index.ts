@@ -14,6 +14,7 @@ export interface CompileOptions {
   clef: 'treble' | 'bass';
   octaveShift: number;
   instrumentGroup?: InstrumentGroup;
+  transposeKey?: 'C' | 'Bb' | 'Eb' | 'F';  // Which key to transpose to (C = concert pitch)
 }
 
 export interface CompileResult {

@@ -10,6 +10,7 @@ export const tauriCompiler: CompilerAdapter = {
       clef: options.clef,
       octaveShift: options.octaveShift,
       instrumentGroup: options.instrumentGroup ?? null,
+      transposeKey: options.transposeKey ?? null,
     });
   },
 };
