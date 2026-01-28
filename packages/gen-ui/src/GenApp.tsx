@@ -25,10 +25,11 @@ import type {
   ModPoints,
 } from './types';
 
-// URL parameter helpers
+// URL parameter helpers (hash-based routing)
 function getUrlParams() {
-  const params = new URLSearchParams(window.location.search);
-  const path = window.location.pathname.slice(1); // Remove leading /
+  const hash = window.location.hash.slice(1); // Remove leading #
+  const [path, search] = hash.split('?');
+  const params = new URLSearchParams(search);
   return {
     score: path || params.get('score') || null,
     instrument: params.get('instrument') || null,
@@ -42,14 +43,14 @@ function getInstrumentIndexById(id: string | null): number {
 }
 
 function updateUrl(score: string | null, instrumentId: string | null) {
-  const path = score ? `/${score}` : '/';
+  const path = score || '';
   const params = new URLSearchParams();
   if (instrumentId && instrumentId !== 'concert') {
     params.set('instrument', instrumentId);
   }
   const search = params.toString();
-  const url = path + (search ? `?${search}` : '');
-  window.history.replaceState({}, '', url);
+  const hash = '#' + path + (search ? `?${search}` : '');
+  window.history.replaceState({}, '', hash);
 }
 
 // Mobile view tabs
