@@ -27,7 +27,7 @@ impl Transposition {
             "C" => None, // Concert pitch, no transposition needed
             "Bb" => Some(Transposition { diatonic: 1, chromatic: 2, fifths: 2 }),   // Up a major 2nd
             "Eb" => Some(Transposition { diatonic: 5, chromatic: 9, fifths: 3 }),   // Up a major 6th
-            "F" => Some(Transposition { diatonic: 4, chromatic: 5, fifths: -1 }),    // Up a perfect 4th (or down a 5th)
+            "F" => Some(Transposition { diatonic: 3, chromatic: 5, fifths: -1 }),    // Up a perfect 4th
             _ => None,
         }
     }
@@ -1682,5 +1682,152 @@ C"#;
 
         // +5 + +3 = +8, wrap to -4 (8 - 12 = -4)
         assert!(xml.contains("<fifths>-4</fifths>"), "B major (+5) + Eb transposition (+3) = Ab major (-4, wrapped from +8)");
+    }
+
+    #[test]
+    fn test_note_transposition_bb_instrument() {
+        // Bb instrument: transposes up a major 2nd (C -> D, E -> F#, G -> A)
+        let score = parse("C D E F G A B C^").unwrap();
+        let transposition = Transposition { diatonic: 1, chromatic: 2, fifths: 2 };
+        let xml = to_musicxml_with_options(&score, Some(transposition), Clef::Treble, 0);
+
+        // Check that notes are transposed correctly
+        // Concert C -> D, Concert D -> E, Concert E -> F#, Concert F -> G, Concert G -> A, Concert A -> B, Concert B -> C#, Concert C^ -> D^
+        assert!(xml.contains("<step>D</step>"), "Concert C should transpose to D");
+        assert!(xml.contains("<step>E</step>"), "Concert D should transpose to E");
+        assert!(xml.contains("<step>F</step>"), "Concert E should transpose to F");
+        assert!(xml.contains("<alter>1</alter>"), "Concert E should have sharp (F#)");
+        assert!(xml.contains("<step>G</step>"), "Concert F should transpose to G");
+        assert!(xml.contains("<step>A</step>"), "Concert G should transpose to A");
+        assert!(xml.contains("<step>B</step>"), "Concert A should transpose to B");
+        assert!(xml.contains("<step>C</step>"), "Concert B should transpose to C");
+    }
+
+    #[test]
+    fn test_note_transposition_eb_instrument() {
+        // Eb instrument: transposes up a major 6th (C -> A, D -> B, E -> C#)
+        let score = parse("C D E F").unwrap();
+        let transposition = Transposition { diatonic: 5, chromatic: 9, fifths: 3 };
+        let xml = to_musicxml_with_options(&score, Some(transposition), Clef::Treble, 0);
+
+        // Concert C -> A, Concert D -> B, Concert E -> C#, Concert F -> D
+        assert!(xml.contains("<step>A</step>"), "Concert C should transpose to A");
+        assert!(xml.contains("<step>B</step>"), "Concert D should transpose to B");
+        assert!(xml.contains("<step>C</step>"), "Concert E should transpose to C");
+        assert!(xml.contains("<alter>1</alter>"), "Concert E should have sharp (C#)");
+        assert!(xml.contains("<step>D</step>"), "Concert F should transpose to D");
+    }
+
+    #[test]
+    fn test_note_transposition_with_accidentals_bb() {
+        // Bb instrument with accidentals: Bb -> C, C# -> D#, Eb -> F
+        let score = parse("Bb C# Eb").unwrap();
+        let transposition = Transposition { diatonic: 1, chromatic: 2, fifths: 2 };
+        let xml = to_musicxml_with_options(&score, Some(transposition), Clef::Treble, 0);
+
+        // Concert Bb -> C (natural), Concert C# -> D#, Concert Eb -> F (natural)
+        // Check for C natural (step C, no alter or alter 0)
+        assert!(xml.contains("<step>C</step>"), "Concert Bb should transpose to C");
+        // D# should appear
+        assert!(xml.contains("<step>D</step>"), "Concert C# should transpose to D#");
+        assert!(xml.contains("<alter>1</alter>"), "Concert C# should have sharp");
+        // F natural
+        assert!(xml.contains("<step>F</step>"), "Concert Eb should transpose to F");
+    }
+
+    #[test]
+    fn test_note_transposition_octave_crossing() {
+        // Test that transposition handles octave crossing correctly
+        // High B for Bb instrument should become C# in next octave
+        let score = parse("B C^").unwrap();
+        let transposition = Transposition { diatonic: 1, chromatic: 2, fifths: 2 };
+        let xml = to_musicxml_with_options(&score, Some(transposition), Clef::Treble, 0);
+
+        // Concert B (octave 4) -> C# (octave 5)
+        // Concert C^ (octave 5) -> D (octave 5)
+        assert!(xml.contains("<step>C</step>"), "Concert B should transpose to C#");
+        assert!(xml.contains("<step>D</step>"), "Concert C^ should transpose to D");
+
+        // Count octaves - should have octave 5 appear
+        assert!(xml.contains("<octave>5</octave>"), "Should have notes in octave 5");
+    }
+
+    #[test]
+    fn test_note_transposition_f_instrument() {
+        // F instrument: transposes up a perfect 4th (C -> F, D -> G, E -> A)
+        let score = parse("C D E F").unwrap();
+        let transposition = Transposition { diatonic: 3, chromatic: 5, fifths: -1 };
+        let xml = to_musicxml_with_options(&score, Some(transposition), Clef::Treble, 0);
+
+        // Concert C -> F, Concert D -> G, Concert E -> A, Concert F -> Bb
+        assert!(xml.contains("<step>F</step>"), "Concert C should transpose to F");
+        assert!(xml.contains("<step>G</step>"), "Concert D should transpose to G");
+        assert!(xml.contains("<step>A</step>"), "Concert E should transpose to A");
+        assert!(xml.contains("<step>B</step>"), "Concert F should transpose to B");
+        assert!(xml.contains("<alter>-1</alter>"), "Concert F should have flat (Bb)");
+    }
+
+    #[test]
+    fn test_note_transposition_with_key_signature_gb_major_bb() {
+        // Test the original issue: Gb major (6 flats) for Bb instrument
+        // Key signature should be Ab major (4 flats)
+        // Concert C in Gb major (which is actually Cb due to key sig) -> D in Ab major (Db)
+        let source = r#"---
+key-signature: Gb
+---
+C D E F G A B C^"#;
+        let score = parse(source).unwrap();
+        let transposition = Transposition { diatonic: 1, chromatic: 2, fifths: 2 };
+        let xml = to_musicxml_with_options(&score, Some(transposition), Clef::Treble, 0);
+
+        // Key signature should be -4 (Ab major, 4 flats)
+        assert!(xml.contains("<fifths>-4</fifths>"), "Gb major should transpose to Ab major (4 flats)");
+
+        // Notes should transpose: C->D, D->E, E->F#, F->G, G->A, A->B, B->C#, C^->D^
+        assert!(xml.contains("<step>D</step>"), "Should contain D notes");
+        assert!(xml.contains("<step>E</step>"), "Should contain E notes");
+        assert!(xml.contains("<step>F</step>"), "Should contain F notes");
+        assert!(xml.contains("<step>G</step>"), "Should contain G notes");
+        assert!(xml.contains("<step>A</step>"), "Should contain A notes");
+        assert!(xml.contains("<step>B</step>"), "Should contain B notes");
+        assert!(xml.contains("<step>C</step>"), "Should contain C notes");
+    }
+
+    #[test]
+    fn test_note_transposition_with_key_signature_gb_major_eb() {
+        // Test the original issue: Gb major (6 flats) for Eb instrument
+        // Key signature should be Eb major (3 flats)
+        let source = r#"---
+key-signature: Gb
+---
+C D E F"#;
+        let score = parse(source).unwrap();
+        let transposition = Transposition { diatonic: 5, chromatic: 9, fifths: 3 };
+        let xml = to_musicxml_with_options(&score, Some(transposition), Clef::Treble, 0);
+
+        // Key signature should be -3 (Eb major, 3 flats)
+        assert!(xml.contains("<fifths>-3</fifths>"), "Gb major should transpose to Eb major (3 flats)");
+
+        // Notes should transpose: C->A, D->B, E->C#, F->D
+        assert!(xml.contains("<step>A</step>"), "Concert C should transpose to A");
+        assert!(xml.contains("<step>B</step>"), "Concert D should transpose to B");
+        assert!(xml.contains("<step>C</step>"), "Concert E should transpose to C");
+        assert!(xml.contains("<step>D</step>"), "Concert F should transpose to D");
+    }
+
+    #[test]
+    fn test_concert_pitch_no_transposition() {
+        // Concert pitch (C key) should not transpose anything
+        let score = parse("C D E F G A B C^").unwrap();
+        let xml = to_musicxml(&score); // No transposition
+
+        // Notes should remain as-is
+        assert!(xml.contains("<step>C</step>"), "C should remain C");
+        assert!(xml.contains("<step>D</step>"), "D should remain D");
+        assert!(xml.contains("<step>E</step>"), "E should remain E");
+        assert!(xml.contains("<step>F</step>"), "F should remain F");
+        assert!(xml.contains("<step>G</step>"), "G should remain G");
+        assert!(xml.contains("<step>A</step>"), "A should remain A");
+        assert!(xml.contains("<step>B</step>"), "B should remain B");
     }
 }
