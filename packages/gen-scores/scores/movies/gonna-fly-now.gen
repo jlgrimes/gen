@@ -7,7 +7,7 @@
 |o*E //E //G
 |o*A //A //B
 oE
-/$ //[D^ C^] /*D //C //D /*E-E
+/$ //[D^ C^] /*D^ //C^ //D^ /*E^-E^
 /$ //[C^ C^] /B //[B A-] //[A A] G /F
 oE-
 |o*E //E /*G
@@ -17,4 +17,5 @@ A
 title: Gonna Fly Now (Rocky)
 composer: Bill Conti
 time-signature: 4/4
+credit: https://ekladata.com/UMLvaAqea0J8v67jrfGCFjGl3NM/partition-accordeon-rocky-balboa-the-best-of-rocky.pdf
 ---

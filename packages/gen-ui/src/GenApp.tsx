@@ -556,6 +556,24 @@ export function GenApp({ compiler, files, scores }: GenAppProps) {
           </select>
         </div>
 
+        {/* Octave control - always visible */}
+        <div className='flex items-center gap-2'>
+          <label className='text-xs font-medium text-gray-600'>
+            Octave:
+          </label>
+          <select
+            value={octaveShift}
+            onChange={e => setOctaveShift(Number(e.target.value))}
+            className='px-2 py-1 text-xs border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
+          >
+            {OCTAVE_OPTIONS.map(option => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
         {/* Custom controls - only shown when Custom is selected */}
         {instrumentIndex === CUSTOM_PRESET_INDEX && (
           <>
@@ -570,22 +588,6 @@ export function GenApp({ compiler, files, scores }: GenAppProps) {
               >
                 {TRANSPOSE_OPTIONS.map((option, index) => (
                   <option key={option.label} value={index}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className='flex items-center gap-2'>
-              <label className='text-xs font-medium text-gray-600'>
-                Octave:
-              </label>
-              <select
-                value={octaveShift}
-                onChange={e => setOctaveShift(Number(e.target.value))}
-                className='px-2 py-1 text-xs border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
-              >
-                {OCTAVE_OPTIONS.map(option => (
-                  <option key={option.value} value={option.value}>
                     {option.label}
                   </option>
                 ))}

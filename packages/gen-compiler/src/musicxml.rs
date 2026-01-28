@@ -180,12 +180,12 @@ fn to_musicxml_full(
 
         // Determine if this is the last measure with the current ending
         // (we need to close the ending bracket if the next measure has a different ending or no ending)
-        let is_ending_stop = if measure.ending.is_some() {
+        let is_ending_stop = if let Some(current_ending) = measure.ending {
             if i + 1 < score.measures.len() {
                 // Not the last measure - check if next measure has different ending
-                score.measures[i + 1].ending != measure.ending
+                score.measures[i + 1].ending != Some(current_ending)
             } else {
-                // Last measure in score - close the ending
+                // Last measure in score - close the ending only if this measure has an ending
                 true
             }
         } else {
