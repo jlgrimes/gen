@@ -62,7 +62,7 @@ fn validate_endings(score: &Score) -> Result<(), GenError> {
                 if !measure.repeat_end {
                     return Err(GenError::SemanticError {
                         measure: measure_number,
-                        message: "First ending (1st:) must end with a repeat sign (:||)".to_string(),
+                        message: "First ending (1.) must end with a repeat sign (:||)".to_string(),
                     });
                 }
             }
@@ -71,7 +71,7 @@ fn validate_endings(score: &Score) -> Result<(), GenError> {
                 if measure.repeat_end {
                     return Err(GenError::SemanticError {
                         measure: measure_number,
-                        message: "Second ending (2nd:) cannot have a repeat sign (:||)".to_string(),
+                        message: "Second ending (2.) cannot have a repeat sign (:||)".to_string(),
                     });
                 }
 
@@ -79,7 +79,7 @@ fn validate_endings(score: &Score) -> Result<(), GenError> {
                 if i == 0 {
                     return Err(GenError::SemanticError {
                         measure: measure_number,
-                        message: "Second ending (2nd:) must immediately follow a first ending (1st:)".to_string(),
+                        message: "Second ending (2.) must immediately follow a first ending (1.)".to_string(),
                     });
                 }
 
@@ -87,7 +87,7 @@ fn validate_endings(score: &Score) -> Result<(), GenError> {
                 if prev_measure.ending != Some(Ending::First) {
                     return Err(GenError::SemanticError {
                         measure: measure_number,
-                        message: "Second ending (2nd:) must immediately follow a first ending (1st:)".to_string(),
+                        message: "Second ending (2.) must immediately follow a first ending (1.)".to_string(),
                     });
                 }
             }
@@ -247,14 +247,14 @@ mod tests {
     #[test]
     fn test_valid_endings() {
         // Valid: 1st ending with repeat, followed by 2nd ending without repeat
-        let score = parse("||: C C C C\n1st: D D D D :||\n2nd: E E E E").unwrap();
+        let score = parse("||: C C C C\n1. D D D D :||\n2. E E E E").unwrap();
         assert!(validate(&score).is_ok());
     }
 
     #[test]
     fn test_first_ending_without_repeat() {
         // Invalid: 1st ending must have repeat end
-        let score = parse("1st: C C C C").unwrap();
+        let score = parse("1. C C C C").unwrap();
         let result = validate(&score);
         assert!(result.is_err());
         if let Err(GenError::SemanticError { message, .. }) = result {
@@ -267,7 +267,7 @@ mod tests {
         // Invalid: 2nd ending cannot have repeat end
         // Start a new repeat after 2nd ending to make the :|| valid from repeat perspective,
         // but ending validation should still catch it
-        let score = parse("||: C C C C\n1st: D D D D :||\n2nd: ||: E E E E :||").unwrap();
+        let score = parse("||: C C C C\n1. D D D D :||\n2. ||: E E E E :||").unwrap();
         let result = validate(&score);
         assert!(result.is_err(), "Should fail validation but got: {:?}", result);
         if let Err(GenError::SemanticError { message, .. }) = &result {
@@ -280,7 +280,7 @@ mod tests {
     #[test]
     fn test_second_ending_without_first() {
         // Invalid: 2nd ending must follow 1st ending
-        let score = parse("C C C C\n2nd: D D D D").unwrap();
+        let score = parse("C C C C\n2. D D D D").unwrap();
         let result = validate(&score);
         assert!(result.is_err());
         if let Err(GenError::SemanticError { message, .. }) = result {

@@ -225,15 +225,15 @@ since these are measure level modifiers, they go at the beginning of the measure
 this is how you use it
 ```
 oF
-1st: Eb $ *Bb /Ab :||
-2nd: Eb $ |oEb
+1. Eb $ *Bb /Ab :||
+2. Eb $ |oEb
 ```
 
 some requirements
-1. "1st" modifier is required to have a repeat sign at the end of it. if not, throw error
-2. "2nd time" modifier cannot have a repeat sign at the end of it. Also, must immediately proceed a line with "1st" AND a repeat. else, throw error
+1. "1." modifier is required to have a repeat sign at the end of it. if not, throw error
+2. "2." modifier cannot have a repeat sign at the end of it. Also, must immediately proceed a line with "1." AND a repeat. else, throw error
 
-to continue a first second ending to multiple measures, simply prepend consecutive lines with 1st: or 2nd:
+to continue a first second ending to multiple measures, simply prepend consecutive lines with 1. or 2.
 
 # gen viewer specifics
 the gen viewer will be a tauri app that renders the gen file into real sheet music you can read.

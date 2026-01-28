@@ -1007,7 +1007,7 @@ C"#;
 
     #[test]
     fn test_musicxml_first_ending() {
-        let score = parse("1st: C C C C :||").unwrap();
+        let score = parse("1. C C C C :||").unwrap();
         let xml = to_musicxml(&score);
 
         // Should contain ending element with number 1
@@ -1018,7 +1018,7 @@ C"#;
 
     #[test]
     fn test_musicxml_second_ending() {
-        let score = parse("2nd: C C C C").unwrap();
+        let score = parse("2. C C C C").unwrap();
         let xml = to_musicxml(&score);
 
         // Should contain ending element with number 2
@@ -1029,7 +1029,7 @@ C"#;
 
     #[test]
     fn test_musicxml_first_and_second_endings() {
-        let score = parse("||: C C C C\n1st: D D D D :||\n2nd: E E E E").unwrap();
+        let score = parse("||: C C C C\n1. D D D D :||\n2. E E E E").unwrap();
         let xml = to_musicxml(&score);
 
         // Should contain both ending types

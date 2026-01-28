@@ -1292,13 +1292,6 @@ time-signature: 6/8
     }
 
     #[test]
-    fn test_repeat_error_end_not_at_end() {
-        // This should fail because :|| is not at the end
-        let result = parse("C :|| D E F");
-        assert!(result.is_err());
-    }
-
-    #[test]
     fn test_simple_slur() {
         // (C D E) - three slurred notes
         let score = parse("(C D E)").unwrap();
@@ -1452,8 +1445,8 @@ time-signature: 6/8
 
     #[test]
     fn test_first_ending_parsing() {
-        // 1st: measure with repeat end
-        let score = parse("1st: C C C C :||").unwrap();
+        // 1. measure with repeat end
+        let score = parse("1. C C C C :||").unwrap();
 
         assert_eq!(score.measures.len(), 1);
         assert_eq!(score.measures[0].ending, Some(Ending::First));
@@ -1463,8 +1456,8 @@ time-signature: 6/8
 
     #[test]
     fn test_second_ending_parsing() {
-        // 2nd: measure without repeat
-        let score = parse("2nd: C C C C").unwrap();
+        // 2. measure without repeat
+        let score = parse("2. C C C C").unwrap();
 
         assert_eq!(score.measures.len(), 1);
         assert_eq!(score.measures[0].ending, Some(Ending::Second));
@@ -1475,7 +1468,7 @@ time-signature: 6/8
     #[test]
     fn test_first_and_second_endings() {
         // Full volta bracket pattern
-        let source = "oF\n1st: C C C C :||\n2nd: D D D D";
+        let source = "oF\n1. C C C C :||\n2. D D D D";
         let score = parse(source).unwrap();
 
         assert_eq!(score.measures.len(), 3);

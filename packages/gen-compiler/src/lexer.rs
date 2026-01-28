@@ -43,8 +43,8 @@ pub enum Token {
     RepeatEnd,      // :||
 
     // Endings
-    FirstEnding,    // 1st:
-    SecondEnding,   // 2nd:
+    FirstEnding,    // 1.
+    SecondEnding,   // 2.
 
     // Structure
     Newline,
@@ -107,12 +107,12 @@ impl<'a> Lexer<'a> {
 
     fn check_first_ending(&self) -> bool {
         let remaining = &self.input[self.position..];
-        remaining.starts_with("1st:")
+        remaining.starts_with("1.")
     }
 
     fn check_second_ending(&self) -> bool {
         let remaining = &self.input[self.position..];
-        remaining.starts_with("2nd:")
+        remaining.starts_with("2.")
     }
 
 
@@ -161,11 +161,9 @@ impl<'a> Lexer<'a> {
 
             // Check for first/second endings (only after metadata is complete)
             if self.check_first_ending() {
-                // Consume "1st:"
+                // Consume "1."
                 self.advance(); // 1
-                self.advance(); // s
-                self.advance(); // t
-                self.advance(); // :
+                self.advance(); // .
                 tokens.push(LocatedToken {
                     token: Token::FirstEnding,
                     line,
@@ -175,11 +173,9 @@ impl<'a> Lexer<'a> {
             }
 
             if self.check_second_ending() {
-                // Consume "2nd:"
+                // Consume "2."
                 self.advance(); // 2
-                self.advance(); // n
-                self.advance(); // d
-                self.advance(); // :
+                self.advance(); // .
                 tokens.push(LocatedToken {
                     token: Token::SecondEnding,
                     line,
@@ -493,7 +489,7 @@ mod tests {
 
     #[test]
     fn test_first_ending() {
-        let mut lexer = Lexer::new("1st: C D :||");
+        let mut lexer = Lexer::new("1. C D :||");
         let tokens = lexer.tokenize().unwrap();
         let token_types: Vec<_> = tokens.iter().map(|t| &t.token).collect();
         assert_eq!(
@@ -512,7 +508,7 @@ mod tests {
 
     #[test]
     fn test_second_ending() {
-        let mut lexer = Lexer::new("2nd: C D");
+        let mut lexer = Lexer::new("2. C D");
         let tokens = lexer.tokenize().unwrap();
         let token_types: Vec<_> = tokens.iter().map(|t| &t.token).collect();
         assert_eq!(

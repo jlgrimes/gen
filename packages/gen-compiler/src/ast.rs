@@ -276,8 +276,8 @@ pub enum Element {
 /// Ending type for volta brackets (1st/2nd endings)
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Ending {
-    First,   // 1st:
-    Second,  // 2nd:
+    First,   // 1.
+    Second,  // 2.
 }
 
 /// A single measure containing musical elements
@@ -286,7 +286,7 @@ pub struct Measure {
     pub elements: Vec<Element>,
     pub repeat_start: bool,   // ||: at the beginning of the measure
     pub repeat_end: bool,     // :|| at the end of the measure
-    pub ending: Option<Ending>, // 1st: or 2nd: volta bracket
+    pub ending: Option<Ending>, // 1. or 2. volta bracket
 }
 
 /// Instrument groups for mod points
