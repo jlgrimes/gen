@@ -3,14 +3,14 @@
 /E //[E E] /E //[E E] /G //[E E] G
 /E //[E E] /E //[E E-] //[E E] /E /$ /E
 /E //[E E] //E /E //E-E //E /*G
-|o*A //A //B
-|o*E //E //G
-|o*A //A //B
+d*A //A //B
+d*E //E //G
+d*A //A //B
 oE
 /$ //[D C] /*D //C //D /*E-E @:^
 /$ //[C^ C^] /B //[B A-] //[A A] G /F
 oE-
-|o*E //E /*G
+d*E //E /*G
 A
 
 ---

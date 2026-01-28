@@ -88,11 +88,11 @@ G A B C^
 `[rhythm][note][pitch]`
 
 **Rhythm modifiers:**
-- (none) or `|` = quarter note
+- (none) = quarter note
 - `/` = eighth note
 - `//` = sixteenth note
 - `///` = 32nd note
-- `|o` = half note
+- `d` = half note
 - `o` = whole note
 - `*` suffix = dotted
 
@@ -107,7 +107,7 @@ G A B C^
 ```
 C           # C quarter note
 /E          # E eighth note
-|oG         # G half note
+dG         # G half note
 /Ab_        # Ab eighth note, one octave down
 //F#^       # F# sixteenth note, one octave up
 $           # quarter rest

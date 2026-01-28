@@ -5,9 +5,9 @@ use crate::error::GenError;
 pub enum Token {
     // Rhythm modifiers
     Slash,          // /
-    Pipe,           // |
-    SmallO,         // o
-    Asterisk,       // *
+    SmallD,         // d (half note)
+    SmallO,         // o (whole note)
+    Asterisk,       // * (dotted)
 
     // Note names
     NoteA,
@@ -198,19 +198,20 @@ impl<'a> Lexer<'a> {
                             self.advance();
                             Token::RepeatStart
                         } else {
-                            // Just ||, treat as two pipes - push one back conceptually
-                            // Actually, we need to emit two Pipe tokens
-                            // For simplicity, emit Pipe and let the next iteration handle the second |
-                            // But we already consumed the second |, so push Pipe token and continue
-                            tokens.push(LocatedToken {
-                                token: Token::Pipe,
+                            // Just ||, which is invalid - must be ||: for repeat start
+                            return Err(GenError::ParseError {
                                 line,
                                 column,
+                                message: "Unexpected '||'. Did you mean '||:' for repeat start?".to_string(),
                             });
-                            Token::Pipe
                         }
                     } else {
-                        Token::Pipe
+                        // Standalone | is not valid anymore
+                        return Err(GenError::ParseError {
+                            line,
+                            column,
+                            message: "Unexpected '|'. Note: '|' is no longer used for rhythm. For half notes, use 'd'. For repeats, use '||:' or ':||'.".to_string(),
+                        });
                     }
                 }
                 ':' => {
@@ -237,6 +238,10 @@ impl<'a> Lexer<'a> {
                             message: "Unexpected ':'. Did you mean ':||' for repeat end?".to_string(),
                         });
                     }
+                }
+                'd' => {
+                    self.advance();
+                    Token::SmallD
                 }
                 'o' => {
                     self.advance();
@@ -446,7 +451,7 @@ mod tests {
 
     #[test]
     fn test_rhythm_modifiers() {
-        let mut lexer = Lexer::new("/C |oD");
+        let mut lexer = Lexer::new("/C dD");
         let tokens = lexer.tokenize().unwrap();
         let token_types: Vec<_> = tokens.iter().map(|t| &t.token).collect();
         assert_eq!(
@@ -455,8 +460,7 @@ mod tests {
                 &Token::Slash,
                 &Token::NoteC,
                 &Token::Whitespace,
-                &Token::Pipe,
-                &Token::SmallO,
+                &Token::SmallD,
                 &Token::NoteD,
             ]
         );

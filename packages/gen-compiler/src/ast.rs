@@ -184,12 +184,12 @@ pub enum Octave {
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub enum Duration {
     Whole,       // o
-    Half,        // |o
+    Half,        // d
     #[default]
-    Quarter,     // (none) or |
-    Eighth,      // \
-    Sixteenth,   // \\
-    ThirtySecond, // \\\
+    Quarter,     // (none)
+    Eighth,      // /
+    Sixteenth,   // //
+    ThirtySecond, // ///
 }
 
 impl Duration {

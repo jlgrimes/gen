@@ -182,7 +182,7 @@ mod tests {
 
     #[test]
     fn test_valid_with_different_durations() {
-        let score = parse("|oC |oC").unwrap(); // 2 half notes
+        let score = parse("dC dC").unwrap(); // 2 half notes
         assert!(validate(&score).is_ok());
     }
 

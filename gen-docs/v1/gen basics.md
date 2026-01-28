@@ -13,9 +13,9 @@ time-signature: 4/4
 ---
 
 C C G G
-A A |oG
+A A dG
 F F E E
-D D |oC
+D D dC
 ```
 
 all available fields for metadata are
@@ -104,14 +104,14 @@ Each line is its own measure. If you do a new line, it will do a new measure.
 
 | rhythm modifier | result         |
 | --------------- | -------------- |
-| `[none]` or `|` | Quarter note   |
+| `[none]`        | Quarter note   |
 | `/`             | Eighth note    |
 | `//`            | Sixteenth note |
 | `///`           | 32nd note      |
-| `|o`            | Half note      |
+| `d`             | Half note      |
 | `o`             | Whole note     |
 | `/*`            | dotted eighth  |
-| `|o*`           | dotted half    |
+| `d*`            | dotted half    |
 
 | note | result          |
 | ---- | --------------- |
@@ -204,7 +204,7 @@ is a C tied with a D. Ties can only be between individual notes.
 
 The first obvious use case of this is triplets, where you want to play three notes as triplets. To make triplets with Gen, it looks like this
 
-`3[G_ C E] /3[|oG E] |oG`
+`3[G_ C E] /3[dG E] dG`
 
 Some notes on the triplets
 1. It is notated as a triplet because there is a 3 at the START of the bracket set.
@@ -229,7 +229,7 @@ You can also specify the tuplet rhythm:
 | `3[...]`   | quarter note triplet       |
 | `/3[...]`  | eighth note triplet        |
 | `//3[...]` | sixteenth note triplet     |
-| `|o3[...]` | half note triplet          |
+| `d3[...]` | half note triplet          |
 | and so on  |                            |
 
 ## Other rhythm groupings
@@ -295,7 +295,7 @@ this is how you use it
 ```
 oF
 1. Eb $ *Bb /Ab :||
-2. Eb $ |oEb
+2. Eb $ dEb
 ```
 
 some requirements

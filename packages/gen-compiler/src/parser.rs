@@ -720,7 +720,7 @@ impl Parser {
     /// Parse rhythm modifiers and return (Duration, dotted)
     fn parse_rhythm(&mut self) -> Result<(Duration, bool), GenError> {
         let mut slash_count = 0;
-        let mut has_pipe = false;
+        let mut has_d = false;
         let mut has_o = false;
         let mut dotted = false;
 
@@ -733,9 +733,9 @@ impl Parser {
                     self.advance();
                     slash_count += 1;
                 }
-                Token::Pipe => {
+                Token::SmallD => {
                     self.advance();
-                    has_pipe = true;
+                    has_d = true;
                 }
                 Token::SmallO => {
                     self.advance();
@@ -750,10 +750,10 @@ impl Parser {
         }
 
         // Determine duration based on modifiers
-        let duration = match (slash_count, has_pipe, has_o) {
+        let duration = match (slash_count, has_d, has_o) {
             (0, false, true) => Duration::Whole,        // o
-            (0, true, true) => Duration::Half,          // |o
-            (0, false, false) | (0, true, false) => Duration::Quarter, // (none) or |
+            (0, true, false) => Duration::Half,         // d
+            (0, false, false) => Duration::Quarter,     // (none)
             (1, false, false) => Duration::Eighth,      // /
             (2, false, false) => Duration::Sixteenth,   // //
             (3, false, false) => Duration::ThirtySecond, // ///
@@ -1204,7 +1204,7 @@ time-signature: 6/8
 
     #[test]
     fn test_rhythm_modifiers() {
-        let score = parse("/C |oD oE").unwrap();
+        let score = parse("/C dD oE").unwrap();
         let elements = &score.measures[0].elements;
 
         if let Element::Note(n) = &elements[0] {
@@ -1235,25 +1235,9 @@ time-signature: 6/8
     }
 
     #[test]
-    fn test_dotted_quarter_rest_pipe_asterisk_dollar() {
-        // |*$ - dotted quarter rest (pipe + asterisk before dollar)
-        let score = parse("|*$").unwrap();
-        let elements = &score.measures[0].elements;
-
-        assert_eq!(elements.len(), 1);
-
-        if let Element::Rest { duration, dotted, .. } = &elements[0] {
-            assert_eq!(*duration, Duration::Quarter);
-            assert!(*dotted, "Rest should be dotted");
-        } else {
-            panic!("Expected rest");
-        }
-    }
-
-    #[test]
     fn test_dotted_half_rest() {
-        // |o*$ - dotted half rest
-        let score = parse("|o*$").unwrap();
+        // d*$ - dotted half rest
+        let score = parse("d*$").unwrap();
         let elements = &score.measures[0].elements;
 
         assert_eq!(elements.len(), 1);

@@ -1,21 +1,21 @@
 D^ /[F^ D^ E^ D^ B D^]
 /$ /[C^ A C^] /$ /[B G]
 *A /A $ A-
-|oA *F /F
-$ *|oF-
-|oF $ F
+dA *F /F
+$ *dF-
+dF $ F
 *G /A-A B
 *C /D-D E             @:^
-*D /C-|oC-            @:^
+*D /C-dC-            @:^
 C^ $ $ F
 *G /A-A B
 *C /D-D E             @:^
-D /E /F-|oF           @:^
-|o$ /$ /E /$ /D       @:^
+D /E /F-dF           @:^
+d$ /$ /E /$ /D       @:^
 *C /D-D E             @:^
-|oD |oC               @:^
-*C^ /B-|oB-
-|oB |o$
+dD dC               @:^
+*C^ /B-dB-
+dB d$
 B /$ /E^ $ /$ /G^     @Eb:_
 F^ /D^ /B E^ /$ /A    @Eb:_
 $ /$ /D^ C^ $         @Eb:_
@@ -26,7 +26,7 @@ B /D^ /B E^ /C^ /B    @Eb:_
 *C^ /A#-/A# /G# F
 /[$ C F C G# C C^ C%^-]
 /C%^ F /F^ $ F^
-|oE^ *D^ /B-
+dE^ *D^ /B-
 oB
 ---
 title: Spain

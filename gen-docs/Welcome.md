@@ -13,9 +13,9 @@ key-signature: C
 ---
 
 C C G G
-A A |oG
+A A dG
 F F E E
-D D |oC
+D D dC
 ```
 
 ## Documentation
@@ -56,7 +56,7 @@ cargo run -- path/to/score.gen
 ### Note Format
 `[rhythm][note][pitch]`
 
-- **Rhythm**: `/` (eighth), `|o` (half), `o` (whole), etc.
+- **Rhythm**: `/` (eighth), `d` (half), `o` (whole), etc.
 - **Note**: `A B C D E F G` or `$` for rest
 - **Pitch**: `#` (sharp), `b` (flat), `^` (octave up), `_` (octave down)
 
@@ -64,7 +64,7 @@ cargo run -- path/to/score.gen
 ```
 C       # Quarter note C
 /E      # Eighth note E
-|oG     # Half note G
+dG     # Half note G
 oC      # Whole note C
 Ab_     # Quarter note Ab, one octave down
 F#^     # Quarter note F#, one octave up
