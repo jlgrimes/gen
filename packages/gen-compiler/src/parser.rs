@@ -375,10 +375,17 @@ impl Parser {
             {
                 let mut element = self.parse_element(None)?;
 
-                // Apply chord annotation if this is a note
-                if let Element::Note(note) = &mut element {
-                    if let Some(chord) = self.chord_annotations.get_chord(self.current_measure_index, note_index_in_measure) {
-                        note.chord = Some(chord.clone());
+                // Apply chord annotation to notes or rests
+                match &mut element {
+                    Element::Note(note) => {
+                        if let Some(chord) = self.chord_annotations.get_chord(self.current_measure_index, note_index_in_measure) {
+                            note.chord = Some(chord.clone());
+                        }
+                    }
+                    Element::Rest { chord, .. } => {
+                        if let Some(chord_symbol) = self.chord_annotations.get_chord(self.current_measure_index, note_index_in_measure) {
+                            *chord = Some(chord_symbol.clone());
+                        }
                     }
                 }
 
@@ -569,6 +576,7 @@ impl Parser {
                             duration: final_duration,
                             dotted,
                             tuplet: Some(tuplet_info),
+                            chord: None,
                         }
                     }
                 };
@@ -591,7 +599,7 @@ impl Parser {
                         }
                         Element::Note(note)
                     }
-                    Element::Rest { duration, dotted, tuplet } => {
+                    Element::Rest { duration, dotted, tuplet, .. } => {
                         // If rest doesn't have explicit duration, use group's rhythm
                         let final_duration = if duration == Duration::Quarter && group_duration != Duration::Quarter {
                             group_duration
@@ -607,6 +615,7 @@ impl Parser {
                             duration: final_duration,
                             dotted: final_dotted,
                             tuplet,
+                            chord: None,
                         }
                     }
                 };
@@ -637,7 +646,7 @@ impl Parser {
         match &current.token {
             Token::Rest => {
                 self.advance();
-                Ok(Element::Rest { duration, dotted, tuplet: tuplet_info })
+                Ok(Element::Rest { duration, dotted, tuplet: tuplet_info, chord: None })
             }
             Token::NoteA | Token::NoteB | Token::NoteC | Token::NoteD | Token::NoteE
             | Token::NoteF | Token::NoteG => {
@@ -943,6 +952,14 @@ fn extract_chords(source: &str) -> ChordAnnotations {
                 }
                 pending_chord = Some(line[start..end].to_string());
                 i = end;
+                // Skip whitespace after chord annotation
+                while i < line.len() {
+                    let ch = line_bytes[i] as char;
+                    if ch != ' ' && ch != '\t' {
+                        break;
+                    }
+                    i += 1;
+                }
                 continue;
             }
 

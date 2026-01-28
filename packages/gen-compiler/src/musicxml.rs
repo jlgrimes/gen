@@ -259,6 +259,7 @@ fn element_divisions_for_beaming(element: &Element) -> u32 {
             duration,
             dotted,
             tuplet,
+            ..
         } => duration_to_divisions_high_res(*duration, *dotted, *tuplet),
     }
 }
@@ -418,7 +419,7 @@ fn write_measure<W: std::io::Write>(
     let beam_states = calculate_beam_states(&measure.elements, time_signature);
 
     for (element, beam_state) in measure.elements.iter().zip(beam_states.iter()) {
-        write_element(writer, element, *beam_state, octave_shift, key_signature);
+        write_element(writer, element, *beam_state, octave_shift, key_signature, transposition.as_ref());
     }
 
     // Write right barline (repeat end and/or ending stop)
@@ -519,21 +520,28 @@ fn write_right_barline<W: std::io::Write>(
         .unwrap();
 }
 
-fn write_element<W: std::io::Write>(writer: &mut Writer<W>, element: &Element, beam_state: BeamState, octave_shift: i8, key_signature: &KeySignature) {
+fn write_element<W: std::io::Write>(writer: &mut Writer<W>, element: &Element, beam_state: BeamState, octave_shift: i8, key_signature: &KeySignature, transposition: Option<&Transposition>) {
     match element {
-        Element::Note(note) => write_note(writer, note, beam_state, octave_shift, key_signature),
+        Element::Note(note) => write_note(writer, note, beam_state, octave_shift, key_signature, transposition),
         Element::Rest {
             duration,
             dotted,
             tuplet,
-        } => write_rest(writer, *duration, *dotted, *tuplet),
+            chord,
+        } => {
+            // Write harmony before rest if chord symbol exists
+            if let Some(ref chord_symbol) = chord {
+                write_harmony(writer, chord_symbol, transposition);
+            }
+            write_rest(writer, *duration, *dotted, *tuplet);
+        }
     }
 }
 
-fn write_note<W: std::io::Write>(writer: &mut Writer<W>, note: &Note, beam_state: BeamState, octave_shift: i8, key_signature: &KeySignature) {
+fn write_note<W: std::io::Write>(writer: &mut Writer<W>, note: &Note, beam_state: BeamState, octave_shift: i8, key_signature: &KeySignature, transposition: Option<&Transposition>) {
     // Write harmony BEFORE note element if chord symbol exists
     if let Some(ref chord_symbol) = note.chord {
-        write_harmony(writer, chord_symbol);
+        write_harmony(writer, chord_symbol, transposition);
     }
 
     writer
@@ -769,8 +777,103 @@ fn write_rest<W: std::io::Write>(
         .unwrap();
 }
 
+/// Transpose a chord root note by the given transposition interval
+/// Only transposes the root note letter, preserves quality (maj7, m7, etc.)
+fn transpose_chord_root(chord_symbol: &str, transposition: &Transposition) -> String {
+    if chord_symbol.is_empty() {
+        return chord_symbol.to_string();
+    }
+
+    // Extract root note (first character)
+    let root_char = chord_symbol.chars().next().unwrap();
+
+    // Check if second character is an accidental
+    let mut quality_start = 1;
+    let has_accidental = if chord_symbol.len() > 1 {
+        match chord_symbol.chars().nth(1) {
+            Some('#') | Some('b') => {
+                quality_start = 2;
+                true
+            }
+            _ => false
+        }
+    } else {
+        false
+    };
+
+    // Get the quality/extension part (everything after root + accidental)
+    let quality = if quality_start < chord_symbol.len() {
+        &chord_symbol[quality_start..]
+    } else {
+        ""
+    };
+
+    // Map note letter to number (C=0, D=1, E=2, F=3, G=4, A=5, B=6)
+    let note_to_num = |c: char| -> i8 {
+        match c {
+            'C' => 0, 'D' => 1, 'E' => 2, 'F' => 3, 'G' => 4, 'A' => 5, 'B' => 6,
+            _ => 0,
+        }
+    };
+
+    let num_to_note = |n: i8| -> char {
+        match n {
+            0 => 'C', 1 => 'D', 2 => 'E', 3 => 'F', 4 => 'G', 5 => 'A', 6 => 'B',
+            _ => 'C',
+        }
+    };
+
+    // Chromatic values for each note (C=0, C#=1, D=2, etc.)
+    let note_chromatic = |c: char| -> i8 {
+        match c {
+            'C' => 0, 'D' => 2, 'E' => 4, 'F' => 5, 'G' => 7, 'A' => 9, 'B' => 11,
+            _ => 0,
+        }
+    };
+
+    // Get starting chromatic value with accidental
+    let mut chromatic = note_chromatic(root_char);
+    if has_accidental {
+        match chord_symbol.chars().nth(1) {
+            Some('#') => chromatic += 1,
+            Some('b') => chromatic -= 1,
+            _ => {}
+        }
+    }
+
+    // Apply transposition
+    let new_note_num = (note_to_num(root_char) + transposition.diatonic).rem_euclid(7);
+    let new_chromatic = (chromatic + transposition.chromatic).rem_euclid(12);
+
+    let new_note = num_to_note(new_note_num);
+    let new_note_base_chromatic = note_chromatic(new_note);
+
+    // Calculate the accidental needed
+    let accidental_diff = (new_chromatic - new_note_base_chromatic).rem_euclid(12);
+
+    let accidental_str = match accidental_diff {
+        0 => "",        // Natural
+        1 => "#",       // Sharp
+        11 => "b",      // Flat (same as -1 mod 12)
+        2 => "##",      // Double sharp (rare)
+        10 => "bb",     // Double flat (rare)
+        _ => "",        // Should not happen with standard transpositions
+    };
+
+    format!("{}{}{}", new_note, accidental_str, quality)
+}
+
 /// Write a harmony (chord symbol) element
-fn write_harmony<W: std::io::Write>(writer: &mut Writer<W>, chord_symbol: &str) {
+fn write_harmony<W: std::io::Write>(writer: &mut Writer<W>, chord_symbol: &str, transposition: Option<&Transposition>) {
+    // Transpose the chord symbol if transposition is specified
+    let transposed_symbol = if let Some(trans) = transposition {
+        transpose_chord_root(chord_symbol, trans)
+    } else {
+        chord_symbol.to_string()
+    };
+
+    let chord_symbol = &transposed_symbol;
+
     writer
         .write_event(Event::Start(BytesStart::new("harmony")))
         .unwrap();
@@ -795,12 +898,56 @@ fn write_harmony<W: std::io::Write>(writer: &mut Writer<W>, chord_symbol: &str) 
         .write_event(Event::End(BytesEnd::new("root")))
         .unwrap();
 
-    // Kind element with full text attribute
+    // Parse chord quality from the chord symbol
+    // Extract quality after root note and accidental
+    let quality_start = if chord_symbol.len() > 1 {
+        match chord_symbol.chars().nth(1) {
+            Some('#') | Some('b') => 2,
+            _ => 1,
+        }
+    } else {
+        1
+    };
+
+    let quality = if quality_start < chord_symbol.len() {
+        &chord_symbol[quality_start..]
+    } else {
+        ""
+    };
+
+    // Map quality string to MusicXML kind
+    let kind_value = match quality {
+        "" => "major",
+        "m" | "min" | "-" => "minor",
+        "maj7" | "M7" | "Δ7" => "major-seventh",
+        "m7" | "min7" | "-7" => "minor-seventh",
+        "7" => "dominant",
+        "dim" | "o" | "°" => "diminished",
+        "dim7" | "o7" | "°7" => "diminished-seventh",
+        "m7b5" | "ø" | "half-dim" => "half-diminished",
+        "aug" | "+" => "augmented",
+        "sus4" | "sus" => "suspended-fourth",
+        "sus2" => "suspended-second",
+        "6" => "major-sixth",
+        "m6" => "minor-sixth",
+        "9" => "dominant-ninth",
+        "maj9" | "M9" => "major-ninth",
+        "m9" => "minor-ninth",
+        "11" => "dominant-11th",
+        "maj11" => "major-11th",
+        "m11" => "minor-11th",
+        "13" => "dominant-13th",
+        "maj13" => "major-13th",
+        "m13" => "minor-13th",
+        _ => "other", // For complex/altered chords
+    };
+
+    // Kind element with text attribute for display and proper kind for parsing
     let mut kind = BytesStart::new("kind");
-    kind.push_attribute(("text", chord_symbol));
+    kind.push_attribute(("text", chord_symbol.as_str()));
     writer.write_event(Event::Start(kind)).unwrap();
     writer
-        .write_event(Event::Text(BytesText::new("none")))
+        .write_event(Event::Text(BytesText::new(kind_value)))
         .unwrap();
     writer
         .write_event(Event::End(BytesEnd::new("kind")))
@@ -1306,7 +1453,7 @@ F F%"#;
     fn test_musicxml_harmony() {
         let score = parse("@ch:Cmaj7 C").unwrap();
         let xml = to_musicxml(&score);
-        assert!(xml.contains("<harmony>"), "MusicXML should contain harmony element");
+        assert!(xml.contains("<harmony"), "MusicXML should contain harmony element");
         assert!(xml.contains("Cmaj7"), "Chord symbol should appear in MusicXML");
         assert!(xml.contains("<root-step>C</root-step>"), "Root note should be C");
     }
@@ -1315,7 +1462,7 @@ F F%"#;
     fn test_musicxml_multiple_harmonies() {
         let score = parse("@ch:C C @ch:G E").unwrap();
         let xml = to_musicxml(&score);
-        let harmony_count = xml.matches("<harmony>").count();
+        let harmony_count = xml.matches("<harmony").count();
         assert_eq!(harmony_count, 2, "Should have 2 harmony elements");
         assert!(xml.contains("text=\"C\""), "First chord should be C");
         assert!(xml.contains("text=\"G\""), "Second chord should be G");
@@ -1342,5 +1489,63 @@ F F%"#;
         let score = parse("C D E F").unwrap();
         let xml = to_musicxml(&score);
         assert!(!xml.contains("<harmony>"), "Should not have harmony elements without chord annotations");
+    }
+
+    #[test]
+    fn test_chord_transposition_bb_instrument() {
+        // Bb instrument (Clarinet): transposes up a major 2nd
+        // Concert C -> D, Concert G7 -> A7
+        let score = parse("@ch:C C @ch:G7 G").unwrap();
+        let transposition = Transposition { diatonic: 1, chromatic: 2 };
+        let xml = to_musicxml_with_options(&score, Some(transposition), Clef::Treble, 0);
+
+        assert!(xml.contains("text=\"D\""), "Concert C should transpose to D for Bb instrument");
+        assert!(xml.contains("text=\"A7\""), "Concert G7 should transpose to A7 for Bb instrument");
+    }
+
+    #[test]
+    fn test_chord_transposition_eb_instrument() {
+        // Eb instrument (Alto Sax): transposes up a major 6th
+        // Concert C -> A, Concert F -> D, Concert G7 -> E7
+        let score = parse("@ch:C C @ch:F F @ch:G7 G").unwrap();
+        let transposition = Transposition { diatonic: 5, chromatic: 9 };
+        let xml = to_musicxml_with_options(&score, Some(transposition), Clef::Treble, 0);
+
+        assert!(xml.contains("text=\"A\""), "Concert C should transpose to A for Eb instrument");
+        assert!(xml.contains("text=\"D\""), "Concert F should transpose to D for Eb instrument");
+        assert!(xml.contains("text=\"E7\""), "Concert G7 should transpose to E7 for Eb instrument");
+    }
+
+    #[test]
+    fn test_chord_transposition_with_accidentals() {
+        // Bb instrument: Concert Bb7 -> C7, Concert Eb -> F
+        let score = parse("@ch:Bb7 B @ch:Eb E").unwrap();
+        let transposition = Transposition { diatonic: 1, chromatic: 2 };
+        let xml = to_musicxml_with_options(&score, Some(transposition), Clef::Treble, 0);
+
+        assert!(xml.contains("text=\"C7\""), "Concert Bb7 should transpose to C7 for Bb instrument");
+        assert!(xml.contains("text=\"F\""), "Concert Eb should transpose to F for Bb instrument");
+    }
+
+    #[test]
+    fn test_chord_transposition_preserves_quality() {
+        // Ensure quality (maj7, m7, dim, etc.) is preserved
+        let score = parse("@ch:Cmaj7 C @ch:Dm7 D @ch:Bdim B").unwrap();
+        let transposition = Transposition { diatonic: 1, chromatic: 2 }; // Bb instrument
+        let xml = to_musicxml_with_options(&score, Some(transposition), Clef::Treble, 0);
+
+        assert!(xml.contains("text=\"Dmaj7\""), "Cmaj7 should become Dmaj7");
+        assert!(xml.contains("text=\"Em7\""), "Dm7 should become Em7");
+        assert!(xml.contains("text=\"C#dim\""), "Bdim should become C#dim");
+    }
+
+    #[test]
+    fn test_chord_no_transposition_concert_pitch() {
+        // Concert pitch (no transposition)
+        let score = parse("@ch:Cmaj7 C @ch:G7 G").unwrap();
+        let xml = to_musicxml(&score);
+
+        assert!(xml.contains("text=\"Cmaj7\""), "Concert pitch should not transpose");
+        assert!(xml.contains("text=\"G7\""), "Concert pitch should not transpose");
     }
 }

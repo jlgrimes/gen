@@ -385,6 +385,10 @@ export function GenApp({ compiler, files, scores }: GenAppProps) {
               pageBackgroundColor: '#FFFFFF',
               drawingParameters: 'default',
             });
+            // Enable chord symbol rendering
+            if (osmdRef.current.EngravingRules) {
+              osmdRef.current.EngravingRules.RenderChordSymbols = true;
+            }
           }
           await osmdRef.current.load(result.xml);
 

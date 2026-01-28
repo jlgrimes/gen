@@ -271,7 +271,7 @@ pub struct Note {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Element {
     Note(Note),
-    Rest { duration: Duration, dotted: bool, tuplet: Option<TupletInfo> },
+    Rest { duration: Duration, dotted: bool, tuplet: Option<TupletInfo>, chord: Option<String> },
 }
 
 /// Ending type for volta brackets (1st/2nd endings)

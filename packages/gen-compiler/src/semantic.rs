@@ -136,7 +136,7 @@ fn calculate_measure_duration(measure: &Measure) -> f64 {
 fn element_duration(element: &Element) -> f64 {
     let (duration, dotted, tuplet) = match element {
         Element::Note(note) => (note.duration, note.dotted, note.tuplet),
-        Element::Rest { duration, dotted, tuplet } => (*duration, *dotted, *tuplet),
+        Element::Rest { duration, dotted, tuplet, .. } => (*duration, *dotted, *tuplet),
     };
 
     let mut base = duration.as_fraction();
