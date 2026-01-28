@@ -1,10 +1,17 @@
 *$ *A *D *$
-*G *F /[D A_ $] E
+*G *F /[D A_ $] *E
 *$ *A *D *$
-*E *D /[A_ F_ $] B_
+*E *D /[A_ F_ $] *B_
 A_ /D $ /D E /D /$ A_
 A#_ /B_ $ /[D E A#_ $] *G
-F /D *$
+F /D *$ /[G_ F_ $] D /B
+*A *G *F /[E (D E)]
+*F *D /G F D /A_
+*D *A_ *D /[E F G]
+A D A_ A D A_
+*D *$ E /E /[F E D]
+*dC *dB_
+*dC *dD
 
 ---
 title: Jubilife City (Day)

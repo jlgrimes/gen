@@ -272,9 +272,16 @@ fn calculate_beam_states(elements: &[Element], time_signature: &TimeSignature) -
     // Calculate beat size in high-res divisions (12 divisions = 1 quarter note)
     // This allows clean representation of triplets (12 is divisible by 3)
     // For 4/4: beat = 12 divisions (quarter note)
-    // For 6/8: beat = 6 divisions (eighth note beat, typical for compound time)
+    // For 6/8, 9/8, 12/8: beat = 18 divisions (dotted quarter note, 3 eighth notes)
     // For 2/4: beat = 12 divisions (quarter note)
-    let beat_divisions = 48 / time_signature.beat_type as u32;
+    let beat_divisions = if time_signature.beat_type == 8 && time_signature.beats % 3 == 0 {
+        // Compound meter (6/8, 9/8, 12/8): beam in groups of 3 eighth notes (dotted quarter)
+        // 3 eighth notes = 18 divisions (each eighth = 6 divisions)
+        18
+    } else {
+        // Simple meter: use beat_type to determine beat size
+        48 / time_signature.beat_type as u32
+    };
 
     // Track position in measure and group notes by beat
     let mut position: u32 = 0;
@@ -1829,5 +1836,60 @@ C D E F"#;
         assert!(xml.contains("<step>G</step>"), "G should remain G");
         assert!(xml.contains("<step>A</step>"), "A should remain A");
         assert!(xml.contains("<step>B</step>"), "B should remain B");
+    }
+
+    #[test]
+    fn test_beaming_12_8_time() {
+        // 12/8 time: should beam in groups of 3 eighth notes (dotted quarter beats)
+        // Measure has 12 eighth notes, should create 4 beam groups
+        let source = r#"---
+time-signature: 12/8
+---
+/C /D /E /F /G /A /B /C^ /D^ /E^ /F^ /G^"#;
+        let score = parse(source).unwrap();
+        let xml = to_musicxml(&score);
+
+        // Count beam begin/end markers - should have 4 beam groups (12 notes / 3 per group)
+        let beam_begin_count = xml.matches("<beam number=\"1\">begin</beam>").count();
+        let beam_end_count = xml.matches("<beam number=\"1\">end</beam>").count();
+
+        assert_eq!(beam_begin_count, 4, "Should have 4 beam groups (one per dotted quarter beat)");
+        assert_eq!(beam_end_count, 4, "Should have 4 beam groups (one per dotted quarter beat)");
+    }
+
+    #[test]
+    fn test_beaming_6_8_time() {
+        // 6/8 time: should beam in groups of 3 eighth notes (dotted quarter beats)
+        let source = r#"---
+time-signature: 6/8
+---
+/C /D /E /F /G /A"#;
+        let score = parse(source).unwrap();
+        let xml = to_musicxml(&score);
+
+        // Should have 2 beam groups (6 notes / 3 per group)
+        let beam_begin_count = xml.matches("<beam number=\"1\">begin</beam>").count();
+        let beam_end_count = xml.matches("<beam number=\"1\">end</beam>").count();
+
+        assert_eq!(beam_begin_count, 2, "Should have 2 beam groups in 6/8");
+        assert_eq!(beam_end_count, 2, "Should have 2 beam groups in 6/8");
+    }
+
+    #[test]
+    fn test_beaming_9_8_time() {
+        // 9/8 time: should beam in groups of 3 eighth notes
+        let source = r#"---
+time-signature: 9/8
+---
+/C /D /E /F /G /A /B /C^ /D^"#;
+        let score = parse(source).unwrap();
+        let xml = to_musicxml(&score);
+
+        // Should have 3 beam groups (9 notes / 3 per group)
+        let beam_begin_count = xml.matches("<beam number=\"1\">begin</beam>").count();
+        let beam_end_count = xml.matches("<beam number=\"1\">end</beam>").count();
+
+        assert_eq!(beam_begin_count, 3, "Should have 3 beam groups in 9/8");
+        assert_eq!(beam_end_count, 3, "Should have 3 beam groups in 9/8");
     }
 }
