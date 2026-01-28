@@ -1,5 +1,5 @@
-D^ /F^ /D^ /E^ /D^ /B /D^
-/$ /C^ /A /C^ /$ /B /G
+D^ /[F^ D^ E^ D^ B D^]
+/$ /[C^ A C^] /$ /[B G]
 *A /A $ A-
 |oA *F /F
 $ *|oF-
@@ -24,7 +24,7 @@ E^ /$ /E^ G^ /F^ /D^ @Eb:_
 B /D^ /B E^ /C^ /B @Eb:_
 /$ /F E-/E F /B
 *C^ /A#-/A# /G# F
-/$ /C /F /C /G# /C /C^ /C%^-
+/$ /[C F C G# C C^ C%^-]
 /C%^ F /F^ $ F^
 |oE^ *D^ /B-
 oB

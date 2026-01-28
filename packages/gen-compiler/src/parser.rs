@@ -51,12 +51,14 @@ impl Parser {
         let mut in_slur = false;  // Track whether we're inside a slur across measures
         let mut slur_start_marked = false;  // Track if slur_start has been marked on a note
         let mut pending_tie_stop = false;  // Track whether next note should have tie_stop
+        let mut current_ending: Option<Ending> = None;  // Track current ending state across measures
 
         while self.current().is_some() {
-            let (measure_opt, new_slur_state, new_slur_start_marked, new_pending_tie_stop) = self.parse_measure(in_slur, slur_start_marked, pending_tie_stop)?;
+            let (measure_opt, new_slur_state, new_slur_start_marked, new_pending_tie_stop, new_ending) = self.parse_measure(in_slur, slur_start_marked, pending_tie_stop, current_ending)?;
             in_slur = new_slur_state;
             slur_start_marked = new_slur_start_marked;
             pending_tie_stop = new_pending_tie_stop;
+            current_ending = new_ending;
             if let Some(measure) = measure_opt {
                 measures.push(measure);
             }
@@ -153,13 +155,13 @@ impl Parser {
     }
 
     /// Parse a single measure (one line)
-    /// Takes and returns slur state to track slurs across measures
-    /// Returns: (Option<Measure>, in_slur, slur_start_marked, pending_tie_stop)
-    fn parse_measure(&mut self, mut in_slur: bool, mut slur_start_marked: bool, mut next_note_has_tie_stop: bool) -> Result<(Option<Measure>, bool, bool, bool), GenError> {
+    /// Takes and returns slur state to track slurs across measures, and current ending state
+    /// Returns: (Option<Measure>, in_slur, slur_start_marked, pending_tie_stop, current_ending)
+    fn parse_measure(&mut self, mut in_slur: bool, mut slur_start_marked: bool, mut next_note_has_tie_stop: bool, current_ending: Option<Ending>) -> Result<(Option<Measure>, bool, bool, bool, Option<Ending>), GenError> {
         let mut elements = Vec::new();
         let mut repeat_start = false;
         let mut repeat_end = false;
-        let mut ending: Option<Ending> = None;
+        let mut ending: Option<Ending> = current_ending;
 
         // Check for first/second ending at beginning of measure
         if let Some(t) = self.current() {
@@ -182,10 +184,19 @@ impl Parser {
         }
 
         // Check for repeat start at beginning of measure (||:)
+        // This can appear on its own line or with notes
         if let Some(t) = self.current() {
             if t.token == Token::RepeatStart {
                 repeat_start = true;
                 self.advance();
+                // Skip whitespace after repeat start
+                while let Some(t) = self.current() {
+                    if t.token == Token::Whitespace {
+                        self.advance();
+                    } else {
+                        break;
+                    }
+                }
             }
         }
 
@@ -204,7 +215,7 @@ impl Parser {
             if t.token == Token::RepeatEnd {
                 repeat_end = true;
                 self.advance();
-                // After repeat end, we should only see whitespace or newline
+                // After repeat end, consume remaining whitespace and newline
                 while let Some(t) = self.current() {
                     if t.token == Token::Whitespace {
                         self.advance();
@@ -214,12 +225,8 @@ impl Parser {
                         self.advance();
                         break;
                     }
-                    // Anything else after :|| is an error
-                    return Err(GenError::ParseError {
-                        line: t.line,
-                        column: t.column,
-                        message: "Repeat end (:||) must be at the end of a measure".to_string(),
-                    });
+                    // Allow other tokens after :||, don't error
+                    break;
                 }
                 break;
             }
@@ -244,39 +251,87 @@ impl Parser {
                 continue;
             }
 
-            // Check for tuplet group starting with [
-            if t.token == Token::LeftBracket {
-                let mut tuplet_elements = self.parse_tuplet_group()?;
+            // Check for bracket groups (rhythm grouping or tuplet)
+            // Syntax options:
+            //   3[C D E]      - quarter note tuplet (number, then bracket)
+            //   /3[C D E]     - eighth note tuplet (rhythm, number, then bracket)
+            //   //[C D E F]   - rhythm grouping (rhythm, then bracket, NO number)
 
-                // If there's a pending tie_stop, apply it to the first note in the tuplet
-                if next_note_has_tie_stop {
-                    if let Some(Element::Note(note)) = tuplet_elements.first_mut() {
-                        note.tie_stop = true;
-                    }
-                    next_note_has_tie_stop = false;
+            // Save position in case we need to backtrack
+            let saved_position = self.position;
+            let (t_line, t_col) = (t.line, t.column);
+
+            // Parse optional rhythm modifier
+            let (group_duration, group_dotted) = self.parse_rhythm()?;
+
+            // Check for optional tuplet number after rhythm
+            let tuplet_number = if let Some(current_t) = self.current() {
+                if let Token::Number(n) = current_t.token {
+                    self.advance();
+                    Some(n)
+                } else {
+                    None
                 }
+            } else {
+                None
+            };
 
-                // Mark slur_start on first note if we're in a slur and haven't marked it yet
-                if in_slur && !slur_start_marked {
-                    if let Some(Element::Note(note)) = tuplet_elements.first_mut() {
-                        note.slur_start = true;
-                        slur_start_marked = true;
-                    }
-                }
+            // Now check if we have a bracket
+            if let Some(current_t) = self.current() {
+                if current_t.token == Token::LeftBracket {
+                    // This is either a tuplet or rhythm grouping
+                    let (mut grouped_elements, has_pending_tie) = self.parse_bracket_group(tuplet_number, group_duration, group_dotted)?;
 
-                // Check if there's a hyphen after the tuplet (tie from last note)
-                if let Some(t) = self.current() {
-                    if t.token == Token::Hyphen {
-                        self.advance();
-                        if let Some(Element::Note(note)) = tuplet_elements.last_mut() {
-                            note.tie_start = true;
+                    // If there's a pending tie_stop, apply it to the first note
+                    if next_note_has_tie_stop {
+                        if let Some(Element::Note(note)) = grouped_elements.first_mut() {
+                            note.tie_stop = true;
                         }
+                        next_note_has_tie_stop = false;
+                    }
+
+                    // Mark slur_start on first note if we're in a slur and haven't marked it yet
+                    if in_slur && !slur_start_marked {
+                        if let Some(Element::Note(note)) = grouped_elements.first_mut() {
+                            note.slur_start = true;
+                            slur_start_marked = true;
+                        }
+                    }
+
+                    // Check if there's a hyphen after the group (tie from last note)
+                    if let Some(t) = self.current() {
+                        if t.token == Token::Hyphen {
+                            self.advance();
+                            if let Some(Element::Note(note)) = grouped_elements.last_mut() {
+                                note.tie_start = true;
+                            }
+                            next_note_has_tie_stop = true;
+                        }
+                    }
+
+                    // If the bracket group ended with a tie, propagate it
+                    if has_pending_tie {
                         next_note_has_tie_stop = true;
                     }
-                }
 
-                elements.extend(tuplet_elements);
-            } else {
+                    elements.extend(grouped_elements);
+                    continue;
+                }
+            }
+
+            // If we got a tuplet number but no bracket, that's an error
+            if tuplet_number.is_some() {
+                return Err(GenError::ParseError {
+                    line: t_line,
+                    column: t_col,
+                    message: "Expected [ after tuplet number".to_string(),
+                });
+            }
+
+            // Not a bracket group, restore position and parse as normal element
+            self.position = saved_position;
+
+            {
                 let mut element = self.parse_element(None)?;
 
                 // Apply tie_stop if pending from previous hyphen
@@ -311,14 +366,18 @@ impl Parser {
         }
 
         if elements.is_empty() && !repeat_start && !repeat_end && ending.is_none() {
-            Ok((None, in_slur, slur_start_marked, next_note_has_tie_stop))
+            Ok((None, in_slur, slur_start_marked, next_note_has_tie_stop, ending))
         } else {
-            Ok((Some(Measure { elements, repeat_start, repeat_end, ending }), in_slur, slur_start_marked, next_note_has_tie_stop))
+            Ok((Some(Measure { elements, repeat_start, repeat_end, ending }), in_slur, slur_start_marked, next_note_has_tie_stop, ending))
         }
     }
 
-    /// Parse a tuplet group like [C D E]3 or [C E G]/3
-    fn parse_tuplet_group(&mut self) -> Result<Vec<Element>, GenError> {
+    /// Parse a bracket group - either a rhythm grouping (//[C D E F]) or tuplet (3[C D E])
+    /// tuplet_number: Some(n) for tuplets, None for rhythm groupings
+    /// group_duration: rhythm modifier before the bracket
+    /// group_dotted: whether the rhythm has a dot
+    /// Returns: (elements, has_pending_tie_stop)
+    fn parse_bracket_group(&mut self, tuplet_number: Option<u8>, group_duration: Duration, group_dotted: bool) -> Result<(Vec<Element>, bool), GenError> {
         let (line, column) = self
             .current()
             .map(|t| (t.line, t.column))
@@ -327,8 +386,10 @@ impl Parser {
         // Consume the opening bracket
         self.advance(); // [
 
-        // Parse the notes inside the bracket (without tuplet info yet)
+        // Parse the notes inside the bracket, tracking ties
         let mut raw_elements = Vec::new();
+        let mut pending_tie_stop = false;
+
         while let Some(t) = self.current() {
             if t.token == Token::RightBracket {
                 break;
@@ -341,12 +402,32 @@ impl Parser {
                 return Err(GenError::ParseError {
                     line,
                     column,
-                    message: "Unexpected newline inside tuplet group".to_string(),
+                    message: "Unexpected newline inside bracket group".to_string(),
                 });
             }
 
             // Parse element without tuplet context for now
-            let element = self.parse_element(None)?;
+            let mut element = self.parse_element(None)?;
+
+            // Apply tie_stop if there was a tie from the previous element
+            if pending_tie_stop {
+                if let Element::Note(note) = &mut element {
+                    note.tie_stop = true;
+                }
+                pending_tie_stop = false;
+            }
+
+            // Check for tie (hyphen) after this element
+            if let Some(t) = self.current() {
+                if t.token == Token::Hyphen {
+                    self.advance();
+                    if let Element::Note(note) = &mut element {
+                        note.tie_start = true;
+                    }
+                    pending_tie_stop = true;
+                }
+            }
+
             raw_elements.push(element);
         }
 
@@ -363,77 +444,94 @@ impl Parser {
             }
         }
 
-        // Parse optional rhythm modifier after bracket (e.g., / for eighth note triplet)
-        let (tuplet_duration, _) = self.parse_rhythm()?;
-
-        // Parse the tuplet number (e.g., 3 for triplet)
-        let actual_notes = if let Some(t) = self.current() {
-            if let Token::Number(n) = t.token {
-                self.advance();
-                n
-            } else {
-                return Err(GenError::ParseError {
-                    line: t.line,
-                    column: t.column,
-                    message: "Expected tuplet number after ]".to_string(),
-                });
-            }
-        } else {
-            return Err(GenError::ParseError {
-                line,
-                column,
-                message: "Expected tuplet number after ]".to_string(),
-            });
-        };
-
         if raw_elements.is_empty() {
             return Err(GenError::ParseError {
                 line,
                 column,
-                message: "Tuplet group cannot be empty".to_string(),
+                message: "Bracket group cannot be empty".to_string(),
             });
         }
 
-        // Create tuplet info and apply to all elements
-        let tuplet_context = TupletContext {
-            default_duration: tuplet_duration,
-        };
-
-        let mut elements = Vec::with_capacity(raw_elements.len());
-        let last_idx = raw_elements.len() - 1;
-
-        for (i, element) in raw_elements.into_iter().enumerate() {
-            let mut tuplet_info = TupletInfo::new(actual_notes);
-            tuplet_info.is_start = i == 0;
-            tuplet_info.is_stop = i == last_idx;
-
-            let element_with_tuplet = match element {
-                Element::Note(mut note) => {
-                    // If note doesn't have an explicit duration, use the tuplet's default
-                    if note.duration == Duration::Quarter {
-                        note.duration = tuplet_context.default_duration;
-                    }
-                    note.tuplet = Some(tuplet_info);
-                    Element::Note(note)
-                }
-                Element::Rest { duration, dotted, .. } => {
-                    // If rest doesn't have explicit duration, use tuplet's default
-                    let final_duration = if duration == Duration::Quarter {
-                        tuplet_context.default_duration
-                    } else {
-                        duration
-                    };
-                    Element::Rest {
-                        duration: final_duration,
-                        dotted,
-                        tuplet: Some(tuplet_info),
-                    }
-                }
+        // If this is a tuplet (has a number), apply tuplet info to all elements
+        if let Some(actual_notes) = tuplet_number {
+            let tuplet_context = TupletContext {
+                default_duration: group_duration,
             };
-            elements.push(element_with_tuplet);
-        }
 
-        Ok(elements)
+            let mut elements = Vec::with_capacity(raw_elements.len());
+            let last_idx = raw_elements.len() - 1;
+
+            for (i, element) in raw_elements.into_iter().enumerate() {
+                let mut tuplet_info = TupletInfo::new(actual_notes);
+                tuplet_info.is_start = i == 0;
+                tuplet_info.is_stop = i == last_idx;
+
+                let element_with_tuplet = match element {
+                    Element::Note(mut note) => {
+                        // If note doesn't have an explicit duration, use the tuplet's default
+                        if note.duration == Duration::Quarter {
+                            note.duration = tuplet_context.default_duration;
+                        }
+                        note.tuplet = Some(tuplet_info);
+                        Element::Note(note)
+                    }
+                    Element::Rest { duration, dotted, .. } => {
+                        // If rest doesn't have explicit duration, use tuplet's default
+                        let final_duration = if duration == Duration::Quarter {
+                            tuplet_context.default_duration
+                        } else {
+                            duration
+                        };
+                        Element::Rest {
+                            duration: final_duration,
+                            dotted,
+                            tuplet: Some(tuplet_info),
+                        }
+                    }
+                };
+                elements.push(element_with_tuplet);
+            }
+
+            Ok((elements, pending_tie_stop))
+        } else {
+            // This is a rhythm grouping (no tuplet number)
+            // Apply the group's rhythm to all elements that don't have an explicit rhythm
+            let mut elements = Vec::with_capacity(raw_elements.len());
+
+            for element in raw_elements.into_iter() {
+                let element_with_rhythm = match element {
+                    Element::Note(mut note) => {
+                        // If note doesn't have an explicit duration, use the group's rhythm
+                        if note.duration == Duration::Quarter && group_duration != Duration::Quarter {
+                            note.duration = group_duration;
+                            note.dotted = group_dotted;
+                        }
+                        Element::Note(note)
+                    }
+                    Element::Rest { duration, dotted, tuplet } => {
+                        // If rest doesn't have explicit duration, use group's rhythm
+                        let final_duration = if duration == Duration::Quarter && group_duration != Duration::Quarter {
+                            group_duration
+                        } else {
+                            duration
+                        };
+                        let final_dotted = if duration == Duration::Quarter && group_duration != Duration::Quarter {
+                            group_dotted
+                        } else {
+                            dotted
+                        };
+                        Element::Rest {
+                            duration: final_duration,
+                            dotted: final_dotted,
+                            tuplet,
+                        }
+                    }
+                };
+                elements.push(element_with_rhythm);
+            }
+
+            Ok((elements, pending_tie_stop))
+        }
     }
 
     /// Parse a single element (note or rest with rhythm)
@@ -865,8 +963,8 @@ time-signature: 6/8
 
     #[test]
     fn test_triplet_parsing() {
-        // Quarter note triplet: [C D E]3
-        let score = parse("[C D E]3").unwrap();
+        // Quarter note triplet: 3[C D E]
+        let score = parse("3[C D E]").unwrap();
         let elements = &score.measures[0].elements;
 
         assert_eq!(elements.len(), 3);
@@ -896,8 +994,8 @@ time-signature: 6/8
 
     #[test]
     fn test_eighth_note_triplet() {
-        // Eighth note triplet: [C D E]/3
-        let score = parse("[C D E]/3").unwrap();
+        // Eighth note triplet: /3[C D E]
+        let score = parse("/3[C D E]").unwrap();
         let elements = &score.measures[0].elements;
 
         assert_eq!(elements.len(), 3);
@@ -913,7 +1011,7 @@ time-signature: 6/8
     #[test]
     fn test_triplet_with_mixed_notes() {
         // Triplet with explicit rhythm on first note
-        let score = parse("[/C D E]3").unwrap();
+        let score = parse("3[/C D E]").unwrap();
         let elements = &score.measures[0].elements;
 
         assert_eq!(elements.len(), 3);
@@ -924,6 +1022,105 @@ time-signature: 6/8
         }
         if let Element::Note(n) = &elements[1] {
             assert_eq!(n.duration, Duration::Quarter);
+        }
+    }
+
+    #[test]
+    fn test_rhythm_grouping_sixteenth() {
+        // Sixteenth note grouping: //[C D E F]
+        let score = parse("//[C D E F]").unwrap();
+        let elements = &score.measures[0].elements;
+
+        assert_eq!(elements.len(), 4);
+
+        // All notes should be sixteenth notes
+        for element in elements.iter() {
+            if let Element::Note(n) = element {
+                assert_eq!(n.duration, Duration::Sixteenth);
+                assert!(n.tuplet.is_none(), "Rhythm grouping should not have tuplet info");
+            }
+        }
+    }
+
+    #[test]
+    fn test_rhythm_grouping_eighth() {
+        // Eighth note grouping: /[C D E F]
+        let score = parse("/[C D E F]").unwrap();
+        let elements = &score.measures[0].elements;
+
+        assert_eq!(elements.len(), 4);
+
+        for element in elements.iter() {
+            if let Element::Note(n) = element {
+                assert_eq!(n.duration, Duration::Eighth);
+                assert!(n.tuplet.is_none());
+            }
+        }
+    }
+
+    #[test]
+    fn test_rhythm_grouping_with_override() {
+        // Rhythm grouping with one note overriding: //[C D /E F]
+        let score = parse("//[C D /E F]").unwrap();
+        let elements = &score.measures[0].elements;
+
+        assert_eq!(elements.len(), 4);
+
+        // First, second, and fourth should be sixteenth
+        if let Element::Note(n) = &elements[0] {
+            assert_eq!(n.duration, Duration::Sixteenth);
+        }
+        if let Element::Note(n) = &elements[1] {
+            assert_eq!(n.duration, Duration::Sixteenth);
+        }
+        // Third should be eighth (explicit override)
+        if let Element::Note(n) = &elements[2] {
+            assert_eq!(n.duration, Duration::Eighth);
+        }
+        if let Element::Note(n) = &elements[3] {
+            assert_eq!(n.duration, Duration::Sixteenth);
+        }
+    }
+
+    #[test]
+    fn test_quintuplet() {
+        // Quintuplet: 5[C D E F G]
+        let score = parse("5[C D E F G]").unwrap();
+        let elements = &score.measures[0].elements;
+
+        assert_eq!(elements.len(), 5);
+
+        for (i, element) in elements.iter().enumerate() {
+            if let Element::Note(n) = element {
+                assert!(n.tuplet.is_some());
+                let tuplet = n.tuplet.unwrap();
+                assert_eq!(tuplet.actual_notes, 5);
+                assert_eq!(tuplet.normal_notes, 4);
+
+                if i == 0 {
+                    assert!(tuplet.is_start);
+                } else if i == 4 {
+                    assert!(tuplet.is_stop);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_sextuplet() {
+        // Sextuplet: 6[C D E F G A]
+        let score = parse("6[C D E F G A]").unwrap();
+        let elements = &score.measures[0].elements;
+
+        assert_eq!(elements.len(), 6);
+
+        for element in elements.iter() {
+            if let Element::Note(n) = element {
+                assert!(n.tuplet.is_some());
+                let tuplet = n.tuplet.unwrap();
+                assert_eq!(tuplet.actual_notes, 6);
+                assert_eq!(tuplet.normal_notes, 4);
+            }
         }
     }
 

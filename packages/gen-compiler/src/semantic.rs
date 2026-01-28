@@ -189,14 +189,14 @@ mod tests {
     #[test]
     fn test_triplet_duration() {
         // Quarter note triplet (3 quarters in the time of 2) + 2 regular quarters = 4 beats
-        let score = parse("[C D E]3 C C").unwrap();
+        let score = parse("3[C D E] C C").unwrap();
         assert!(validate(&score).is_ok());
     }
 
     #[test]
     fn test_eighth_note_triplet_duration() {
         // Eighth note triplet (3 eighths in time of 2 eighths = 1 quarter) + 3 regular quarters = 4 beats
-        let score = parse("[C D E]/3 C C C").unwrap();
+        let score = parse("/3[C D E] C C C").unwrap();
         assert!(validate(&score).is_ok());
     }
 

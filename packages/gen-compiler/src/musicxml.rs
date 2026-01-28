@@ -164,6 +164,34 @@ fn to_musicxml_full(
             octave_shift
         };
 
+        // Determine if this is the first measure with the current ending
+        // (we need to open the ending bracket if the previous measure had a different ending or no ending)
+        let is_ending_start = if measure.ending.is_some() {
+            if i > 0 {
+                // Not the first measure - check if previous measure had different ending
+                score.measures[i - 1].ending != measure.ending
+            } else {
+                // First measure in score - start the ending
+                true
+            }
+        } else {
+            false
+        };
+
+        // Determine if this is the last measure with the current ending
+        // (we need to close the ending bracket if the next measure has a different ending or no ending)
+        let is_ending_stop = if measure.ending.is_some() {
+            if i + 1 < score.measures.len() {
+                // Not the last measure - check if next measure has different ending
+                score.measures[i + 1].ending != measure.ending
+            } else {
+                // Last measure in score - close the ending
+                true
+            }
+        } else {
+            false
+        };
+
         write_measure(
             &mut writer,
             measure,
@@ -174,6 +202,8 @@ fn to_musicxml_full(
             transposition,
             clef,
             effective_octave_shift,
+            is_ending_start,
+            is_ending_stop,
         );
     }
 
@@ -312,14 +342,17 @@ fn write_measure<W: std::io::Write>(
     transposition: Option<Transposition>,
     clef: Clef,
     octave_shift: i8,
+    is_ending_start: bool,
+    is_ending_stop: bool,
 ) {
     let mut measure_elem = BytesStart::new("measure");
     measure_elem.push_attribute(("number", number.to_string().as_str()));
     writer.write_event(Event::Start(measure_elem)).unwrap();
 
     // Write left barline (repeat start and/or ending start)
-    if measure.repeat_start || measure.ending.is_some() {
-        write_left_barline(writer, measure.repeat_start, measure.ending);
+    // Only write ending start if this is the first measure with this ending
+    if measure.repeat_start || is_ending_start {
+        write_left_barline(writer, measure.repeat_start, if is_ending_start { measure.ending } else { None });
     }
 
     // Include time signature, key signature, and clef on first measure
@@ -389,8 +422,9 @@ fn write_measure<W: std::io::Write>(
     }
 
     // Write right barline (repeat end and/or ending stop)
-    if measure.repeat_end || measure.ending.is_some() {
-        write_right_barline(writer, measure.repeat_end, measure.ending);
+    // Only write ending stop if this is the last measure with this ending
+    if measure.repeat_end || is_ending_stop {
+        write_right_barline(writer, measure.repeat_end, if is_ending_stop { measure.ending } else { None });
     }
 
     writer
@@ -834,7 +868,7 @@ C"#;
 
     #[test]
     fn test_musicxml_triplet_output() {
-        let score = parse("[C D E]3").unwrap();
+        let score = parse("3[C D E]").unwrap();
         let xml = to_musicxml(&score);
 
         // Should contain time-modification for triplets

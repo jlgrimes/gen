@@ -163,23 +163,42 @@ is a C tied with a D. Ties can only be between individual notes.
 
 The first obvious use case of this is triplets, where you want to play three notes as triplets. To make triplets with Gen, it looks like this
 
-`[G_ C E]3 [|oG E]|3 |oG`
+`3[G_ C E] /3[|oG E] |oG`
 
 Some notes on the triplets
-1. It is notated as a triplet because there is a 3 after the end bracket.
-2. You can specify how fast the triplet is by putting the rhythm modifier after the brackets before the 3. If not specified, it is a quarter note triplet. for example, `[C E G]/3` is an eigth note triplet.
+1. It is notated as a triplet because there is a 3 at the START of the bracket set.
+2. You can specify how fast the triplet is by putting the rhythm modifier BEFORE the number and bracket. If not specified, it is a quarter note triplet. For example, `/3[C E G]` is an eighth note triplet.
 	1. With this, normally, the notes duration are default to quarter note. However, if in a triplet modifier, the default duration of the note would be whatever the triplet duration specifies, instead of quarter note. In the example shown, C E G would all have duration 8th note triplets since defined in the eighth note triplet rhythm bracket. You can also override rhythm like you see from above.
 
 Other tuplets can be specified using the respective numbers:
 
 | syntax    | meaning                 |
 | --------- | ----------------------- |
-| `[...]2`  | duplet                  |
-| `[...]3`  | triplet                 |
-| `[...]4`  | four-et? (the four one) |
-| `[...]5`  | quintuplet              |
-| `[...]6`  | sextuplet               |
+| `2[...]`  | duplet                  |
+| `3[...]`  | triplet                 |
+| `4[...]`  | four-et? (the four one) |
+| `5[...]`  | quintuplet              |
+| `6[...]`  | sextuplet               |
 | and so on |                         |
+
+You can also specify the tuplet rhythm:
+
+| syntax     | meaning                    |
+| ---------- | -------------------------- |
+| `3[...]`   | quarter note triplet       |
+| `/3[...]`  | eighth note triplet        |
+| `//3[...]` | sixteenth note triplet     |
+| `|o3[...]` | half note triplet          |
+| and so on  |                            |
+
+## Other rhythm groupings
+
+You can also group together notes with the same rhythm by using brackets and specifying the rhythm in front. Like this
+
+`//[C D E F]` instead of `//C //D //E //F`
+
+This works with any rhythm modifier. Notes inside the bracket will use the group's rhythm unless they have an explicit rhythm specified.
+
 ## Slurs
 
 Slurs can be represented with a normal parantheses set around the group you want a slur between ()
@@ -213,6 +232,9 @@ oF
 some requirements
 1. "1st" modifier is required to have a repeat sign at the end of it. if not, throw error
 2. "2nd time" modifier cannot have a repeat sign at the end of it. Also, must immediately proceed a line with "1st" AND a repeat. else, throw error
+
+to continue a first second ending to multiple measures, simply prepend consecutive lines with 1st: or 2nd:
+
 # gen viewer specifics
 the gen viewer will be a tauri app that renders the gen file into real sheet music you can read.
 The viewer will allow you to view by instrument, which transposes the music to given instrumet/key. It changes a new property on the client side called `viewed-pitch`, which is used to transpose the gen notation before it is translated to sheet music. The value of viewed-pitch is whichever note middle C should be mapped to.
