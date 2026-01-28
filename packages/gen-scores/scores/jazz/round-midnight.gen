@@ -1,8 +1,8 @@
-||: $ //[B_ E F Bb] *G /Bb_
+||: $ //[B_ E F B] *G /B_
 *E //[D% E] /B /A $
-$ //[E G B D^] *C%^ /Eb
+$ //[E G B D^] *C%^ /E
 /A% //[F# D%] G# /Ab //[F% Db] G%
-$ //[A C E^ G]^ *F /C
+$ //[A C^ E^ G^] *F^ /C^
 B /3[E D% Db] /C% A //[E F]
 1st: /3[F# F# F#] /3[F# F% D#] *F /D
 1st: /[D% Bb_] $ |o$ :||
@@ -10,16 +10,17 @@ B /3[E D% Db] /C% A //[E F]
 2nd: |o*E /[E F]
 G /[F E] *F /E
 /[D% B] $ $ /[E F]
-G /[F E] F* /E
+G /[F E] *F /E
 /[D% B_] $ $ B
-*C^ /D *B /B
-A G *F /B /[E^ E^] E^ /[D^ D^] D^
-C^ /[E D%] /[B A E% D]
+*C^ /C^ *B /B
+A G *F /B
+/[E^ E^] E^ /[D^ D^] D^
+C^ /[E D%] /[B A E% Db]
 //[B_ E F Bb] *G /Bb_
 *E //[D% E] /B /A $
 $ //[E G B D^] *C%^ /Eb
 /A% //[F# D%] G# /Ab //[F% Db] G%
-$ //[A C E^ G]^ *F /C
+$ //[A C^ E^ G^] *F^ /C^
 B /3[E D% Db] /C% A //[E F]
 G /[F E] F /[E D]
 oE
