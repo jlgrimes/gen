@@ -112,7 +112,6 @@ const INSTRUMENT_PRESETS: InstrumentPreset[] = [
     transposeIndex: 1,
     octaveShift: 1,
     clef: 'treble',
-    instrumentGroup: 'bb',
   },
   {
     id: 'bb',
@@ -347,7 +346,12 @@ export function GenApp({ compiler, files, scores }: GenAppProps) {
       setIsCompiling(true);
       try {
         // Compile with clef and instrument group parameters
-        const transposeKey = TRANSPOSE_OPTIONS[currentTransposeIndex]?.label as 'C' | 'Bb' | 'Eb' | 'F' | undefined;
+        const transposeKey = TRANSPOSE_OPTIONS[currentTransposeIndex]?.label as
+          | 'C'
+          | 'Bb'
+          | 'Eb'
+          | 'F'
+          | undefined;
         console.log('Compiling with:', {
           octave,
           instrumentGroup,
@@ -563,9 +567,7 @@ export function GenApp({ compiler, files, scores }: GenAppProps) {
 
         {/* Octave control - always visible */}
         <div className='flex items-center gap-2'>
-          <label className='text-xs font-medium text-gray-600'>
-            Octave:
-          </label>
+          <label className='text-xs font-medium text-gray-600'>Octave:</label>
           <select
             value={octaveShift}
             onChange={e => setOctaveShift(Number(e.target.value))}
