@@ -34,6 +34,7 @@ pub struct Parser {
     tokens: Vec<LocatedToken>,
     position: usize,
     chord_annotations: ChordAnnotations,
+    measure_octave_modifiers: HashMap<usize, i8>,
     current_measure_index: usize,
 }
 
@@ -43,6 +44,7 @@ impl Parser {
             tokens,
             position: 0,
             chord_annotations: ChordAnnotations::default(),
+            measure_octave_modifiers: HashMap::new(),
             current_measure_index: 0,
         }
     }
@@ -68,9 +70,10 @@ impl Parser {
     }
 
     /// Parse the music content into a Score (metadata already extracted)
-    /// mod_points, line_to_measure, and chord_annotations are passed in from the outer parse function
-    pub(crate) fn parse_music(&mut self, metadata: Metadata, mod_points: ModPoints, line_to_measure: HashMap<usize, usize>, chord_annotations: ChordAnnotations) -> Result<Score, GenError> {
+    /// mod_points, line_to_measure, chord_annotations, and measure_octave_modifiers are passed in from the outer parse function
+    pub(crate) fn parse_music(&mut self, metadata: Metadata, mod_points: ModPoints, line_to_measure: HashMap<usize, usize>, chord_annotations: ChordAnnotations, measure_octave_modifiers: HashMap<usize, i8>) -> Result<Score, GenError> {
         self.chord_annotations = chord_annotations;
+        self.measure_octave_modifiers = measure_octave_modifiers;
         self.current_measure_index = 0;
         self.skip_whitespace_and_newlines();
 
@@ -311,11 +314,15 @@ impl Parser {
                     // This is either a tuplet or rhythm grouping
                     let (mut grouped_elements, has_pending_tie) = self.parse_bracket_group(tuplet_number, group_duration, group_dotted)?;
 
-                    // Apply chord annotations to notes in the bracket group
+                    // Apply chord annotations and measure octave modifier to notes in the bracket group
                     for element in &mut grouped_elements {
                         if let Element::Note(note) = element {
                             if let Some(chord) = self.chord_annotations.get_chord(self.current_measure_index, note_index_in_measure) {
                                 note.chord = Some(chord.clone());
+                            }
+                            // Apply measure octave modifier
+                            if let Some(&offset) = self.measure_octave_modifiers.get(&self.current_measure_index) {
+                                note.octave = Self::apply_octave_offset(note.octave, offset);
                             }
                             note_index_in_measure += 1;
                         } else if matches!(element, Element::Rest { .. }) {
@@ -413,6 +420,13 @@ impl Parser {
                             note.tie_start = true;
                         }
                         next_note_has_tie_stop = true;
+                    }
+                }
+
+                // Apply measure octave modifier to notes
+                if let Element::Note(note) = &mut element {
+                    if let Some(&offset) = self.measure_octave_modifiers.get(&self.current_measure_index) {
+                        note.octave = Self::apply_octave_offset(note.octave, offset);
                     }
                 }
 
@@ -542,6 +556,22 @@ impl Parser {
             });
         }
 
+        // Parse optional octave modifiers after the closing bracket (^ or _)
+        let mut group_octave_offset = 0i8;
+        while let Some(t) = self.current() {
+            match &t.token {
+                Token::Underscore => {
+                    group_octave_offset -= 1;
+                    self.advance();
+                }
+                Token::Caret => {
+                    group_octave_offset += 1;
+                    self.advance();
+                }
+                _ => break,
+            }
+        }
+
         // If this is a tuplet (has a number), apply tuplet info to all elements
         if let Some(actual_notes) = tuplet_number {
             let tuplet_context = TupletContext {
@@ -563,6 +593,12 @@ impl Parser {
                             note.duration = tuplet_context.default_duration;
                         }
                         note.tuplet = Some(tuplet_info);
+
+                        // Apply group octave offset
+                        if group_octave_offset != 0 {
+                            note.octave = Self::apply_octave_offset(note.octave, group_octave_offset);
+                        }
+
                         Element::Note(note)
                     }
                     Element::Rest { duration, dotted, .. } => {
@@ -597,6 +633,12 @@ impl Parser {
                             note.duration = group_duration;
                             note.dotted = group_dotted;
                         }
+
+                        // Apply group octave offset
+                        if group_octave_offset != 0 {
+                            note.octave = Self::apply_octave_offset(note.octave, group_octave_offset);
+                        }
+
                         Element::Note(note)
                     }
                     Element::Rest { duration, dotted, tuplet, .. } => {
@@ -796,6 +838,28 @@ impl Parser {
         };
 
         (accidental, octave)
+    }
+
+    /// Apply an octave offset to an existing octave value
+    fn apply_octave_offset(base_octave: Octave, offset: i8) -> Octave {
+        // Convert current octave to offset value
+        let base_value = match base_octave {
+            Octave::DoubleLow => -2,
+            Octave::Low => -1,
+            Octave::Middle => 0,
+            Octave::High => 1,
+            Octave::DoubleHigh => 2,
+        };
+
+        // Apply offset and convert back to Octave
+        let new_value = base_value + offset;
+        match new_value {
+            i if i <= -2 => Octave::DoubleLow,
+            -1 => Octave::Low,
+            0 => Octave::Middle,
+            1 => Octave::High,
+            _ => Octave::DoubleHigh,
+        }
     }
 }
 
@@ -1011,6 +1075,65 @@ fn extract_chords(source: &str) -> ChordAnnotations {
     annotations
 }
 
+/// Extract measure octave modifiers from @:^ or @:_ patterns in source
+/// Returns mapping: measure index → octave offset
+fn extract_measure_octave_modifiers(source: &str) -> HashMap<usize, i8> {
+    let mut modifiers = HashMap::new();
+    let mut measure_index = 0;
+    let mut in_metadata = false;
+
+    for line in source.lines() {
+        let trimmed = line.trim();
+
+        // Track metadata blocks
+        if trimmed == "---" {
+            in_metadata = !in_metadata;
+            continue;
+        }
+        if in_metadata {
+            continue;
+        }
+
+        // Check if line has music content (not empty or just annotations)
+        let has_music_content = line.chars().any(|c| matches!(c, 'A'..='G' | '$' | '['));
+
+        if has_music_content {
+            // Look for @:^ or @:_ pattern in this line
+            for (i, _) in line.match_indices("@:") {
+                let rest = &line[i + 2..]; // Skip "@:"
+
+                // Extract the modifier (^, _, ^^, __)
+                let modifier = if rest.starts_with("^^") {
+                    "^^"
+                } else if rest.starts_with("__") {
+                    "__"
+                } else if rest.starts_with('^') {
+                    "^"
+                } else if rest.starts_with('_') {
+                    "_"
+                } else {
+                    continue;
+                };
+
+                let offset = match modifier {
+                    "^" => 1,
+                    "_" => -1,
+                    "^^" => 2,
+                    "__" => -2,
+                    _ => continue,
+                };
+
+                modifiers.insert(measure_index, offset);
+                break; // Only one measure modifier per measure
+            }
+
+            measure_index += 1;
+        }
+    }
+
+    modifiers
+}
+
 /// Main parsing function
 pub fn parse(source: &str) -> Result<Score, GenError> {
     // Extract mod points from comments first (before any other processing)
@@ -1019,6 +1142,9 @@ pub fn parse(source: &str) -> Result<Score, GenError> {
 
     // Extract chord annotations from source
     let chord_annotations = extract_chords(source);
+
+    // Extract measure octave modifiers from source
+    let measure_octave_modifiers = extract_measure_octave_modifiers(source);
 
     // Extract metadata block (can be anywhere in the file)
     let (metadata_content, music_source) = extract_metadata(source);
@@ -1034,7 +1160,7 @@ pub fn parse(source: &str) -> Result<Score, GenError> {
     let mut lexer = Lexer::new(&music_source);
     let tokens = lexer.tokenize()?;
     let mut parser = Parser::new(tokens);
-    parser.parse_music(metadata, mod_points, line_to_measure, chord_annotations)
+    parser.parse_music(metadata, mod_points, line_to_measure, chord_annotations, measure_octave_modifiers)
 }
 
 #[cfg(test)]
@@ -2006,6 +2132,343 @@ time-signature: 6/8
         // Second measure
         if let Element::Note(n) = &score.measures[1].elements[0] {
             assert_eq!(n.chord, Some("G".to_string()));
+        }
+    }
+
+    #[test]
+    fn test_rhythm_grouping_with_octave_modifier() {
+        // [A B C D]^ - all notes should be octave up
+        let score = parse("[A B C D]^").unwrap();
+        let elements = &score.measures[0].elements;
+
+        assert_eq!(elements.len(), 4);
+
+        // All notes should be in high octave
+        for (i, element) in elements.iter().enumerate() {
+            if let Element::Note(n) = element {
+                assert_eq!(n.octave, Octave::High, "Note {} should be in high octave", i);
+            } else {
+                panic!("Expected note at position {}", i);
+            }
+        }
+    }
+
+    #[test]
+    fn test_rhythm_grouping_with_octave_modifier_down() {
+        // [E F G A]_ - all notes should be octave down
+        let score = parse("[E F G A]_").unwrap();
+        let elements = &score.measures[0].elements;
+
+        assert_eq!(elements.len(), 4);
+
+        // All notes should be in low octave
+        for element in elements.iter() {
+            if let Element::Note(n) = element {
+                assert_eq!(n.octave, Octave::Low);
+            } else {
+                panic!("Expected note");
+            }
+        }
+    }
+
+    #[test]
+    fn test_rhythm_grouping_with_double_octave_modifier() {
+        // [C D E F]^^ - all notes should be double octave up
+        let score = parse("[C D E F]^^").unwrap();
+        let elements = &score.measures[0].elements;
+
+        assert_eq!(elements.len(), 4);
+
+        for element in elements.iter() {
+            if let Element::Note(n) = element {
+                assert_eq!(n.octave, Octave::DoubleHigh);
+            }
+        }
+    }
+
+    #[test]
+    fn test_rhythm_grouping_with_rhythm_and_octave() {
+        // /[A B C D]^ - eighth notes, all octave up
+        let score = parse("/[A B C D]^").unwrap();
+        let elements = &score.measures[0].elements;
+
+        assert_eq!(elements.len(), 4);
+
+        for element in elements.iter() {
+            if let Element::Note(n) = element {
+                assert_eq!(n.duration, Duration::Eighth, "Note should be eighth note");
+                assert_eq!(n.octave, Octave::High, "Note should be in high octave");
+            } else {
+                panic!("Expected note");
+            }
+        }
+    }
+
+    #[test]
+    fn test_tuplet_with_octave_modifier() {
+        // 3[C D E]^ - triplet with all notes octave up
+        let score = parse("3[C D E]^").unwrap();
+        let elements = &score.measures[0].elements;
+
+        assert_eq!(elements.len(), 3);
+
+        for (i, element) in elements.iter().enumerate() {
+            if let Element::Note(n) = element {
+                assert!(n.tuplet.is_some(), "Note {} should have tuplet info", i);
+                assert_eq!(n.octave, Octave::High, "Note {} should be in high octave", i);
+            } else {
+                panic!("Expected note at position {}", i);
+            }
+        }
+    }
+
+    #[test]
+    fn test_tuplet_with_rhythm_and_octave_modifier() {
+        // /3[C D E]^ - eighth note triplet, all octave up
+        let score = parse("/3[C D E]^").unwrap();
+        let elements = &score.measures[0].elements;
+
+        assert_eq!(elements.len(), 3);
+
+        for element in elements.iter() {
+            if let Element::Note(n) = element {
+                assert!(n.tuplet.is_some());
+                assert_eq!(n.duration, Duration::Eighth);
+                assert_eq!(n.octave, Octave::High);
+            }
+        }
+    }
+
+    #[test]
+    fn test_group_octave_modifier_with_individual_modifiers() {
+        // [A^ B C_]^ - group modifier should apply on top of individual modifiers
+        // A^ becomes A^^ (double high), B becomes B^ (high), C_ becomes C (middle)
+        let score = parse("[A^ B C_]^").unwrap();
+        let elements = &score.measures[0].elements;
+
+        assert_eq!(elements.len(), 3);
+
+        if let Element::Note(n) = &elements[0] {
+            assert_eq!(n.name, NoteName::A);
+            assert_eq!(n.octave, Octave::DoubleHigh, "A^ with group ^ should be double high");
+        } else {
+            panic!("Expected note");
+        }
+
+        if let Element::Note(n) = &elements[1] {
+            assert_eq!(n.name, NoteName::B);
+            assert_eq!(n.octave, Octave::High, "B with group ^ should be high");
+        } else {
+            panic!("Expected note");
+        }
+
+        if let Element::Note(n) = &elements[2] {
+            assert_eq!(n.name, NoteName::C);
+            assert_eq!(n.octave, Octave::Middle, "C_ with group ^ should be middle");
+        } else {
+            panic!("Expected note");
+        }
+    }
+
+    #[test]
+    fn test_group_octave_modifier_equivalence() {
+        // [A B C D]^ should be equivalent to A^ B^ C^ D^
+        let score1 = parse("[A B C D]^").unwrap();
+        let score2 = parse("A^ B^ C^ D^").unwrap();
+
+        assert_eq!(score1.measures.len(), 1);
+        assert_eq!(score2.measures.len(), 1);
+        assert_eq!(score1.measures[0].elements.len(), 4);
+        assert_eq!(score2.measures[0].elements.len(), 4);
+
+        for (i, (elem1, elem2)) in score1.measures[0].elements.iter()
+            .zip(score2.measures[0].elements.iter())
+            .enumerate() {
+            if let (Element::Note(n1), Element::Note(n2)) = (elem1, elem2) {
+                assert_eq!(n1.name, n2.name, "Note {} name should match", i);
+                assert_eq!(n1.octave, n2.octave, "Note {} octave should match", i);
+                assert_eq!(n1.duration, n2.duration, "Note {} duration should match", i);
+            } else {
+                panic!("Expected notes at position {}", i);
+            }
+        }
+    }
+
+    #[test]
+    fn test_rhythm_group_with_octave_equivalence() {
+        // /[A B C D]^ should be equivalent to /A^ /B^ /C^ /D^
+        let score1 = parse("/[A B C D]^").unwrap();
+        let score2 = parse("/A^ /B^ /C^ /D^").unwrap();
+
+        assert_eq!(score1.measures.len(), 1);
+        assert_eq!(score2.measures.len(), 1);
+        assert_eq!(score1.measures[0].elements.len(), 4);
+        assert_eq!(score2.measures[0].elements.len(), 4);
+
+        for (i, (elem1, elem2)) in score1.measures[0].elements.iter()
+            .zip(score2.measures[0].elements.iter())
+            .enumerate() {
+            if let (Element::Note(n1), Element::Note(n2)) = (elem1, elem2) {
+                assert_eq!(n1.name, n2.name, "Note {} name should match", i);
+                assert_eq!(n1.octave, n2.octave, "Note {} octave should match", i);
+                assert_eq!(n1.duration, n2.duration, "Note {} duration should match", i);
+            } else {
+                panic!("Expected notes at position {}", i);
+            }
+        }
+    }
+
+    #[test]
+    fn test_measure_octave_modifier_up() {
+        // @:^ at end of measure raises all notes by one octave
+        let score = parse("A B C D @:^").unwrap();
+        let elements = &score.measures[0].elements;
+
+        assert_eq!(elements.len(), 4);
+
+        for (i, element) in elements.iter().enumerate() {
+            if let Element::Note(n) = element {
+                assert_eq!(n.octave, Octave::High, "Note {} should be in high octave", i);
+            } else {
+                panic!("Expected note at position {}", i);
+            }
+        }
+    }
+
+    #[test]
+    fn test_measure_octave_modifier_down() {
+        // @:_ at end of measure lowers all notes by one octave
+        let score = parse("E F G A @:_").unwrap();
+        let elements = &score.measures[0].elements;
+
+        assert_eq!(elements.len(), 4);
+
+        for element in elements.iter() {
+            if let Element::Note(n) = element {
+                assert_eq!(n.octave, Octave::Low);
+            } else {
+                panic!("Expected note");
+            }
+        }
+    }
+
+    #[test]
+    fn test_measure_octave_modifier_double() {
+        // @:^^ raises all notes by two octaves
+        let score = parse("C D E F @:^^").unwrap();
+        let elements = &score.measures[0].elements;
+
+        assert_eq!(elements.len(), 4);
+
+        for element in elements.iter() {
+            if let Element::Note(n) = element {
+                assert_eq!(n.octave, Octave::DoubleHigh);
+            }
+        }
+    }
+
+    #[test]
+    fn test_measure_octave_modifier_with_bracket_groups() {
+        // Measure octave modifier should apply to bracket groups too
+        let score = parse("[A B C D] @:^").unwrap();
+        let elements = &score.measures[0].elements;
+
+        assert_eq!(elements.len(), 4);
+
+        for element in elements.iter() {
+            if let Element::Note(n) = element {
+                assert_eq!(n.octave, Octave::High);
+            }
+        }
+    }
+
+    #[test]
+    fn test_measure_octave_modifier_with_individual_modifiers() {
+        // Measure modifier applies on top of individual modifiers
+        // A^ with measure @:^ becomes A^^ (double high)
+        let score = parse("A^ B C_ D @:^").unwrap();
+        let elements = &score.measures[0].elements;
+
+        assert_eq!(elements.len(), 4);
+
+        if let Element::Note(n) = &elements[0] {
+            assert_eq!(n.name, NoteName::A);
+            assert_eq!(n.octave, Octave::DoubleHigh, "A^ with @:^ should be double high");
+        }
+
+        if let Element::Note(n) = &elements[1] {
+            assert_eq!(n.name, NoteName::B);
+            assert_eq!(n.octave, Octave::High, "B with @:^ should be high");
+        }
+
+        if let Element::Note(n) = &elements[2] {
+            assert_eq!(n.name, NoteName::C);
+            assert_eq!(n.octave, Octave::Middle, "C_ with @:^ should be middle");
+        }
+
+        if let Element::Note(n) = &elements[3] {
+            assert_eq!(n.name, NoteName::D);
+            assert_eq!(n.octave, Octave::High, "D with @:^ should be high");
+        }
+    }
+
+    #[test]
+    fn test_measure_octave_modifier_with_group_modifier() {
+        // Measure modifier and group modifier should stack
+        // [A B]^ with @:^ should make all notes ^^
+        let score = parse("[A B C D]^ @:^").unwrap();
+        let elements = &score.measures[0].elements;
+
+        assert_eq!(elements.len(), 4);
+
+        for element in elements.iter() {
+            if let Element::Note(n) = element {
+                assert_eq!(n.octave, Octave::DoubleHigh, "Group ^ + measure ^ should be ^^");
+            }
+        }
+    }
+
+    #[test]
+    fn test_measure_octave_modifier_multiple_measures() {
+        // Only the measure with @:^ should be affected
+        let source = "A B C D\nE F G A @:^";
+        let score = parse(source).unwrap();
+
+        assert_eq!(score.measures.len(), 2);
+
+        // First measure - normal octave
+        for element in &score.measures[0].elements {
+            if let Element::Note(n) = element {
+                assert_eq!(n.octave, Octave::Middle);
+            }
+        }
+
+        // Second measure - all high octave
+        for element in &score.measures[1].elements {
+            if let Element::Note(n) = element {
+                assert_eq!(n.octave, Octave::High);
+            }
+        }
+    }
+
+    #[test]
+    fn test_measure_octave_modifier_equivalence() {
+        // A B C D @:^ should be equivalent to A^ B^ C^ D^
+        let score1 = parse("A B C D @:^").unwrap();
+        let score2 = parse("A^ B^ C^ D^").unwrap();
+
+        assert_eq!(score1.measures.len(), 1);
+        assert_eq!(score2.measures.len(), 1);
+
+        for (i, (elem1, elem2)) in score1.measures[0].elements.iter()
+            .zip(score2.measures[0].elements.iter())
+            .enumerate() {
+            if let (Element::Note(n1), Element::Note(n2)) = (elem1, elem2) {
+                assert_eq!(n1.name, n2.name, "Note {} name should match", i);
+                assert_eq!(n1.octave, n2.octave, "Note {} octave should match", i);
+            } else {
+                panic!("Expected notes at position {}", i);
+            }
         }
     }
 }

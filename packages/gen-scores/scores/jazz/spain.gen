@@ -5,26 +5,26 @@ D^ /[F^ D^ E^ D^ B D^]
 $ *|oF-
 |oF $ F
 *G /A-A B
-*C^ /D^-D^ E^
-*D^ /C^-|oC^-
+*C /D-D E             @:^
+*D /C-|oC-            @:^
 C^ $ $ F
 *G /A-A B
-*C^ /D^-D^ E^
-D^ /E^ /F^-|oF^
-|o$ /$ /E^ /$ /D^
-*C^ /D^-D^ E^
-|oD^ |oC^
+*C /D-D E             @:^
+D /E /F-|oF           @:^
+|o$ /$ /E /$ /D       @:^
+*C /D-D E             @:^
+|oD |oC               @:^
 *C^ /B-|oB-
 |oB |o$
-B /$ /E^ $ /$ /G^ @Eb:_
-F^ /D^ /B E^ /$ /A @Eb:_
-$ /$ /D^ C^ $ @Eb:_
-/A /B /$ /G-/G /G D^ @Eb:_
-E^ /$ /E^ G^ /F^ /D^ @Eb:_
-B /D^ /B E^ /C^ /B @Eb:_
+B /$ /E^ $ /$ /G^     @Eb:_
+F^ /D^ /B E^ /$ /A    @Eb:_
+$ /$ /D^ C^ $         @Eb:_
+/A /B /$ /G-/G /G D^  @Eb:_
+E^ /$ /E^ G^ /F^ /D^  @Eb:_
+B /D^ /B E^ /C^ /B    @Eb:_
 /$ /F E-/E F /B
 *C^ /A#-/A# /G# F
-/$ /[C F C G# C C^ C%^-]
+/[$ C F C G# C C^ C%^-]
 /C%^ F /F^ $ F^
 |oE^ *D^ /B-
 oB

@@ -114,6 +114,28 @@ $           # quarter rest
 /$          # eighth rest
 ```
 
+### Bracket Groups
+Groups apply modifiers to multiple notes at once:
+
+**Rhythm grouping:**
+- `//[C D E F]` = `//C //D //E //F` (all sixteenth notes)
+
+**Octave modifiers on groups:**
+- `[A B C D]^` = `A^ B^ C^ D^` (all notes up one octave)
+- `/[A B C D]^` = `/A^ /B^ /C^ /D^` (eighth notes, all up one octave)
+- `3[C D E]^` = quarter note triplet, all up one octave
+- `/3[C D E]^` = eighth note triplet, all up one octave
+
+Group octave modifiers are applied **after** individual note modifiers:
+- `[A^ B C_]^` results in A^^, B^, C (middle)
+
+### Measure Octave Modifiers
+Apply octave shift to ALL notes in a measure:
+- `A B C D @:^` = `A^ B^ C^ D^` (all notes up one octave)
+- `@:_`, `@:^^`, `@:__` also supported
+- Stacks with individual and group modifiers: `[A B]^ @:^` results in all notes ^^
+- Similar to instrument group modifiers (@Eb:^) but affects all notes
+
 ## Building
 
 ### Full project

@@ -149,7 +149,48 @@ there are two different modifiers to pitch.
 *note - these second level modifiers are only to be applied at the note level*
 
 ## Group modifiers
-Sometimes, you want to modify more than one note at a time. For this you can use group modifiers. All you need to do is put a group of notes in brackets [], and specify what you'd like to add to the grouping in the beginning.
+Sometimes, you want to modify more than one note at a time. For this you can use group modifiers. Groups are defined by putting notes in brackets `[...]`.
+
+### Rhythm grouping
+You can apply the same rhythm to multiple notes by putting the rhythm modifier before the bracket:
+
+`//[C D E F]` is the same as `//C //D //E //F`
+
+### Octave modifiers on groups
+You can apply octave modifiers to an entire group by putting the octave modifier **after** the closing bracket. This will shift all notes in the group by the specified amount.
+
+**Syntax:** `[notes...]^` or `[notes...]_`
+
+**Examples:**
+- `[A B C D]^` - all four notes shifted up one octave (equivalent to `A^ B^ C^ D^`)
+- `/[A B C D]^` - eighth notes, all shifted up one octave (equivalent to `/A^ /B^ /C^ /D^`)
+- `[E F G A]_` - all notes shifted down one octave
+- `[C D E F]^^` - all notes shifted up two octaves
+
+**Combining with individual octave modifiers:**
+Group octave modifiers apply on top of individual note octave modifiers:
+- `[A^ B C_]^` - A becomes double high (^^ total), B becomes high (^ from group), C_ becomes middle (_ + ^ = middle)
+
+**Works with tuplets too:**
+- `3[C D E]^` - quarter note triplet, all notes shifted up one octave
+- `/3[C D E]^` - eighth note triplet, all notes shifted up one octave
+
+### Measure octave modifiers
+You can apply an octave shift to ALL notes in a measure by adding `@:^` or `@:_` anywhere in the measure (typically at the end).
+
+**Syntax:** `@:^`, `@:_`, `@:^^`, or `@:__`
+
+**Examples:**
+- `A B C D @:^` - all four notes shifted up one octave (equivalent to `A^ B^ C^ D^`)
+- `C D E F @:__` - all notes shifted down two octaves
+- `//[D C] /*D //C //D /*E @:^` - all notes (including those in brackets) shifted up one octave
+
+**Combining with other octave modifiers:**
+Measure octave modifiers apply on top of individual note modifiers and group modifiers:
+- `A^ B C @:^` - A becomes ^^ (double high), B becomes ^, C becomes ^
+- `[A B]^ @:^` - all notes become ^^ (group ^ + measure ^)
+
+**Note:** This is similar to instrument group modifiers (@Eb:^, @Bb:^) but applies to ALL notes in the measure regardless of instrument.
 
 ## Ties
 

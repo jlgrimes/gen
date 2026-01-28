@@ -331,7 +331,7 @@ impl<'a> Lexer<'a> {
                     Token::Whitespace
                 }
                 '@' => {
-                    // Annotation/mod point - validate format: @Eb:^, @Bb:_, or @ch:Cmaj7
+                    // Annotation/mod point - validate format: @Eb:^, @Bb:_, @ch:Cmaj7, or @:^
                     self.advance();
 
                     // Collect the annotation content until whitespace, @ or newline
@@ -357,6 +357,21 @@ impl<'a> Lexer<'a> {
                         continue;
                     }
 
+                    // Check if this is a measure octave modifier (@:^, @:_, @:^^, @:__)
+                    if annotation.starts_with(':') {
+                        let modifier = &annotation[1..];
+                        let valid_modifier = matches!(modifier, "^" | "_" | "^^" | "__");
+                        if !valid_modifier {
+                            return Err(GenError::ParseError {
+                                line,
+                                column,
+                                message: format!("Invalid measure octave modifier '@{}'. Expected: @:^, @:_, @:^^, or @:__", annotation),
+                            });
+                        }
+                        // Valid measure octave modifier - skip it (will be extracted by parser)
+                        continue;
+                    }
+
                     // Otherwise, validate mod point format: should be like "Eb:^" or "Bb:_"
                     // Format: Group (Eb or Bb) + colon + modifier (^ or _)
                     if !annotation.is_empty() {
@@ -364,7 +379,7 @@ impl<'a> Lexer<'a> {
                             let group = &annotation[..colon_pos];
                             let modifier = &annotation[colon_pos + 1..];
                             let valid_group = group.eq_ignore_ascii_case("Eb") || group.eq_ignore_ascii_case("Bb");
-                            let valid_modifier = modifier == "^" || modifier == "_";
+                            let valid_modifier = modifier == "^" || modifier == "_" || modifier == "^^" || modifier == "__";
                             valid_group && valid_modifier
                         } else {
                             false
@@ -374,14 +389,14 @@ impl<'a> Lexer<'a> {
                             return Err(GenError::ParseError {
                                 line,
                                 column,
-                                message: format!("Invalid annotation '@{}'. Expected: @ch:ChordName, @Eb:^, or @Bb:_", annotation.trim()),
+                                message: format!("Invalid annotation '@{}'. Expected: @ch:ChordName, @Eb:^, @Bb:_, or @:^", annotation.trim()),
                             });
                         }
                     } else {
                         return Err(GenError::ParseError {
                             line,
                             column,
-                            message: "Empty annotation. Expected: @ch:ChordName, @Eb:^, or @Bb:_".to_string(),
+                            message: "Empty annotation. Expected: @ch:ChordName, @Eb:^, @Bb:_, or @:^".to_string(),
                         });
                     }
 
