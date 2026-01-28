@@ -209,6 +209,34 @@ for example
 
 slurs the first three notes
 
+## Chord Symbols
+
+Chord symbols can be added to notes using the `@ch:` annotation. Place the annotation before the note you want the chord to appear on.
+
+**Syntax:** `@ch:ChordName`
+
+**Examples:**
+```
+@ch:C C E G C^          # C major chord on first note
+@ch:Dm7 D F A C^        # Dm7 chord on first note
+@ch:C C D @ch:G E F G   # C chord on C, G chord on E
+```
+
+**Multiple chords per measure:**
+You can have as many chord annotations as needed in a single measure:
+```
+@ch:Cmaj7 C E @ch:Dm7 D F @ch:G7 G B
+```
+
+**Chord symbol format:**
+Gen accepts any chord symbol text without validation. Common formats include:
+- Basic triads: `C`, `Dm`, `Eb`, `F#`
+- Seventh chords: `Cmaj7`, `Dm7`, `G7`, `Bm7b5`
+- Extended chords: `C9`, `Dm11`, `G13`
+- Altered chords: `Csus4`, `Cadd9`, `C7alt`
+
+The chord symbol will appear above the staff in the rendered sheet music.
+
 # Other notation
 
 ## Repeats

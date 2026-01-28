@@ -331,7 +331,7 @@ impl<'a> Lexer<'a> {
                     Token::Whitespace
                 }
                 '@' => {
-                    // Annotation/mod point - validate format: @Eb:^ or @Bb:_
+                    // Annotation/mod point - validate format: @Eb:^, @Bb:_, or @ch:Cmaj7
                     self.advance();
 
                     // Collect the annotation content until whitespace, @ or newline
@@ -344,7 +344,20 @@ impl<'a> Lexer<'a> {
                     }
                     let annotation = &self.input[start_pos..self.position];
 
-                    // Validate annotation format: should be like "Eb:^" or "Bb:_"
+                    // Check if this is a chord annotation (@ch:XXX)
+                    if annotation.starts_with("ch:") {
+                        if annotation.len() <= 3 {
+                            return Err(GenError::ParseError {
+                                line,
+                                column,
+                                message: "Chord annotation '@ch:' requires a chord symbol".to_string(),
+                            });
+                        }
+                        // Valid chord annotation - skip it (will be extracted by parser)
+                        continue;
+                    }
+
+                    // Otherwise, validate mod point format: should be like "Eb:^" or "Bb:_"
                     // Format: Group (Eb or Bb) + colon + modifier (^ or _)
                     if !annotation.is_empty() {
                         let valid = if let Some(colon_pos) = annotation.find(':') {
@@ -361,14 +374,14 @@ impl<'a> Lexer<'a> {
                             return Err(GenError::ParseError {
                                 line,
                                 column,
-                                message: format!("Invalid annotation '@{}'. Expected format: @Eb:^ or @Bb:_ (group:modifier)", annotation.trim()),
+                                message: format!("Invalid annotation '@{}'. Expected: @ch:ChordName, @Eb:^, or @Bb:_", annotation.trim()),
                             });
                         }
                     } else {
                         return Err(GenError::ParseError {
                             line,
                             column,
-                            message: "Empty annotation. Expected format: @Eb:^ or @Bb:_".to_string(),
+                            message: "Empty annotation. Expected: @ch:ChordName, @Eb:^, or @Bb:_".to_string(),
                         });
                     }
 

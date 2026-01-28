@@ -264,6 +264,7 @@ pub struct Note {
     pub tie_stop: bool,    // This note ends a tie (from the previous note)
     pub slur_start: bool,  // This note starts a slur
     pub slur_stop: bool,   // This note ends a slur
+    pub chord: Option<String>,  // Optional chord symbol to display above this note
 }
 
 /// An element in a measure: either a note or a rest

@@ -8,10 +8,33 @@ struct TupletContext {
     default_duration: Duration,
 }
 
+/// Chord annotations: measure index → note index → chord symbol
+#[derive(Debug, Clone, Default)]
+pub(crate) struct ChordAnnotations {
+    chords: HashMap<usize, HashMap<usize, String>>,
+}
+
+impl ChordAnnotations {
+    fn set_chord(&mut self, measure_idx: usize, note_idx: usize, chord: String) {
+        self.chords
+            .entry(measure_idx)
+            .or_insert_with(HashMap::new)
+            .insert(note_idx, chord);
+    }
+
+    fn get_chord(&self, measure_idx: usize, note_idx: usize) -> Option<&String> {
+        self.chords
+            .get(&measure_idx)
+            .and_then(|notes| notes.get(&note_idx))
+    }
+}
+
 /// Parser for Gen source code
 pub struct Parser {
     tokens: Vec<LocatedToken>,
     position: usize,
+    chord_annotations: ChordAnnotations,
+    current_measure_index: usize,
 }
 
 impl Parser {
@@ -19,6 +42,8 @@ impl Parser {
         Self {
             tokens,
             position: 0,
+            chord_annotations: ChordAnnotations::default(),
+            current_measure_index: 0,
         }
     }
 
@@ -43,8 +68,10 @@ impl Parser {
     }
 
     /// Parse the music content into a Score (metadata already extracted)
-    /// mod_points and line_to_measure are passed in from the outer parse function
-    pub fn parse_music(&mut self, metadata: Metadata, mod_points: ModPoints, line_to_measure: HashMap<usize, usize>) -> Result<Score, GenError> {
+    /// mod_points, line_to_measure, and chord_annotations are passed in from the outer parse function
+    pub(crate) fn parse_music(&mut self, metadata: Metadata, mod_points: ModPoints, line_to_measure: HashMap<usize, usize>, chord_annotations: ChordAnnotations) -> Result<Score, GenError> {
+        self.chord_annotations = chord_annotations;
+        self.current_measure_index = 0;
         self.skip_whitespace_and_newlines();
 
         let mut measures = Vec::new();
@@ -61,6 +88,7 @@ impl Parser {
             current_ending = new_ending;
             if let Some(measure) = measure_opt {
                 measures.push(measure);
+                self.current_measure_index += 1;
             }
             self.skip_whitespace_and_newlines();
         }
@@ -159,6 +187,7 @@ impl Parser {
     /// Returns: (Option<Measure>, in_slur, slur_start_marked, pending_tie_stop, current_ending)
     fn parse_measure(&mut self, mut in_slur: bool, mut slur_start_marked: bool, mut next_note_has_tie_stop: bool, current_ending: Option<Ending>) -> Result<(Option<Measure>, bool, bool, bool, Option<Ending>), GenError> {
         let mut elements = Vec::new();
+        let mut note_index_in_measure = 0;  // Track note index for chord application
         let mut repeat_start = false;
         let mut repeat_end = false;
         let mut ending: Option<Ending> = current_ending;
@@ -282,6 +311,18 @@ impl Parser {
                     // This is either a tuplet or rhythm grouping
                     let (mut grouped_elements, has_pending_tie) = self.parse_bracket_group(tuplet_number, group_duration, group_dotted)?;
 
+                    // Apply chord annotations to notes in the bracket group
+                    for element in &mut grouped_elements {
+                        if let Element::Note(note) = element {
+                            if let Some(chord) = self.chord_annotations.get_chord(self.current_measure_index, note_index_in_measure) {
+                                note.chord = Some(chord.clone());
+                            }
+                            note_index_in_measure += 1;
+                        } else if matches!(element, Element::Rest { .. }) {
+                            note_index_in_measure += 1;
+                        }
+                    }
+
                     // If there's a pending tie_stop, apply it to the first note
                     if next_note_has_tie_stop {
                         if let Some(Element::Note(note)) = grouped_elements.first_mut() {
@@ -334,6 +375,13 @@ impl Parser {
             {
                 let mut element = self.parse_element(None)?;
 
+                // Apply chord annotation if this is a note
+                if let Element::Note(note) = &mut element {
+                    if let Some(chord) = self.chord_annotations.get_chord(self.current_measure_index, note_index_in_measure) {
+                        note.chord = Some(chord.clone());
+                    }
+                }
+
                 // Apply tie_stop if pending from previous hyphen
                 if next_note_has_tie_stop {
                     if let Element::Note(note) = &mut element {
@@ -359,6 +407,11 @@ impl Parser {
                         }
                         next_note_has_tie_stop = true;
                     }
+                }
+
+                // Increment note index for both notes and rests
+                if matches!(element, Element::Note(_) | Element::Rest { .. }) {
+                    note_index_in_measure += 1;
                 }
 
                 elements.push(element);
@@ -602,6 +655,7 @@ impl Parser {
                     tie_stop: false,
                     slur_start: false,
                     slur_stop: false,
+                    chord: None,
                 }))
             }
             _ => Err(GenError::ParseError {
@@ -849,11 +903,105 @@ fn extract_mod_points(source: &str) -> (ModPoints, HashMap<usize, usize>) {
     (mod_points, line_to_measure)
 }
 
+/// Extract chord annotations from @ch:XXX patterns in source
+/// Returns mapping: measure index → note index → chord symbol
+fn extract_chords(source: &str) -> ChordAnnotations {
+    let mut annotations = ChordAnnotations::default();
+    let mut measure_index = 0;
+    let mut in_metadata = false;
+
+    for line in source.lines() {
+        let trimmed = line.trim();
+
+        // Track metadata blocks
+        if trimmed == "---" {
+            in_metadata = !in_metadata;
+            continue;
+        }
+        if in_metadata || trimmed.is_empty() {
+            continue;
+        }
+
+        // Parse line to find chords and map to notes
+        let mut note_index = 0;
+        let mut pending_chord: Option<String> = None;
+        let mut i = 0;
+        let line_bytes = line.as_bytes();
+
+        while i < line.len() {
+            // Check for @ch: annotation
+            if i + 4 <= line.len() && &line[i..i + 4] == "@ch:" {
+                // Extract chord symbol (until whitespace or @)
+                let start = i + 4;
+                let mut end = start;
+                while end < line.len() {
+                    let ch = line_bytes[end] as char;
+                    if ch == ' ' || ch == '\t' || ch == '\n' || ch == '@' {
+                        break;
+                    }
+                    end += 1;
+                }
+                pending_chord = Some(line[start..end].to_string());
+                i = end;
+                continue;
+            }
+
+            let ch = line_bytes[i] as char;
+
+            // Check for note or rest
+            if matches!(ch, 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | '$') {
+                // Apply pending chord to this note
+                if let Some(chord) = pending_chord.take() {
+                    annotations.set_chord(measure_index, note_index, chord);
+                }
+                note_index += 1;
+                i += 1;
+            }
+            // Check for bracket group [...] - contains multiple notes
+            else if ch == '[' {
+                let mut depth = 1;
+                let bracket_start = i;
+                i += 1;
+                while i < line.len() && depth > 0 {
+                    match line_bytes[i] as char {
+                        '[' => depth += 1,
+                        ']' => depth -= 1,
+                        _ => {}
+                    }
+                    i += 1;
+                }
+                // Count notes in bracket
+                for &byte in &line_bytes[bracket_start..i] {
+                    let c = byte as char;
+                    if matches!(c, 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | '$') {
+                        if let Some(chord) = pending_chord.take() {
+                            annotations.set_chord(measure_index, note_index, chord);
+                        }
+                        note_index += 1;
+                    }
+                }
+            } else {
+                i += 1;
+            }
+        }
+
+        // Move to next measure if we had notes
+        if note_index > 0 {
+            measure_index += 1;
+        }
+    }
+
+    annotations
+}
+
 /// Main parsing function
 pub fn parse(source: &str) -> Result<Score, GenError> {
     // Extract mod points from comments first (before any other processing)
     // This needs the original source to get correct line numbers
     let (mod_points, line_to_measure) = extract_mod_points(source);
+
+    // Extract chord annotations from source
+    let chord_annotations = extract_chords(source);
 
     // Extract metadata block (can be anywhere in the file)
     let (metadata_content, music_source) = extract_metadata(source);
@@ -869,7 +1017,7 @@ pub fn parse(source: &str) -> Result<Score, GenError> {
     let mut lexer = Lexer::new(&music_source);
     let tokens = lexer.tokenize()?;
     let mut parser = Parser::new(tokens);
-    parser.parse_music(metadata, mod_points, line_to_measure)
+    parser.parse_music(metadata, mod_points, line_to_measure, chord_annotations)
 }
 
 #[cfg(test)]
@@ -1752,6 +1900,95 @@ time-signature: 6/8
             assert_eq!(n.name, NoteName::F);
             assert!(!n.slur_start);
             assert!(n.slur_stop);
+        }
+    }
+
+    #[test]
+    fn test_chord_single() {
+        let score = parse("@ch:Cmaj7 C D E F").unwrap();
+        if let Element::Note(n) = &score.measures[0].elements[0] {
+            assert_eq!(n.chord, Some("Cmaj7".to_string()));
+            assert_eq!(n.name, NoteName::C);
+        } else {
+            panic!("Expected Note element");
+        }
+        // Other notes should not have chords
+        if let Element::Note(n) = &score.measures[0].elements[1] {
+            assert_eq!(n.chord, None);
+        }
+    }
+
+    #[test]
+    fn test_chord_multiple() {
+        let score = parse("@ch:C C D @ch:G E F").unwrap();
+        if let Element::Note(n) = &score.measures[0].elements[0] {
+            assert_eq!(n.chord, Some("C".to_string()));
+            assert_eq!(n.name, NoteName::C);
+        } else {
+            panic!("Expected Note element");
+        }
+        if let Element::Note(n) = &score.measures[0].elements[1] {
+            assert_eq!(n.chord, None);
+            assert_eq!(n.name, NoteName::D);
+        }
+        if let Element::Note(n) = &score.measures[0].elements[2] {
+            assert_eq!(n.chord, Some("G".to_string()));
+            assert_eq!(n.name, NoteName::E);
+        } else {
+            panic!("Expected Note element");
+        }
+    }
+
+    #[test]
+    fn test_chord_complex_symbols() {
+        let score = parse("@ch:Dm7b5 C @ch:F#maj7#11 D").unwrap();
+        if let Element::Note(n) = &score.measures[0].elements[0] {
+            assert_eq!(n.chord, Some("Dm7b5".to_string()));
+        } else {
+            panic!("Expected Note element");
+        }
+        if let Element::Note(n) = &score.measures[0].elements[1] {
+            assert_eq!(n.chord, Some("F#maj7#11".to_string()));
+        } else {
+            panic!("Expected Note element");
+        }
+    }
+
+    #[test]
+    fn test_chord_with_bracket_group() {
+        let score = parse("@ch:Am /[C E A]").unwrap();
+        if let Element::Note(n) = &score.measures[0].elements[0] {
+            assert_eq!(n.chord, Some("Am".to_string()));
+            assert_eq!(n.duration, Duration::Eighth);
+        } else {
+            panic!("Expected Note element");
+        }
+        // Other notes in bracket should not have chord
+        if let Element::Note(n) = &score.measures[0].elements[1] {
+            assert_eq!(n.chord, None);
+        }
+    }
+
+    #[test]
+    fn test_chord_empty_fails() {
+        let result = parse("@ch: C");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_chord_multiple_measures() {
+        let source = "@ch:C C D E F\n@ch:G G A B C^";
+        let score = parse(source).unwrap();
+        assert_eq!(score.measures.len(), 2);
+
+        // First measure
+        if let Element::Note(n) = &score.measures[0].elements[0] {
+            assert_eq!(n.chord, Some("C".to_string()));
+        }
+
+        // Second measure
+        if let Element::Note(n) = &score.measures[1].elements[0] {
+            assert_eq!(n.chord, Some("G".to_string()));
         }
     }
 }

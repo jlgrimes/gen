@@ -531,6 +531,11 @@ fn write_element<W: std::io::Write>(writer: &mut Writer<W>, element: &Element, b
 }
 
 fn write_note<W: std::io::Write>(writer: &mut Writer<W>, note: &Note, beam_state: BeamState, octave_shift: i8, key_signature: &KeySignature) {
+    // Write harmony BEFORE note element if chord symbol exists
+    if let Some(ref chord_symbol) = note.chord {
+        write_harmony(writer, chord_symbol);
+    }
+
     writer
         .write_event(Event::Start(BytesStart::new("note")))
         .unwrap();
@@ -761,6 +766,48 @@ fn write_rest<W: std::io::Write>(
 
     writer
         .write_event(Event::End(BytesEnd::new("note")))
+        .unwrap();
+}
+
+/// Write a harmony (chord symbol) element
+fn write_harmony<W: std::io::Write>(writer: &mut Writer<W>, chord_symbol: &str) {
+    writer
+        .write_event(Event::Start(BytesStart::new("harmony")))
+        .unwrap();
+
+    // Parse root note (first character)
+    let root_step = chord_symbol.chars().next().unwrap_or('C');
+
+    writer
+        .write_event(Event::Start(BytesStart::new("root")))
+        .unwrap();
+    write_text_element(writer, "root-step", &root_step.to_string());
+
+    // Check for sharp/flat in second character
+    if chord_symbol.len() > 1 {
+        match chord_symbol.chars().nth(1) {
+            Some('#') => write_text_element(writer, "root-alter", "1"),
+            Some('b') => write_text_element(writer, "root-alter", "-1"),
+            _ => {}
+        }
+    }
+    writer
+        .write_event(Event::End(BytesEnd::new("root")))
+        .unwrap();
+
+    // Kind element with full text attribute
+    let mut kind = BytesStart::new("kind");
+    kind.push_attribute(("text", chord_symbol));
+    writer.write_event(Event::Start(kind)).unwrap();
+    writer
+        .write_event(Event::Text(BytesText::new("none")))
+        .unwrap();
+    writer
+        .write_event(Event::End(BytesEnd::new("kind")))
+        .unwrap();
+
+    writer
+        .write_event(Event::End(BytesEnd::new("harmony")))
         .unwrap();
 }
 
@@ -1253,5 +1300,47 @@ F F%"#;
         let octave_4_count = xml.matches("<octave>4</octave>").count();
         assert_eq!(octave_5_count, 4, "First 4 notes (line 1) should be at octave 5 with Eb:^ mod point");
         assert_eq!(octave_4_count, 4, "Last 4 notes (line 2) should be at octave 4 (no mod point)");
+    }
+
+    #[test]
+    fn test_musicxml_harmony() {
+        let score = parse("@ch:Cmaj7 C").unwrap();
+        let xml = to_musicxml(&score);
+        assert!(xml.contains("<harmony>"), "MusicXML should contain harmony element");
+        assert!(xml.contains("Cmaj7"), "Chord symbol should appear in MusicXML");
+        assert!(xml.contains("<root-step>C</root-step>"), "Root note should be C");
+    }
+
+    #[test]
+    fn test_musicxml_multiple_harmonies() {
+        let score = parse("@ch:C C @ch:G E").unwrap();
+        let xml = to_musicxml(&score);
+        let harmony_count = xml.matches("<harmony>").count();
+        assert_eq!(harmony_count, 2, "Should have 2 harmony elements");
+        assert!(xml.contains("text=\"C\""), "First chord should be C");
+        assert!(xml.contains("text=\"G\""), "Second chord should be G");
+    }
+
+    #[test]
+    fn test_musicxml_harmony_with_sharp() {
+        let score = parse("@ch:F# F").unwrap();
+        let xml = to_musicxml(&score);
+        assert!(xml.contains("<root-step>F</root-step>"), "Root should be F");
+        assert!(xml.contains("<root-alter>1</root-alter>"), "Should have sharp alteration");
+    }
+
+    #[test]
+    fn test_musicxml_harmony_with_flat() {
+        let score = parse("@ch:Bb7 B").unwrap();
+        let xml = to_musicxml(&score);
+        assert!(xml.contains("<root-step>B</root-step>"), "Root should be B");
+        assert!(xml.contains("<root-alter>-1</root-alter>"), "Should have flat alteration");
+    }
+
+    #[test]
+    fn test_musicxml_no_harmony() {
+        let score = parse("C D E F").unwrap();
+        let xml = to_musicxml(&score);
+        assert!(!xml.contains("<harmony>"), "Should not have harmony elements without chord annotations");
     }
 }
