@@ -402,13 +402,6 @@ export function GenApp({ compiler, files, playback, scores }: GenAppProps) {
           | 'F'
           | undefined;
 
-        console.log('Generating playback data with options:', {
-          clef,
-          octaveShift,
-          instrumentGroup: currentInstrumentGroup,
-          transposeKey,
-        });
-
         const result = await playback.generatePlaybackData(genSource, {
           clef,
           octaveShift,
@@ -416,18 +409,12 @@ export function GenApp({ compiler, files, playback, scores }: GenAppProps) {
           transposeKey,
         });
 
-        console.log('Playback data result:', result);
-
         if (result.status === 'success' && result.data) {
-          console.log('Playback data received:', result.data);
-          console.log('Number of notes:', result.data.notes.length);
-          console.log('First few notes:', result.data.notes.slice(0, 5));
           setPlaybackData(result.data);
           const maxBeat = Math.max(
             ...result.data.notes.map(n => n.startTime + n.duration),
             0
           );
-          console.log('Total beats calculated:', maxBeat);
           setTotalBeats(maxBeat);
         } else {
           console.error('Playback data generation failed:', result);
@@ -444,12 +431,7 @@ export function GenApp({ compiler, files, playback, scores }: GenAppProps) {
 
   // Playback handlers
   const handlePlay = useCallback(async () => {
-    console.log('handlePlay called');
-    console.log('playbackEngineRef.current:', playbackEngineRef.current);
-    console.log('playbackData:', playbackData);
-
     if (!playbackEngineRef.current || !playbackData) {
-      console.error('Cannot play: engine or data missing');
       return;
     }
 
@@ -458,18 +440,15 @@ export function GenApp({ compiler, files, playback, scores }: GenAppProps) {
       const currentPreset = INSTRUMENT_PRESETS[instrumentIndex];
       if (currentPreset) {
         const soundfont = INSTRUMENT_TO_SOUNDFONT[currentPreset.id] || 'acoustic_grand_piano';
-        console.log('Ensuring instrument is loaded:', soundfont);
         await playbackEngineRef.current.loadInstrument(soundfont);
       }
 
-      console.log('Starting playback...');
       await playbackEngineRef.current.play(
         playbackData,
         (beat: number) => setCurrentBeat(beat),
         () => setIsPlaying(false)
       );
       setIsPlaying(true);
-      console.log('Playback started successfully');
     } catch (err: unknown) {
       console.error('Playback error:', err);
     }
@@ -614,6 +593,10 @@ export function GenApp({ compiler, files, playback, scores }: GenAppProps) {
   const handleScoreSelect = useCallback((score: ScoreInfo) => {
     setGenSource(score.content);
     setSelectedScore(score.name);
+    // Reset playback state when changing songs
+    playbackEngineRef.current?.stop();
+    setIsPlaying(false);
+    setCurrentBeat(0);
   }, []);
 
   const exportToPdf = useCallback(async () => {
