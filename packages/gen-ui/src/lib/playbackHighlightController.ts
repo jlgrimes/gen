@@ -23,6 +23,10 @@ export class PlaybackHighlightController {
     this.noteMapper = new OSMDNoteMapper(osmd);
     this.strategy = strategy;
 
+    // DEBUG: Log all osmdMatchKey values from Rust
+    console.log('[PlaybackHighlightController] Rust osmdMatchKeys:',
+      playbackData.notes.map(n => n.osmdMatchKey));
+
     // Build OSMD index
     this.noteMapper.buildIndex();
   }

@@ -43,10 +43,15 @@ export interface FileAdapter {
 }
 
 export interface PlaybackNote {
-  midiNote: number;         // Concert pitch (for playback)
-  displayMidiNote: number;  // Display pitch (transposed, matches sheet music)
-  startTime: number;        // in beats
-  duration: number;         // in beats
+  midiNote: number;         // Concert pitch (for audio playback)
+  displayMidiNote: number;  // Display pitch (transposed, for matching with sheet music)
+  startTime: number;        // Actual playback start time in beats (with triplet calculations)
+  duration: number;         // Actual playback duration in beats (with triplet calculations)
+  noteIndex: number;        // Sequential index (0, 1, 2, ...) for matching with OSMD note order
+  measureNumber: number;    // Which measure this note is in (1-indexed)
+  beatInMeasure: number;    // Beat position within the measure (for OSMD timestamp matching)
+  osmdTimestamp: number;    // OSMD's display timestamp (different from startTime for triplets)
+  osmdMatchKey: string;     // Pre-computed key for matching with OSMD: "{osmd_midi}_{osmdTimestamp}"
 }
 
 export interface PlaybackChord {

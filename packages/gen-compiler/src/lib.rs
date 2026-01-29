@@ -58,13 +58,19 @@ pub fn compile_with_mod_points(
 }
 
 /// Playback data for a single note
+/// Contains ALL information needed for both audio playback and visual highlighting
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PlaybackNote {
-    pub midi_note: u8,          // Concert pitch MIDI note (for playback)
-    pub display_midi_note: u8,  // Display MIDI note (transposed, matches sheet music)
-    pub start_time: f64,        // Time in beats from start
-    pub duration: f64,          // Duration in beats
+    pub midi_note: u8,          // Concert pitch MIDI note (for audio playback)
+    pub display_midi_note: u8,  // Display MIDI note (transposed, for matching with sheet music)
+    pub start_time: f64,        // Actual playback start time in beats (with triplet calculations)
+    pub duration: f64,          // Actual playback duration in beats (with triplet calculations)
+    pub note_index: usize,      // Sequential index (0, 1, 2, ...) for matching with OSMD note order
+    pub measure_number: usize,  // Which measure this note is in (1-indexed)
+    pub beat_in_measure: f64,   // Beat position within the measure (for OSMD timestamp matching)
+    pub osmd_timestamp: f64,    // OSMD's display timestamp (accumulated note lengths, not triplet-adjusted)
+    pub osmd_match_key: String, // Pre-computed key for matching with OSMD GraphicalNotes: "{midi}_{timestamp}"
 }
 
 /// Playback data for a chord (multiple notes played simultaneously)
@@ -179,13 +185,18 @@ pub fn generate_playback_data(
     let total_offset = clef_offset + octave_shift;
     let _group = instrument_group.and_then(InstrumentGroup::from_str); // Reserved for future mod point support
 
-    let mut current_time = 0.0;
+    let mut current_time = 0.0;      // Playback time (triplet-adjusted)
+    let mut osmd_time = 0.0;         // OSMD display time (not triplet-adjusted)
     let mut notes = Vec::new();
     let mut chords = Vec::new();
     let mut current_key = score.metadata.key_signature.clone();
     let mut pending_tie: Option<(usize, f64)> = None; // (note index, accumulated duration)
+    let mut note_index = 0usize;
 
-    for measure in &score.measures {
+    for (measure_idx, measure) in score.measures.iter().enumerate() {
+        let measure_number = measure_idx + 1; // 1-indexed
+        let measure_start_time = current_time;
+
         // Check for key changes
         if let Some(new_key) = &measure.key_change {
             current_key = new_key.clone();
@@ -193,6 +204,18 @@ pub fn generate_playback_data(
 
         for element in &measure.elements {
             let duration = element.total_beats(&score.metadata.time_signature);
+
+            // Calculate base duration for OSMD (without triplet adjustment)
+            let osmd_duration = match element {
+                Element::Note(note) => {
+                    let base = note.duration.as_beats(&score.metadata.time_signature);
+                    if note.dotted { base * 1.5 } else { base }
+                },
+                Element::Rest { duration: rest_dur, dotted, .. } => {
+                    let base = rest_dur.as_beats(&score.metadata.time_signature);
+                    if *dotted { base * 1.5 } else { base }
+                },
+            };
 
             match element {
                 Element::Note(note) => {
@@ -211,12 +234,20 @@ pub fn generate_playback_data(
                     if note.tie_start && !note.tie_stop {
                         // Start of a tied group - create note and track it
                         let note_idx = notes.len();
+                        let beat_in_measure = current_time - measure_start_time;
+                        let display_midi = note.to_midi_note(&current_key, total_offset);
                         notes.push(PlaybackNote {
                             midi_note: note.to_midi_note(&current_key, 0), // Concert pitch (no offset)
-                            display_midi_note: note.to_midi_note(&current_key, total_offset), // Display pitch (with offset)
+                            display_midi_note: display_midi, // Display pitch (with offset)
                             start_time: current_time,
                             duration,
+                            note_index,
+                            measure_number,
+                            beat_in_measure,
+                            osmd_timestamp: osmd_time,
+                            osmd_match_key: format!("{}_{:.3}", display_midi, osmd_time),
                         });
+                        note_index += 1;
                         pending_tie = Some((note_idx, duration));
                     } else if note.tie_stop && note.tie_start {
                         // Middle of a tied group - extend the first note's duration
@@ -232,12 +263,20 @@ pub fn generate_playback_data(
                         }
                     } else {
                         // Regular note (not tied)
+                        let beat_in_measure = current_time - measure_start_time;
+                        let display_midi = note.to_midi_note(&current_key, total_offset);
                         notes.push(PlaybackNote {
                             midi_note: note.to_midi_note(&current_key, 0), // Concert pitch (no offset)
-                            display_midi_note: note.to_midi_note(&current_key, total_offset), // Display pitch (with offset)
+                            display_midi_note: display_midi, // Display pitch (with offset)
                             start_time: current_time,
                             duration,
+                            note_index,
+                            measure_number,
+                            beat_in_measure,
+                            osmd_timestamp: osmd_time,
+                            osmd_match_key: format!("{}_{:.3}", display_midi, osmd_time),
                         });
+                        note_index += 1;
                         pending_tie = None;
                     }
                 }
@@ -258,7 +297,8 @@ pub fn generate_playback_data(
                 }
             }
 
-            current_time += duration;
+            current_time += duration;        // Playback time (triplet-adjusted)
+            osmd_time += osmd_duration;      // OSMD time (not triplet-adjusted)
         }
     }
 
@@ -706,3 +746,132 @@ title: Rhythm Grouping with Ties
         assert!(xml.contains("<tied type=\"stop\"/>")); // Tie stop
     }
 }
+
+    #[test]
+    fn test_playback_triplets() {
+        let source = r#"---
+tempo: 120
+---
+C /3[D E F] G
+"#;
+        let result = generate_playback_data(source, "treble", 0, None);
+        assert!(result.is_ok());
+        let data = result.unwrap();
+
+        // C, D, E, F (triplet), G
+        assert_eq!(data.notes.len(), 5);
+
+        println!("\n=== Triplet Playback Data ===");
+        for (i, note) in data.notes.iter().enumerate() {
+            println!("Note {}: MIDI {} at beat {:.4}, duration {:.4}",
+                i, note.midi_note, note.start_time, note.duration);
+        }
+
+        // C at beat 0
+        assert_eq!(data.notes[0].midi_note, 60);
+        assert_eq!(data.notes[0].start_time, 0.0);
+        assert_eq!(data.notes[0].duration, 1.0);
+
+        // Triplet notes: 3 eighth notes in the space of 2 eighth notes (1 beat)
+        // Duration of each = 1.0 / 3 = 0.333...
+        assert_eq!(data.notes[1].midi_note, 62); // D
+        assert!((data.notes[1].start_time - 1.0).abs() < 0.0001);
+        assert!((data.notes[1].duration - 0.6666666666666666).abs() < 0.0001);
+
+        assert_eq!(data.notes[2].midi_note, 64); // E
+        assert!((data.notes[2].start_time - 1.6666666666666667).abs() < 0.0001);
+
+        assert_eq!(data.notes[3].midi_note, 65); // F
+        assert!((data.notes[3].start_time - 2.3333333333333335).abs() < 0.0001);
+
+        // G at beat 3
+        assert_eq!(data.notes[4].midi_note, 67);
+        assert_eq!(data.notes[4].start_time, 3.0);
+    }
+
+    #[test]
+    fn test_osmd_match_keys() {
+        let source = r#"---
+tempo: 120
+---
+C D E
+"#;
+        let result = generate_playback_data(source, "treble", 0, None);
+        assert!(result.is_ok());
+        let data = result.unwrap();
+
+        // C4 = MIDI 60, display 60 (OSMD uses display MIDI directly)
+        assert_eq!(data.notes[0].osmd_match_key, "60_0.000");
+
+        // D4 = MIDI 62, display 62
+        assert_eq!(data.notes[1].osmd_match_key, "62_1.000");
+
+        // E4 = MIDI 64, display 64
+        assert_eq!(data.notes[2].osmd_match_key, "64_2.000");
+    }
+
+    #[test]
+    fn test_osmd_match_keys_triplets() {
+        let source = r#"---
+tempo: 120
+---
+C 3[D E F] G
+"#;
+        let result = generate_playback_data(source, "treble", 0, None);
+        assert!(result.is_ok());
+        let data = result.unwrap();
+
+        println!("\n=== OSMD Match Keys for Triplets ===");
+        for (i, note) in data.notes.iter().enumerate() {
+            println!("Note {}: playback={:.3}, osmd={:.3}, key=\"{}\"",
+                i, note.start_time, note.osmd_timestamp, note.osmd_match_key);
+        }
+
+        // C at beat 0 (both playback and OSMD) - C4 = MIDI 60
+        assert_eq!(data.notes[0].start_time, 0.0);
+        assert_eq!(data.notes[0].osmd_timestamp, 0.0);
+        assert_eq!(data.notes[0].osmd_match_key, "60_0.000");
+
+        // D: playback 1.0, OSMD 1.0 (start of triplet) - D4 = MIDI 62
+        assert_eq!(data.notes[1].start_time, 1.0);
+        assert_eq!(data.notes[1].osmd_timestamp, 1.0);
+        assert_eq!(data.notes[1].osmd_match_key, "62_1.000");
+
+        // E: playback 1.667 (triplet math), OSMD 1.5 (base eighth = 0.5) - E4 = MIDI 64
+        assert!((data.notes[2].start_time - 1.6666666666666667).abs() < 0.0001);
+        assert_eq!(data.notes[2].osmd_timestamp, 1.5);
+        assert_eq!(data.notes[2].osmd_match_key, "64_1.500");
+
+        // F: playback 2.333 (triplet math), OSMD 2.0 (base eighth = 0.5) - F4 = MIDI 65
+        assert!((data.notes[3].start_time - 2.3333333333333335).abs() < 0.0001);
+        assert_eq!(data.notes[3].osmd_timestamp, 2.0);
+        assert_eq!(data.notes[3].osmd_match_key, "65_2.000");
+
+        // G: playback 3.0, OSMD 2.5 (base eighth = 0.5) - G4 = MIDI 67
+        assert_eq!(data.notes[4].start_time, 3.0);
+        assert_eq!(data.notes[4].osmd_timestamp, 2.5);
+        assert_eq!(data.notes[4].osmd_match_key, "67_2.500");
+    }
+
+    #[test]
+    fn test_osmd_match_keys_with_octave_shift() {
+        let source = r#"---
+tempo: 120
+---
+C D E
+"#;
+
+        // Octave shift up (+1 octave = +12 semitones)
+        let result = generate_playback_data(source, "treble", 1, None);
+        assert!(result.is_ok());
+        let data = result.unwrap();
+
+        // C4 shifted up 1 octave = C5 = MIDI 72 (display MIDI used directly)
+        assert_eq!(data.notes[0].midi_note, 60);  // Concert pitch unchanged
+        assert_eq!(data.notes[0].display_midi_note, 72);  // Display shifted up
+        assert_eq!(data.notes[0].osmd_match_key, "72_0.000");
+
+        // D4 shifted up 1 octave = D5 = MIDI 74
+        assert_eq!(data.notes[1].display_midi_note, 74);
+        assert_eq!(data.notes[1].osmd_match_key, "74_1.000");
+    }

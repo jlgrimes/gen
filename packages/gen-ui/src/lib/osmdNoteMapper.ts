@@ -55,22 +55,31 @@ export class OSMDNoteMapper {
     }
 
     // Traverse: MeasureList → GraphicalMeasure → staffEntries → voiceEntries → notes
+    // For triplets and other complex rhythms, notes in the same staffEntry but different
+    // voiceEntries have different start times. We need to accumulate durations.
     for (const measureList of graphicSheet.MeasureList) {
       for (const measure of measureList) {
         if (!measure) continue;
 
         for (const staffEntry of measure.staffEntries) {
-          const timestamp = extractTimestamp(staffEntry);
+          const baseTimestamp = extractTimestamp(staffEntry);
+          let accumulatedDuration = 0;
 
           for (const voiceEntry of staffEntry.graphicalVoiceEntries) {
             for (const note of voiceEntry.notes) {
               // Skip rests
               if (!note.sourceNote || note.sourceNote.isRest()) {
+                // Still accumulate duration for rests
+                if (note.sourceNote && note.sourceNote.length) {
+                  accumulatedDuration += note.sourceNote.length.RealValue * 4;
+                }
                 continue;
               }
 
               try {
                 const midiNote = extractMidiNote(note);
+                // Calculate actual timestamp: base + accumulated duration
+                const timestamp = baseTimestamp + accumulatedDuration;
                 const key = this.makeKey(midiNote, timestamp);
 
                 // Store in map (handle potential collisions with array)
@@ -78,6 +87,11 @@ export class OSMDNoteMapper {
                   this.noteMap.set(key, []);
                 }
                 this.noteMap.get(key)!.push(note);
+
+                // Accumulate this note's duration for the next note
+                if (note.sourceNote.length) {
+                  accumulatedDuration += note.sourceNote.length.RealValue * 4;
+                }
 
               } catch (err) {
                 console.warn('OSMDNoteMapper: Failed to extract MIDI note', err);
@@ -89,6 +103,9 @@ export class OSMDNoteMapper {
     }
 
     this.isIndexed = true;
+
+    // DEBUG: Log all keys created by OSMD
+    console.log('[OSMDNoteMapper] Built index with keys:', Array.from(this.noteMap.keys()).sort());
   }
 
   /**
@@ -101,7 +118,12 @@ export class OSMDNoteMapper {
       return null;
     }
 
-    // Use concert pitch for matching (works for both transposed and non-transposed instruments)
+    // Use Rust's pre-computed osmdMatchKey if available (new approach)
+    if (playbackNote.osmdMatchKey) {
+      return this.findGraphicalNoteByKey(playbackNote.osmdMatchKey);
+    }
+
+    // Fallback to old matching logic for backwards compatibility
     const displayMidi = playbackNote.midiNote;
 
     // Try exact match first
@@ -164,5 +186,14 @@ export class OSMDNoteMapper {
    */
   get size(): number {
     return this.noteMap.size;
+  }
+
+  /**
+   * Find a GraphicalNote using Rust's pre-computed osmdMatchKey.
+   * This is simpler and more reliable than recalculating timestamps.
+   */
+  findGraphicalNoteByKey(osmdMatchKey: string): GraphicalNote | null {
+    const matches = this.noteMap.get(osmdMatchKey);
+    return matches?.[0] || null;
   }
 }
