@@ -18,6 +18,7 @@
 /// - **Sus4**: `sus4` → root, perfect 4th, perfect 5th
 /// - **Sus2**: `sus2` → root, major 2nd, perfect 5th
 /// - **9th chords**: `9`, `maj9`, `m9` → 7th chord + major 9th
+/// - **Slash chords**: `C/E`, `Am/G` → chord with specified bass note
 ///
 /// # Examples
 /// ```
@@ -34,14 +35,24 @@
 ///
 /// // F# major: F#3, A#3, C#4
 /// assert_eq!(parse_chord_symbol("F#"), vec![54, 58, 61]);
+///
+/// // C/E (C major with E in bass): E2, C3, G3
+/// assert_eq!(parse_chord_symbol("C/E"), vec![40, 48, 55]);
 /// ```
 ///
 /// # MIDI Note Reference
 /// - C3 = 48, D3 = 50, E3 = 52, F3 = 53, G3 = 55, A3 = 57, B3 = 59
 /// - Intervals: minor 3rd = +3, major 3rd = +4, perfect 5th = +7, minor 7th = +10, major 7th = +11
 pub fn parse_chord_symbol(chord_symbol: &str) -> Vec<u8> {
+    // Check for slash chord (e.g., "C/E", "Am/G")
+    let (main_chord, bass_note) = if let Some(slash_pos) = chord_symbol.find('/') {
+        (&chord_symbol[..slash_pos], Some(&chord_symbol[slash_pos + 1..]))
+    } else {
+        (chord_symbol, None)
+    };
+
     // Extract root note and chord quality
-    let chars: Vec<char> = chord_symbol.chars().collect();
+    let chars: Vec<char> = main_chord.chars().collect();
     if chars.is_empty() {
         return vec![];
     }
@@ -72,11 +83,10 @@ pub fn parse_chord_symbol(chord_symbol: &str) -> Vec<u8> {
     let root = (base_midi + accidental) as u8;
 
     // Parse chord quality from remaining string
-    let quality = &chord_symbol[idx..];
+    let quality = &main_chord[idx..];
 
-    // Return intervals relative to root
-    // Using common jazz/pop chord voicings
-    match quality {
+    // Get chord tones (without bass modification)
+    let mut chord_tones = match quality {
         // Major triads
         "" | "maj" | "M" => vec![root, root + 4, root + 7],
 
@@ -107,9 +117,55 @@ pub fn parse_chord_symbol(chord_symbol: &str) -> Vec<u8> {
         "maj9" | "M9" => vec![root, root + 4, root + 7, root + 11, root + 14],
         "m9" | "min9" => vec![root, root + 3, root + 7, root + 10, root + 14],
 
+        // Add9 chords (triad + 9th, no 7th)
+        "add9" => vec![root, root + 4, root + 7, root + 14],
+        "madd9" => vec![root, root + 3, root + 7, root + 14],
+
+        // Augmented 7th (dominant 7th with raised 5th)
+        "7#5" | "7+5" | "aug7" => vec![root, root + 4, root + 8, root + 10],
+
+        // Dominant 7th with flat 5
+        "7b5" => vec![root, root + 4, root + 6, root + 10],
+
         // Default to major if unknown
         _ => vec![root, root + 4, root + 7],
+    };
+
+    // Handle slash chord - add bass note an octave below
+    if let Some(bass_str) = bass_note {
+        let bass_chars: Vec<char> = bass_str.chars().collect();
+        if !bass_chars.is_empty() {
+            let bass_name = bass_chars[0];
+            let bass_accidental = if bass_chars.len() > 1 && (bass_chars[1] == '#' || bass_chars[1] == 'b') {
+                if bass_chars[1] == '#' { 1 } else { -1 }
+            } else {
+                0
+            };
+
+            // Bass note in C2 octave (one octave below chord voicing)
+            let bass_base = match bass_name {
+                'C' => 36,  // C2
+                'D' => 38,
+                'E' => 40,
+                'F' => 41,
+                'G' => 43,
+                'A' => 45,
+                'B' => 47,
+                _ => 36,
+            };
+            let bass_midi = (bass_base + bass_accidental) as u8;
+
+            // Remove the bass note from chord tones if it's there (as an inversion)
+            // and add it at the bottom
+            let bass_in_chord_octave = bass_midi + 12; // Same note in C3
+            chord_tones.retain(|&note| note != bass_in_chord_octave && note != bass_in_chord_octave + 12);
+
+            // Insert bass at the beginning
+            chord_tones.insert(0, bass_midi);
+        }
     }
+
+    chord_tones
 }
 
 #[cfg(test)]
@@ -140,5 +196,30 @@ mod tests {
 
         let b_flat_minor = parse_chord_symbol("Bbm");
         assert_eq!(b_flat_minor, vec![58, 61, 65]); // Bb3, Db4, F4
+    }
+
+    #[test]
+    fn test_slash_chords() {
+        // C/E - C major with E in bass (first inversion)
+        // E2 (40), C3 (48), G3 (55) - E removed from chord, added as bass
+        let c_over_e = parse_chord_symbol("C/E");
+        assert_eq!(c_over_e, vec![40, 48, 55]); // E2, C3, G3
+
+        // C/G - C major with G in bass (second inversion)
+        let c_over_g = parse_chord_symbol("C/G");
+        assert_eq!(c_over_g, vec![43, 48, 52]); // G2, C3, E3
+
+        // Am/G - A minor with G in bass
+        // G2 (43), A3 (57), C4 (60), E4 (64) - but G is not in Am, so just adds bass
+        let am_over_g = parse_chord_symbol("Am/G");
+        assert_eq!(am_over_g, vec![43, 57, 60, 64]); // G2, A3, C4, E4
+
+        // D/F# - D major with F# in bass
+        let d_over_fsharp = parse_chord_symbol("D/F#");
+        assert_eq!(d_over_fsharp, vec![42, 50, 57]); // F#2, D3, A3
+
+        // C/Ab - C major with Ab in bass (the original user request!)
+        let c_over_ab = parse_chord_symbol("C/Ab");
+        assert_eq!(c_over_ab, vec![44, 48, 52, 55]); // Ab2, C3, E3, G3
     }
 }

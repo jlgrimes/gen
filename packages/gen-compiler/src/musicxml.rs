@@ -1070,18 +1070,26 @@ fn write_rest<W: std::io::Write>(
 
 /// Transpose a chord root note by the given transposition interval
 /// Only transposes the root note letter, preserves quality (maj7, m7, etc.)
+/// Also transposes bass note in slash chords (e.g., C/E -> D/F#)
 fn transpose_chord_root(chord_symbol: &str, transposition: &Transposition) -> String {
     if chord_symbol.is_empty() {
         return chord_symbol.to_string();
     }
 
+    // Check for slash chord - handle bass note separately
+    let (main_chord, bass_note) = if let Some(slash_pos) = chord_symbol.find('/') {
+        (&chord_symbol[..slash_pos], Some(&chord_symbol[slash_pos + 1..]))
+    } else {
+        (chord_symbol, None)
+    };
+
     // Extract root note (first character)
-    let root_char = chord_symbol.chars().next().unwrap();
+    let root_char = main_chord.chars().next().unwrap();
 
     // Check if second character is an accidental
     let mut quality_start = 1;
-    let has_accidental = if chord_symbol.len() > 1 {
-        match chord_symbol.chars().nth(1) {
+    let has_accidental = if main_chord.len() > 1 {
+        match main_chord.chars().nth(1) {
             Some('#') | Some('b') => {
                 quality_start = 2;
                 true
@@ -1093,8 +1101,8 @@ fn transpose_chord_root(chord_symbol: &str, transposition: &Transposition) -> St
     };
 
     // Get the quality/extension part (everything after root + accidental)
-    let quality = if quality_start < chord_symbol.len() {
-        &chord_symbol[quality_start..]
+    let quality = if quality_start < main_chord.len() {
+        &main_chord[quality_start..]
     } else {
         ""
     };
@@ -1122,10 +1130,49 @@ fn transpose_chord_root(chord_symbol: &str, transposition: &Transposition) -> St
         }
     };
 
+    // Helper to transpose a single note (returns transposed note with accidental)
+    let transpose_note = |note_str: &str| -> String {
+        if note_str.is_empty() {
+            return String::new();
+        }
+        let note_char = note_str.chars().next().unwrap();
+        let note_has_accidental = if note_str.len() > 1 {
+            matches!(note_str.chars().nth(1), Some('#') | Some('b'))
+        } else {
+            false
+        };
+
+        let mut note_chromatic_val = note_chromatic(note_char);
+        if note_has_accidental {
+            match note_str.chars().nth(1) {
+                Some('#') => note_chromatic_val += 1,
+                Some('b') => note_chromatic_val -= 1,
+                _ => {}
+            }
+        }
+
+        let new_note_num = (note_to_num(note_char) + transposition.diatonic).rem_euclid(7);
+        let new_chromatic_val = (note_chromatic_val + transposition.chromatic).rem_euclid(12);
+        let new_note = num_to_note(new_note_num);
+        let new_note_base = note_chromatic(new_note);
+        let acc_diff = (new_chromatic_val - new_note_base).rem_euclid(12);
+
+        let acc_str = match acc_diff {
+            0 => "",
+            1 => "#",
+            11 => "b",
+            2 => "##",
+            10 => "bb",
+            _ => "",
+        };
+
+        format!("{}{}", new_note, acc_str)
+    };
+
     // Get starting chromatic value with accidental
     let mut chromatic = note_chromatic(root_char);
     if has_accidental {
-        match chord_symbol.chars().nth(1) {
+        match main_chord.chars().nth(1) {
             Some('#') => chromatic += 1,
             Some('b') => chromatic -= 1,
             _ => {}
@@ -1151,7 +1198,13 @@ fn transpose_chord_root(chord_symbol: &str, transposition: &Transposition) -> St
         _ => "",        // Should not happen with standard transpositions
     };
 
-    format!("{}{}{}", new_note, accidental_str, quality)
+    // Build result with optional bass note
+    if let Some(bass) = bass_note {
+        let transposed_bass = transpose_note(bass);
+        format!("{}{}{}/{}", new_note, accidental_str, quality, transposed_bass)
+    } else {
+        format!("{}{}{}", new_note, accidental_str, quality)
+    }
 }
 
 /// Write a harmony (chord symbol) element
@@ -1165,12 +1218,19 @@ fn write_harmony<W: std::io::Write>(writer: &mut Writer<W>, chord_symbol: &str, 
 
     let chord_symbol = &transposed_symbol;
 
+    // Check for slash chord (e.g., "C/E", "Am/G", "D7/F#")
+    let (main_chord, bass_note) = if let Some(slash_pos) = chord_symbol.find('/') {
+        (&chord_symbol[..slash_pos], Some(&chord_symbol[slash_pos + 1..]))
+    } else {
+        (chord_symbol.as_str(), None)
+    };
+
     writer
         .write_event(Event::Start(BytesStart::new("harmony")))
         .unwrap();
 
     // Parse root note (first character)
-    let root_step = chord_symbol.chars().next().unwrap_or('C');
+    let root_step = main_chord.chars().next().unwrap_or('C');
 
     writer
         .write_event(Event::Start(BytesStart::new("root")))
@@ -1178,8 +1238,8 @@ fn write_harmony<W: std::io::Write>(writer: &mut Writer<W>, chord_symbol: &str, 
     write_text_element(writer, "root-step", &root_step.to_string());
 
     // Check for sharp/flat in second character
-    if chord_symbol.len() > 1 {
-        match chord_symbol.chars().nth(1) {
+    if main_chord.len() > 1 {
+        match main_chord.chars().nth(1) {
             Some('#') => write_text_element(writer, "root-alter", "1"),
             Some('b') => write_text_element(writer, "root-alter", "-1"),
             _ => {}
@@ -1191,8 +1251,8 @@ fn write_harmony<W: std::io::Write>(writer: &mut Writer<W>, chord_symbol: &str, 
 
     // Parse chord quality from the chord symbol
     // Extract quality after root note and accidental
-    let quality_start = if chord_symbol.len() > 1 {
-        match chord_symbol.chars().nth(1) {
+    let quality_start = if main_chord.len() > 1 {
+        match main_chord.chars().nth(1) {
             Some('#') | Some('b') => 2,
             _ => 1,
         }
@@ -1200,8 +1260,8 @@ fn write_harmony<W: std::io::Write>(writer: &mut Writer<W>, chord_symbol: &str, 
         1
     };
 
-    let quality = if quality_start < chord_symbol.len() {
-        &chord_symbol[quality_start..]
+    let quality = if quality_start < main_chord.len() {
+        &main_chord[quality_start..]
     } else {
         ""
     };
@@ -1230,6 +1290,10 @@ fn write_harmony<W: std::io::Write>(writer: &mut Writer<W>, chord_symbol: &str, 
         "13" => "dominant-13th",
         "maj13" => "major-13th",
         "m13" => "minor-13th",
+        "add9" => "major-ninth", // add9 is a triad + 9th (close to major-ninth without 7th)
+        "madd9" => "minor-ninth",
+        "7#5" | "7+5" | "aug7" => "augmented-seventh",
+        "7b5" => "dominant", // dominant with altered 5th
         _ => "other", // For complex/altered chords
     };
 
@@ -1243,6 +1307,29 @@ fn write_harmony<W: std::io::Write>(writer: &mut Writer<W>, chord_symbol: &str, 
     writer
         .write_event(Event::End(BytesEnd::new("kind")))
         .unwrap();
+
+    // Write bass element for slash chords (e.g., C/E, Am/G)
+    if let Some(bass) = bass_note {
+        if !bass.is_empty() {
+            let bass_step = bass.chars().next().unwrap_or('C');
+            writer
+                .write_event(Event::Start(BytesStart::new("bass")))
+                .unwrap();
+            write_text_element(writer, "bass-step", &bass_step.to_string());
+
+            // Check for sharp/flat in bass note
+            if bass.len() > 1 {
+                match bass.chars().nth(1) {
+                    Some('#') => write_text_element(writer, "bass-alter", "1"),
+                    Some('b') => write_text_element(writer, "bass-alter", "-1"),
+                    _ => {}
+                }
+            }
+            writer
+                .write_event(Event::End(BytesEnd::new("bass")))
+                .unwrap();
+        }
+    }
 
     writer
         .write_event(Event::End(BytesEnd::new("harmony")))

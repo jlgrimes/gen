@@ -510,23 +510,33 @@ impl Parser {
                     // This is either a tuplet or rhythm grouping
                     let (mut grouped_elements, has_pending_tie) = self.parse_bracket_group(tuplet_number, group_duration, group_dotted)?;
 
-                    // Apply chord annotations and measure octave modifier to notes in the bracket group
+                    // Apply chord annotations and measure octave modifier to notes/rests in the bracket group
                     for element in &mut grouped_elements {
-                        if let Element::Note(note) = element {
-                            if let Some(parsed) = self.chord_annotations.get_chord(self.current_measure_index, note_index_in_measure) {
-                                note.chord = Some(ChordAnnotation::with_duration(
-                                    parsed.symbol.clone(),
-                                    parsed.duration,
-                                    parsed.dotted,
-                                ));
+                        match element {
+                            Element::Note(note) => {
+                                if let Some(parsed) = self.chord_annotations.get_chord(self.current_measure_index, note_index_in_measure) {
+                                    note.chord = Some(ChordAnnotation::with_duration(
+                                        parsed.symbol.clone(),
+                                        parsed.duration,
+                                        parsed.dotted,
+                                    ));
+                                }
+                                // Apply measure octave modifier
+                                if let Some(&offset) = self.measure_octave_modifiers.get(&self.current_measure_index) {
+                                    note.octave = Self::apply_octave_offset(note.octave, offset);
+                                }
+                                note_index_in_measure += 1;
                             }
-                            // Apply measure octave modifier
-                            if let Some(&offset) = self.measure_octave_modifiers.get(&self.current_measure_index) {
-                                note.octave = Self::apply_octave_offset(note.octave, offset);
+                            Element::Rest { chord, .. } => {
+                                if let Some(parsed) = self.chord_annotations.get_chord(self.current_measure_index, note_index_in_measure) {
+                                    *chord = Some(ChordAnnotation::with_duration(
+                                        parsed.symbol.clone(),
+                                        parsed.duration,
+                                        parsed.dotted,
+                                    ));
+                                }
+                                note_index_in_measure += 1;
                             }
-                            note_index_in_measure += 1;
-                        } else if matches!(element, Element::Rest { .. }) {
-                            note_index_in_measure += 1;
                         }
                     }
 
@@ -2841,5 +2851,24 @@ time-signature: 6/8
         // The invalid key simply won't set a key_change
         let score = result.unwrap();
         assert!(score.measures[0].key_change.is_none());
+    }
+
+    #[test]
+    fn test_chord_on_rest_in_bracket() {
+        // This is the real-world case from the-wizard-and-i.gen
+        let score = parse("@ch:Ab 3[$ C D] 3[E D C]").unwrap();
+
+        // First element should be the rest with chord attached
+        if let Element::Rest { chord, .. } = &score.measures[0].elements[0] {
+            assert!(chord.is_some(), "Rest should have chord attached");
+            assert_eq!(chord_symbol(chord), Some("Ab"));
+            // Default duration should be whole note
+            assert_eq!(chord.as_ref().unwrap().duration, Duration::Whole);
+        } else {
+            panic!("Expected first element to be a Rest");
+        }
+
+        // Verify total element count (6 notes/rests in the two triplets)
+        assert_eq!(score.measures[0].elements.len(), 6);
     }
 }
