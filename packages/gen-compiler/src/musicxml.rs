@@ -301,6 +301,7 @@ fn to_musicxml_full(
             effective_octave_shift,
             is_ending_start,
             is_ending_stop,
+            score.metadata.tempo.as_ref(),
         );
     }
 
@@ -437,6 +438,56 @@ fn calculate_beam_states(elements: &[Element], time_signature: &TimeSignature) -
     states
 }
 
+fn write_tempo_direction<W: std::io::Write>(
+    writer: &mut Writer<W>,
+    tempo: &crate::ast::Tempo,
+    time_signature: &TimeSignature,
+) {
+    writer
+        .write_event(Event::Start(BytesStart::new("direction")))
+        .unwrap();
+
+    writer
+        .write_event(Event::Start(BytesStart::new("direction-type")))
+        .unwrap();
+
+    // Metronome marking
+    writer
+        .write_event(Event::Start(BytesStart::new("metronome")))
+        .unwrap();
+
+    // Determine the beat unit for the metronome
+    let beat_unit = tempo.duration.musicxml_type();
+    write_text_element(writer, "beat-unit", beat_unit);
+
+    // Add dot if tempo is dotted
+    if tempo.dotted {
+        writer
+            .write_event(Event::Empty(BytesStart::new("beat-unit-dot")))
+            .unwrap();
+    }
+
+    write_text_element(writer, "per-minute", &tempo.bpm.to_string());
+
+    writer
+        .write_event(Event::End(BytesEnd::new("metronome")))
+        .unwrap();
+
+    writer
+        .write_event(Event::End(BytesEnd::new("direction-type")))
+        .unwrap();
+
+    // Sound element with quarter-note tempo for MIDI playback
+    let quarter_bpm = tempo.to_quarter_note_bpm();
+    let mut sound_elem = BytesStart::new("sound");
+    sound_elem.push_attribute(("tempo", quarter_bpm.to_string().as_str()));
+    writer.write_event(Event::Empty(sound_elem)).unwrap();
+
+    writer
+        .write_event(Event::End(BytesEnd::new("direction")))
+        .unwrap();
+}
+
 fn write_measure<W: std::io::Write>(
     writer: &mut Writer<W>,
     measure: &Measure,
@@ -449,6 +500,7 @@ fn write_measure<W: std::io::Write>(
     octave_shift: i8,
     is_ending_start: bool,
     is_ending_stop: bool,
+    tempo: Option<&crate::ast::Tempo>,
 ) {
     let mut measure_elem = BytesStart::new("measure");
     measure_elem.push_attribute(("number", number.to_string().as_str()));
@@ -576,6 +628,11 @@ fn write_measure<W: std::io::Write>(
         writer
             .write_event(Event::End(BytesEnd::new("attributes")))
             .unwrap();
+
+        // Add tempo marking on first measure
+        if let Some(tempo_info) = tempo {
+            write_tempo_direction(writer, tempo_info, time_signature);
+        }
     }
 
     // Calculate beam states for all elements
