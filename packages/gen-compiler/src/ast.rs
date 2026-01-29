@@ -24,15 +24,25 @@ pub struct Pitch {
     pub octave_offset: i8, // ^ = +1, ^^ = +2, _ = -1, __ = -2
 }
 
+/// Mode for key signature
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub enum Mode {
+    #[default]
+    Major,
+    Minor,
+}
+
 /// Key signature (number of sharps/flats)
 /// Positive = sharps, Negative = flats, Zero = C major / A minor
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct KeySignature {
     pub fifths: i8, // -7 to +7 (flats to sharps)
+    pub mode: Mode,
 }
 
 impl KeySignature {
     /// Parse a key signature string like "G", "D", "F", "Bb", "Eb", etc.
+    /// Also supports minor keys: "Am", "Dm", "Ebm", etc.
     /// Also supports sharp/flat count notation: "#", "##", "###", etc. or "b", "bb", "bbb", etc.
     pub fn from_str(s: &str) -> Option<Self> {
         let trimmed = s.trim();
@@ -41,7 +51,7 @@ impl KeySignature {
         if !trimmed.is_empty() && trimmed.chars().all(|c| c == '#') {
             let count = trimmed.len() as i8;
             if count >= 1 && count <= 7 {
-                return Some(Self { fifths: count });
+                return Some(Self { fifths: count, mode: Mode::Major });
             }
             return None;
         }
@@ -52,13 +62,38 @@ impl KeySignature {
         if trimmed.len() >= 2 && trimmed.chars().all(|c| c == 'b') {
             let count = trimmed.len() as i8;
             if count >= 2 && count <= 7 {
-                return Some(Self { fifths: -count });
+                return Some(Self { fifths: -count, mode: Mode::Major });
             }
             return None;
         }
 
+        // Check if it's a minor key (ends with 'm')
+        if trimmed.ends_with('m') && trimmed.len() > 1 {
+            let key_name = &trimmed[..trimmed.len()-1];
+            let fifths = match key_name {
+                // Minor keys (using their natural key signature)
+                "A" => 0,        // A minor (no sharps/flats, same as C major)
+                "E" => 1,        // E minor (1 sharp, same as G major)
+                "B" => 2,        // B minor (2 sharps, same as D major)
+                "F#" | "Fs" => 3, // F# minor (3 sharps, same as A major)
+                "C#" | "Cs" => 4, // C# minor (4 sharps, same as E major)
+                "G#" | "Gs" => 5, // G# minor (5 sharps, same as B major)
+                "D#" | "Ds" => 6, // D# minor (6 sharps, same as F# major)
+                "A#" | "As" => 7, // A# minor (7 sharps, same as C# major)
+                "D" => -1,       // D minor (1 flat, same as F major)
+                "G" => -2,       // G minor (2 flats, same as Bb major)
+                "C" => -3,       // C minor (3 flats, same as Eb major)
+                "F" => -4,       // F minor (4 flats, same as Ab major)
+                "Bb" | "Bf" => -5, // Bb minor (5 flats, same as Db major)
+                "Eb" | "Ef" => -6, // Eb minor (6 flats, same as Gb major)
+                "Ab" | "Af" => -7, // Ab minor (7 flats, same as Cb major)
+                _ => return None,
+            };
+            return Some(Self { fifths, mode: Mode::Minor });
+        }
+
+        // Major keys
         let fifths = match trimmed {
-            // Major keys
             "C" => 0,
             "G" => 1,
             "D" => 2,
@@ -76,7 +111,7 @@ impl KeySignature {
             "Cb" | "Cf" => -7,
             _ => return None,
         };
-        Some(Self { fifths })
+        Some(Self { fifths, mode: Mode::Major })
     }
 
     /// Returns the accidental for a note based on this key signature.

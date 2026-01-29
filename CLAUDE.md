@@ -103,6 +103,12 @@ G A B C^
 - `^` = octave up, `^^` = two octaves up
 - `_` = octave down, `__` = two octaves down
 
+**IMPORTANT - Octave Range:**
+- **Default octave range: low C to B** (no modifier needed)
+- **High C and above: MUST use `^` modifier** (C^, D^, E^, F^, G^, etc.)
+- Only notes from low C through B are in the base octave
+- Example: In "Happy Birthday" melody, the sustained notes on "you" and "dear" need C^, D^, E^, F^ because they're above B
+
 ### Examples
 ```
 C           # C quarter note

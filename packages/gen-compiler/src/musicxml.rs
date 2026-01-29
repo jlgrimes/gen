@@ -397,6 +397,11 @@ fn write_measure<W: std::io::Write>(
             .write_event(Event::Start(BytesStart::new("key")))
             .unwrap();
         write_text_element(writer, "fifths", &transposed_fifths.to_string());
+        let mode_str = match key_signature.mode {
+            crate::ast::Mode::Major => "major",
+            crate::ast::Mode::Minor => "minor",
+        };
+        write_text_element(writer, "mode", mode_str);
         writer
             .write_event(Event::End(BytesEnd::new("key")))
             .unwrap();
@@ -433,6 +438,11 @@ fn write_measure<W: std::io::Write>(
             .write_event(Event::Start(BytesStart::new("key")))
             .unwrap();
         write_text_element(writer, "fifths", &transposed_fifths.to_string());
+        let mode_str = match key_signature.mode {
+            crate::ast::Mode::Major => "major",
+            crate::ast::Mode::Minor => "minor",
+        };
+        write_text_element(writer, "mode", mode_str);
         writer
             .write_event(Event::End(BytesEnd::new("key")))
             .unwrap();
