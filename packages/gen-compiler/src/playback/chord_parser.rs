@@ -142,23 +142,21 @@ pub fn parse_chord_symbol(chord_symbol: &str) -> Vec<u8> {
                 0
             };
 
-            // Bass note in C2 octave (one octave below chord voicing)
+            // Bass note in C3 octave (same octave as chord voicing, but will be lowest)
             let bass_base = match bass_name {
-                'C' => 36,  // C2
-                'D' => 38,
-                'E' => 40,
-                'F' => 41,
-                'G' => 43,
-                'A' => 45,
-                'B' => 47,
-                _ => 36,
+                'C' => 48,  // C3
+                'D' => 50,
+                'E' => 52,
+                'F' => 53,
+                'G' => 55,
+                'A' => 57,
+                'B' => 59,
+                _ => 48,
             };
             let bass_midi = (bass_base + bass_accidental) as u8;
 
-            // Remove the bass note from chord tones if it's there (as an inversion)
-            // and add it at the bottom
-            let bass_in_chord_octave = bass_midi + 12; // Same note in C3
-            chord_tones.retain(|&note| note != bass_in_chord_octave && note != bass_in_chord_octave + 12);
+            // Remove the bass note from chord tones if it's already there
+            chord_tones.retain(|&note| note != bass_midi);
 
             // Insert bass at the beginning
             chord_tones.insert(0, bass_midi);
@@ -201,25 +199,25 @@ mod tests {
     #[test]
     fn test_slash_chords() {
         // C/E - C major with E in bass (first inversion)
-        // E2 (40), C3 (48), G3 (55) - E removed from chord, added as bass
+        // E3 (52) moves to front, removed from original position
         let c_over_e = parse_chord_symbol("C/E");
-        assert_eq!(c_over_e, vec![40, 48, 55]); // E2, C3, G3
+        assert_eq!(c_over_e, vec![52, 48, 55]); // E3, C3, G3
 
         // C/G - C major with G in bass (second inversion)
         let c_over_g = parse_chord_symbol("C/G");
-        assert_eq!(c_over_g, vec![43, 48, 52]); // G2, C3, E3
+        assert_eq!(c_over_g, vec![55, 48, 52]); // G3, C3, E3
 
         // Am/G - A minor with G in bass
-        // G2 (43), A3 (57), C4 (60), E4 (64) - but G is not in Am, so just adds bass
+        // G3 (55) added to front, not in original Am chord
         let am_over_g = parse_chord_symbol("Am/G");
-        assert_eq!(am_over_g, vec![43, 57, 60, 64]); // G2, A3, C4, E4
+        assert_eq!(am_over_g, vec![55, 57, 60, 64]); // G3, A3, C4, E4
 
         // D/F# - D major with F# in bass
         let d_over_fsharp = parse_chord_symbol("D/F#");
-        assert_eq!(d_over_fsharp, vec![42, 50, 57]); // F#2, D3, A3
+        assert_eq!(d_over_fsharp, vec![54, 50, 57]); // F#3, D3, A3
 
         // C/Ab - C major with Ab in bass (the original user request!)
         let c_over_ab = parse_chord_symbol("C/Ab");
-        assert_eq!(c_over_ab, vec![44, 48, 52, 55]); // Ab2, C3, E3, G3
+        assert_eq!(c_over_ab, vec![56, 48, 52, 55]); // Ab3, C3, E3, G3
     }
 }
