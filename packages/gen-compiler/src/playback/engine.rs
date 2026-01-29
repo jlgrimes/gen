@@ -101,6 +101,11 @@ pub fn generate_playback_data(
     let mut pending_tie: Option<(usize, f64)> = None; // (note index, accumulated duration)
     let mut note_index = 0usize;
 
+    // Calculate conversion factor from time-signature beats to quarter-note beats for OSMD matching
+    // For 12/8 (beat_type=8): eighth note = 1 TS beat = 0.5 quarter notes, so multiply by 0.5
+    // For 4/4 (beat_type=4): quarter note = 1 TS beat = 1.0 quarter note, so multiply by 1.0
+    let osmd_to_quarter_multiplier = 4.0 / score.metadata.time_signature.beat_type as f64;
+
     for (measure_idx, measure) in score.measures.iter().enumerate() {
         let measure_number = measure_idx + 1; // 1-indexed
         let measure_start_time = current_time;
@@ -161,6 +166,7 @@ pub fn generate_playback_data(
                         let note_idx = notes.len();
                         let beat_in_measure = current_time - measure_start_time;
                         let display_midi = note.to_midi_note(&current_key, total_offset);
+                        let osmd_quarter_time = osmd_time * osmd_to_quarter_multiplier;
                         notes.push(PlaybackNote {
                             midi_note: note.to_midi_note(&current_key, octave_shift), // Playback pitch (with octave shift, no clef offset)
                             display_midi_note: display_midi, // Display pitch (with full offset)
@@ -169,8 +175,8 @@ pub fn generate_playback_data(
                             note_index,
                             measure_number,
                             beat_in_measure,
-                            osmd_timestamp: osmd_time,
-                            osmd_match_key: format!("{}_{:.3}", display_midi, osmd_time),
+                            osmd_timestamp: osmd_quarter_time,
+                            osmd_match_key: format!("{}_{:.3}", display_midi, osmd_quarter_time),
                         });
                         note_index += 1;
                         pending_tie = Some((note_idx, duration));
@@ -190,6 +196,7 @@ pub fn generate_playback_data(
                         // Regular note (not tied)
                         let beat_in_measure = current_time - measure_start_time;
                         let display_midi = note.to_midi_note(&current_key, total_offset);
+                        let osmd_quarter_time = osmd_time * osmd_to_quarter_multiplier;
                         notes.push(PlaybackNote {
                             midi_note: note.to_midi_note(&current_key, octave_shift), // Playback pitch (with octave shift, no clef offset)
                             display_midi_note: display_midi, // Display pitch (with full offset)
@@ -198,8 +205,8 @@ pub fn generate_playback_data(
                             note_index,
                             measure_number,
                             beat_in_measure,
-                            osmd_timestamp: osmd_time,
-                            osmd_match_key: format!("{}_{:.3}", display_midi, osmd_time),
+                            osmd_timestamp: osmd_quarter_time,
+                            osmd_match_key: format!("{}_{:.3}", display_midi, osmd_quarter_time),
                         });
                         note_index += 1;
                         pending_tie = None;
@@ -243,10 +250,10 @@ pub fn generate_playback_data(
     // Convert all startTime and duration from time-signature beats to tempo's beat unit
     // For example: tempo "*88" in 12/8 has tempo_beat_duration = 3 (dotted quarter = 3 eighths)
     // So we divide all times by 3 to convert from eighth-note beats to dotted-quarter beats
+    // Note: beat_in_measure is NOT converted - it stays in time-signature beats for reference
     for note in &mut notes {
         note.start_time /= tempo_beat_duration;
         note.duration /= tempo_beat_duration;
-        note.beat_in_measure /= tempo_beat_duration;
     }
 
     for chord in &mut chords {
