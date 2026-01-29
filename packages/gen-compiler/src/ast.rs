@@ -1,3 +1,74 @@
+//! # Abstract Syntax Tree (AST) Types
+//!
+//! This module defines all type structures for the Gen music notation language AST.
+//!
+//! ## Type Hierarchy
+//! ```text
+//! Score
+//!   ├── Metadata (title, composer, key sig, time sig, tempo)
+//!   ├── ModPoints (per-line octave shifts for instruments)
+//!   ├── line_to_measure: HashMap<line, measure_idx>
+//!   └── Vec<Measure>
+//!         ├── Vec<Element> (Note | Rest)
+//!         ├── repeat_start/end: bool
+//!         ├── ending: Option<Ending>
+//!         └── key_change: Option<KeySignature>
+//!
+//! Element (enum)
+//!   ├── Note
+//!   │     ├── name: NoteName (A-G)
+//!   │     ├── accidental: Accidental (#, b, natural)
+//!   │     ├── octave: Octave (^, ^^, _, __)
+//!   │     ├── duration: Duration (whole, half, quarter, eighth, sixteenth, 32nd)
+//!   │     ├── dotted: bool
+//!   │     ├── tuplet: Option<TupletInfo>
+//!   │     ├── tie_start/stop: bool
+//!   │     ├── slur_start/stop: bool
+//!   │     └── chord: Option<String>
+//!   └── Rest
+//!         ├── duration: Duration
+//!         ├── dotted: bool
+//!         ├── tuplet: Option<TupletInfo>
+//!         └── chord: Option<String>
+//! ```
+//!
+//! ## Key Concepts
+//!
+//! ### Element
+//! Either a `Note` or `Rest` (discriminated union). Each element has a duration
+//! which can be modified by dotted rhythms and tuplets.
+//!
+//! ### Duration Calculation
+//! - **Base rhythm** + **dotted modifier** + **tuplet** = actual duration
+//! - Example: Dotted quarter note = `1.0 * 1.5 = 1.5 beats`
+//! - Example: Quarter note triplet = `1.0 * (2/3) = 0.667 beats`
+//!
+//! ### Octave System (CRITICAL)
+//! - Octaves are **ALWAYS** relative to the C-B range, regardless of key signature
+//! - Base octave (no modifier): `C D E F G A B` (middle octave)
+//! - High octave (`^` modifier): `C^ D^ E^ F^ G^ A^ B^` (one octave up)
+//! - Low octave (`_` modifier): `C_ D_ E_ F_ G_ A_ B_` (one octave down)
+//! - The octave **ALWAYS resets at C**, not at the tonic of the key
+//! - Example: In F major, `E F G A B C^` goes up through the octave break at C
+//!
+//! ### Tuplets
+//! - Defined by `actual_notes` notes in the time of `normal_notes`
+//! - Common: triplet = 3 notes in time of 2 (3:2 ratio)
+//! - Quintuplet = 5 notes in time of 4 (5:4 ratio)
+//! - Duration per note = `(normal_notes / actual_notes) * base_duration`
+//!
+//! ### Ties
+//! - `tie_start = true` and `tie_stop = false`: First note of a tied group
+//! - `tie_start = true` and `tie_stop = true`: Middle note (continues tie)
+//! - `tie_start = false` and `tie_stop = true`: Last note of a tied group
+//! - Only the first note plays audio; others are visual only
+//!
+//! ## Related Modules
+//! - `parser` - Creates these types from Gen source
+//! - `semantic` - Validates these types (measure durations, repeats)
+//! - `musicxml` - Generates MusicXML from these types
+//! - `lib` - Uses these types for playback data generation
+
 use serde::Deserialize;
 use std::collections::HashMap;
 
