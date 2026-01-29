@@ -30,9 +30,9 @@ all available fields for metadata are
 
 ### Key Signatures
 
-The `key-signature` field accepts key names or sharp/flat count notation:
+The `key-signature` field accepts key names (major or minor), or sharp/flat count notation:
 
-**By key name:**
+**By key name (Major):**
 | Key    | Sharps/Flats |
 | ------ | ------------ |
 | `C`    | 0 (none)     |
@@ -50,6 +50,26 @@ The `key-signature` field accepts key names or sharp/flat count notation:
 | `Db`   | 5 flats      |
 | `Gb`   | 6 flats      |
 | `Cb`   | 7 flats      |
+
+**By key name (Minor):**
+Add 'm' suffix to specify minor keys:
+| Key    | Sharps/Flats | Relative Major |
+| ------ | ------------ | -------------- |
+| `Am`   | 0 (none)     | C major        |
+| `Em`   | 1 sharp      | G major        |
+| `Bm`   | 2 sharps     | D major        |
+| `F#m`  | 3 sharps     | A major        |
+| `C#m`  | 4 sharps     | E major        |
+| `G#m`  | 5 sharps     | B major        |
+| `D#m`  | 6 sharps     | F# major       |
+| `A#m`  | 7 sharps     | C# major       |
+| `Dm`   | 1 flat       | F major        |
+| `Gm`   | 2 flats      | Bb major       |
+| `Cm`   | 3 flats      | Eb major       |
+| `Fm`   | 4 flats      | Ab major       |
+| `Bbm`  | 5 flats      | Db major       |
+| `Ebm`  | 6 flats      | Gb major       |
+| `Abm`  | 7 flats      | Cb major       |
 
 **By sharp/flat count:**
 | Notation  | Meaning   |
@@ -96,6 +116,20 @@ key-signature: ##
 D E F G
 A B C D^
 ```
+
+Example with minor key:
+```
+---
+title: My Song in A Minor
+key-signature: Am
+---
+
+A B C^ D
+E F^ G A
+```
+
+Note: In A minor, all notes follow the natural minor scale without explicit accidentals.
+
 Each line is its own measure. If you do a new line, it will do a new measure.
 # Anatomy of a note
 
@@ -147,6 +181,26 @@ there are two different modifiers to pitch.
 | `^`                         | 8va           |
 | `^^`                        | 8vaa          |
 *note - these second level modifiers are only to be applied at the note level*
+
+**CRITICAL: Understanding Octave Boundaries**
+
+The octave system in Gen is **absolute** and **always based on C**, regardless of the key signature:
+
+- **Base octave (no modifier):** C, D, E, F, G, A, B
+- **High octave (^ modifier):** C^, D^, E^, F^, G^, A^, B^
+- **Low octave (_ modifier):** C_, D_, E_, F_, G_, A_, B_
+
+**The octave ALWAYS resets at C**, not at the tonic of your key. This means:
+- B to C^ is moving up across the octave boundary
+- B^ to C^ stays in the same octave
+- In any key (G major, Eb minor, F# major, etc.), C always marks the octave boundary
+
+**Examples:**
+- Melody going up: `G A B C^ D^ E^` (crosses from base octave to high octave at C)
+- Melody going down: `E^ D^ C^ B A G` (crosses from high octave to base octave at B)
+- Wide jump down: `A^ B^ C^^ D^^ E^ F^ G` (going from double-high down to high then base octave)
+
+**This is true regardless of key signature.** Even if you're in F major or D minor, the octave boundary is still at C.
 
 ## Group modifiers
 Sometimes, you want to modify more than one note at a time. For this you can use group modifiers. Groups are defined by putting notes in brackets `[...]`.

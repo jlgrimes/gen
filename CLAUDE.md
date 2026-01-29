@@ -84,6 +84,11 @@ C D E F
 G A B C^
 ```
 
+**Key signatures support both major and minor keys:**
+- Major keys: `C`, `G`, `D`, `A`, `E`, `B`, `F#`, `C#`, `F`, `Bb`, `Eb`, `Ab`, `Db`, `Gb`, `Cb`
+- Minor keys: Add 'm' suffix (e.g., `Am`, `Em`, `Dm`, `Cm`, `F#m`, `Bbm`, `Ebm`)
+- Sharp/flat count: `#`, `##`, `###` (sharps) or `bb`, `bbb`, `bbbb` (flats)
+
 ### Note Format
 `[rhythm][note][pitch]`
 
@@ -103,11 +108,16 @@ G A B C^
 - `^` = octave up, `^^` = two octaves up
 - `_` = octave down, `__` = two octaves down
 
-**IMPORTANT - Octave Range:**
-- **Default octave range: low C to B** (no modifier needed)
-- **High C and above: MUST use `^` modifier** (C^, D^, E^, F^, G^, etc.)
-- Only notes from low C through B are in the base octave
-- Example: In "Happy Birthday" melody, the sustained notes on "you" and "dear" need C^, D^, E^, F^ because they're above B
+**CRITICAL - Octave System (ALWAYS ABSOLUTE):**
+- **The octave range is ALWAYS C through B, regardless of key signature**
+- **Base octave (no modifier): C D E F G A B** - this is the "middle" octave
+- **High octave (^ modifier): C^ D^ E^ F^ G^ A^ B^** - this is one octave up
+- **Low octave (_ modifier): C_ D_ E_ F_ G_ A_ B_** - this is one octave down
+- **The octave ALWAYS "resets" at C** - so B to C^ is going up, but B^ to C^ is staying in the same octave
+- **Key signature does NOT affect octave boundaries** - even in F major or Eb minor, the octave break is still at C
+- Example: A melody that goes G A B C^ D^ is going up through the octave break at C
+- Example: In "Happy Birthday", the sustained "you" notes are C^, D^ because they're above B
+- Example: If jumping from high notes to low, you might go E^ D^ C^ B A G (going down through octaves)
 
 ### Examples
 ```
