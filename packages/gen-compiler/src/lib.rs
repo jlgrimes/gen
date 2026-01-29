@@ -5,6 +5,8 @@ pub mod musicxml;
 pub mod parser;
 pub mod semantic;
 
+use serde::Serialize;
+
 pub use ast::*;
 pub use error::*;
 pub use musicxml::{to_musicxml, to_musicxml_with_options, to_musicxml_with_mod_points, Clef, Transposition};
@@ -53,6 +55,82 @@ pub fn compile_with_mod_points(
     let group = instrument_group.and_then(InstrumentGroup::from_str);
     let transposition = transpose_key.and_then(Transposition::for_key);
     Ok(to_musicxml_with_mod_points(&score, transposition, clef, octave_shift, group))
+}
+
+/// Playback data for a single note
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlaybackNote {
+    pub midi_note: u8,      // MIDI note number (0-127, C4 = 60)
+    pub start_time: f64,    // Time in beats from start
+    pub duration: f64,      // Duration in beats
+}
+
+/// Playback data for an entire score
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlaybackData {
+    pub tempo: u16,           // BPM
+    pub notes: Vec<PlaybackNote>,
+}
+
+/// Generate playback data from a Gen source string
+/// Returns timing and MIDI note information for audio playback
+pub fn generate_playback_data(
+    source: &str,
+    clef: &str,
+    octave_shift: i8,
+    instrument_group: Option<&str>,
+) -> Result<PlaybackData, GenError> {
+    let score = parse(source)?;
+
+    // Calculate clef offset for MIDI note calculation
+    let clef_offset = match clef {
+        "bass" => -2,  // Bass clef is 2 octaves lower
+        _ => 0,        // Treble clef is the base
+    };
+
+    let total_offset = clef_offset + octave_shift;
+    let _group = instrument_group.and_then(InstrumentGroup::from_str); // Reserved for future mod point support
+
+    let mut current_time = 0.0;
+    let mut notes = Vec::new();
+    let mut current_key = score.metadata.key_signature.clone();
+
+    for measure in &score.measures {
+        // Check for key changes
+        if let Some(new_key) = &measure.key_change {
+            current_key = new_key.clone();
+        }
+
+        for element in &measure.elements {
+            let duration = element.total_beats(&score.metadata.time_signature);
+
+            match element {
+                Element::Note(note) => {
+                    // Skip tied notes that are continuations (tie_stop without tie_start)
+                    // Only play the first note of a tied group
+                    if !note.tie_stop || note.tie_start {
+                        notes.push(PlaybackNote {
+                            midi_note: note.to_midi_note(&current_key, total_offset),
+                            start_time: current_time,
+                            duration,
+                        });
+                    }
+                }
+                Element::Rest { .. } => {
+                    // Rests just advance time
+                }
+            }
+
+            current_time += duration;
+        }
+    }
+
+    Ok(PlaybackData {
+        tempo: score.metadata.tempo.unwrap_or(120),
+        notes,
+    })
 }
 
 #[cfg(test)]

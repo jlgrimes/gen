@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { save } from '@tauri-apps/plugin-dialog';
 import { writeFile } from '@tauri-apps/plugin-fs';
-import type { CompilerAdapter, FileAdapter, CompileResult } from 'gen-ui';
+import type { CompilerAdapter, FileAdapter, CompileResult, PlaybackAdapter, PlaybackResult } from 'gen-ui';
 
 export const tauriCompiler: CompilerAdapter = {
   async compile(source, options) {
@@ -24,5 +24,16 @@ export const tauriFiles: FileAdapter = {
     if (filePath) {
       await writeFile(filePath, data);
     }
+  },
+};
+
+export const tauriPlayback: PlaybackAdapter = {
+  async generatePlaybackData(source, options) {
+    return invoke<PlaybackResult>('generate_playback_data', {
+      source,
+      clef: options.clef,
+      octaveShift: options.octaveShift,
+      instrumentGroup: options.instrumentGroup ?? null,
+    });
   },
 };

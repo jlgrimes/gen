@@ -19,11 +19,15 @@ import { useIsMobile } from '@/hooks/useIsMobile';
 import type {
   CompilerAdapter,
   FileAdapter,
+  PlaybackAdapter,
+  PlaybackData,
   ScoreInfo,
   CompileError,
   InstrumentGroup,
   ModPoints,
 } from './types';
+import { PlaybackEngine } from './lib/playback';
+import { Play, Pause, Square } from 'lucide-react';
 
 // URL parameter helpers (hash-based routing)
 function getUrlParams() {
@@ -138,6 +142,16 @@ const INSTRUMENT_PRESETS: InstrumentPreset[] = [
   },
 ];
 
+// Map instrument presets to soundfont instrument names
+const INSTRUMENT_TO_SOUNDFONT: Record<string, string> = {
+  'concert': 'acoustic_grand_piano',
+  'bass': 'acoustic_grand_piano',
+  'flute': 'flute',
+  'bb': 'trumpet', // For Bb Trumpet/Clarinet/Tenor Sax, default to trumpet
+  'eb': 'alto_sax', // For Eb Alto/Baritone Sax
+  'f-horn': 'french_horn',
+};
+
 // Parse mod points from source text
 function parseModPointsFromSource(source: string): ModPoints {
   const result: ModPoints = { eb: [], bb: [] };
@@ -202,10 +216,11 @@ MusicSheetCalculator.transposeCalculator = new TransposeCalculator();
 export interface GenAppProps {
   compiler: CompilerAdapter;
   files: FileAdapter;
+  playback?: PlaybackAdapter;
   scores: ScoreInfo[];
 }
 
-export function GenApp({ compiler, files, scores }: GenAppProps) {
+export function GenApp({ compiler, files, playback, scores }: GenAppProps) {
   const isMobile = useIsMobile();
 
   // Get initial values from URL
@@ -248,6 +263,14 @@ export function GenApp({ compiler, files, scores }: GenAppProps) {
   const sheetMusicRef = useRef<HTMLDivElement>(null);
   const osmdRef = useRef<OpenSheetMusicDisplay | null>(null);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Playback state
+  const playbackEngineRef = useRef<PlaybackEngine | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentBeat, setCurrentBeat] = useState(0);
+  const [totalBeats, setTotalBeats] = useState(0);
+  const [playbackData, setPlaybackData] = useState<PlaybackData | null>(null);
+  const [isLoadingPlayback, setIsLoadingPlayback] = useState(false);
 
   // Get current instrument group from preset
   const currentInstrumentGroup = useMemo((): InstrumentGroup | undefined => {
@@ -332,6 +355,142 @@ export function GenApp({ compiler, files, scores }: GenAppProps) {
         : null;
     updateUrl(selectedScore, instrumentId);
   }, [selectedScore, instrumentIndex]);
+
+  // Initialize playback engine
+  useEffect(() => {
+    if (!playback) return; // Playback is optional
+
+    if (!playbackEngineRef.current) {
+      playbackEngineRef.current = new PlaybackEngine();
+    }
+
+    // Only dispose on final unmount, not on re-renders
+    return () => {
+      // Don't dispose here - it closes the AudioContext permanently
+      // We'll dispose on window unload or when the component truly unmounts
+    };
+  }, [playback]);
+
+  // Load instrument when instrument preset changes
+  useEffect(() => {
+    if (!playback || !playbackEngineRef.current) return;
+
+    const currentPreset = INSTRUMENT_PRESETS[instrumentIndex];
+    if (currentPreset) {
+      const soundfont = INSTRUMENT_TO_SOUNDFONT[currentPreset.id] || 'acoustic_grand_piano';
+      playbackEngineRef.current.loadInstrument(soundfont).catch((err: unknown) => {
+        console.error('Failed to load instrument:', err);
+      });
+    }
+  }, [playback, instrumentIndex]);
+
+  // Generate playback data when source or settings change
+  useEffect(() => {
+    if (!playback || !genSource.trim()) {
+      setPlaybackData(null);
+      setTotalBeats(0);
+      return;
+    }
+
+    const generateData = async () => {
+      setIsLoadingPlayback(true);
+      try {
+        const transposeKey = TRANSPOSE_OPTIONS[transposeIndex]?.label as
+          | 'C'
+          | 'Bb'
+          | 'Eb'
+          | 'F'
+          | undefined;
+
+        console.log('Generating playback data with options:', {
+          clef,
+          octaveShift,
+          instrumentGroup: currentInstrumentGroup,
+          transposeKey,
+        });
+
+        const result = await playback.generatePlaybackData(genSource, {
+          clef,
+          octaveShift,
+          instrumentGroup: currentInstrumentGroup,
+          transposeKey,
+        });
+
+        console.log('Playback data result:', result);
+
+        if (result.status === 'success' && result.data) {
+          console.log('Playback data received:', result.data);
+          console.log('Number of notes:', result.data.notes.length);
+          console.log('First few notes:', result.data.notes.slice(0, 5));
+          setPlaybackData(result.data);
+          const maxBeat = Math.max(
+            ...result.data.notes.map(n => n.startTime + n.duration),
+            0
+          );
+          console.log('Total beats calculated:', maxBeat);
+          setTotalBeats(maxBeat);
+        } else {
+          console.error('Playback data generation failed:', result);
+        }
+      } catch (err) {
+        console.error('Failed to generate playback data:', err);
+      } finally {
+        setIsLoadingPlayback(false);
+      }
+    };
+
+    generateData();
+  }, [playback, genSource, clef, octaveShift, currentInstrumentGroup, transposeIndex]);
+
+  // Playback handlers
+  const handlePlay = useCallback(async () => {
+    console.log('handlePlay called');
+    console.log('playbackEngineRef.current:', playbackEngineRef.current);
+    console.log('playbackData:', playbackData);
+
+    if (!playbackEngineRef.current || !playbackData) {
+      console.error('Cannot play: engine or data missing');
+      return;
+    }
+
+    try {
+      // Ensure instrument is loaded
+      const currentPreset = INSTRUMENT_PRESETS[instrumentIndex];
+      if (currentPreset) {
+        const soundfont = INSTRUMENT_TO_SOUNDFONT[currentPreset.id] || 'acoustic_grand_piano';
+        console.log('Ensuring instrument is loaded:', soundfont);
+        await playbackEngineRef.current.loadInstrument(soundfont);
+      }
+
+      console.log('Starting playback...');
+      await playbackEngineRef.current.play(
+        playbackData,
+        (beat: number) => setCurrentBeat(beat),
+        () => setIsPlaying(false)
+      );
+      setIsPlaying(true);
+      console.log('Playback started successfully');
+    } catch (err: unknown) {
+      console.error('Playback error:', err);
+    }
+  }, [playbackData, instrumentIndex]);
+
+  const handlePause = useCallback(() => {
+    playbackEngineRef.current?.pause();
+    setIsPlaying(false);
+  }, []);
+
+  const handleStop = useCallback(() => {
+    playbackEngineRef.current?.stop();
+    setIsPlaying(false);
+    setCurrentBeat(0);
+  }, []);
+
+  const handleSeek = useCallback(async (beat: number) => {
+    if (!playbackEngineRef.current) return;
+    await playbackEngineRef.current.seek(beat);
+    setCurrentBeat(beat);
+  }, []);
 
   const compileAndRender = useCallback(
     async (
@@ -526,14 +685,66 @@ export function GenApp({ compiler, files, scores }: GenAppProps) {
     <div className='h-full flex flex-col bg-white min-w-0'>
       <div className='p-3 border-b border-border flex items-center justify-between'>
         <h2 className='font-semibold text-sm'>Sheet Music</h2>
-        <button
-          onClick={exportToPdf}
-          className='flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors'
-          title='Export to PDF'
-        >
-          <Download size={14} />
-          Export PDF
-        </button>
+        <div className='flex items-center gap-2'>
+          {/* Playback controls - only show if playback adapter is available */}
+          {playback && playbackData && (
+            <div className='flex items-center gap-1.5 mr-2'>
+              {!isPlaying ? (
+                <button
+                  onClick={handlePlay}
+                  disabled={isLoadingPlayback}
+                  className='flex items-center gap-1 px-2 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed rounded-md transition-colors'
+                  title='Play'
+                >
+                  <Play size={14} />
+                </button>
+              ) : (
+                <button
+                  onClick={handlePause}
+                  className='flex items-center gap-1 px-2 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors'
+                  title='Pause'
+                >
+                  <Pause size={14} />
+                </button>
+              )}
+              <button
+                onClick={handleStop}
+                disabled={!isPlaying && currentBeat === 0}
+                className='flex items-center gap-1 px-2 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed rounded-md transition-colors'
+                title='Stop'
+              >
+                <Square size={14} />
+              </button>
+              <input
+                type='range'
+                min={0}
+                max={totalBeats}
+                step={0.01}
+                value={currentBeat}
+                onChange={e => handleSeek(Number(e.target.value))}
+                className='w-32 h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer'
+                title='Seek'
+              />
+              <span className='text-xs text-gray-500 min-w-12 text-right'>
+                {(() => {
+                  if (!playbackData) return '0:00';
+                  const seconds = (currentBeat / (playbackData.tempo / 60));
+                  const mins = Math.floor(seconds / 60);
+                  const secs = Math.floor(seconds % 60);
+                  return `${mins}:${secs.toString().padStart(2, '0')}`;
+                })()}
+              </span>
+            </div>
+          )}
+          <button
+            onClick={exportToPdf}
+            className='flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors'
+            title='Export to PDF'
+          >
+            <Download size={14} />
+            Export PDF
+          </button>
+        </div>
       </div>
       {/* Toolbar */}
       <div className='px-4 py-2 border-b border-border bg-gray-50 flex items-center gap-4 md:gap-6 flex-wrap'>

@@ -41,3 +41,24 @@ export interface CompilerAdapter {
 export interface FileAdapter {
   savePdf(data: Uint8Array, suggestedName: string): Promise<void>;
 }
+
+export interface PlaybackNote {
+  midiNote: number;
+  startTime: number;  // in beats
+  duration: number;   // in beats
+}
+
+export interface PlaybackData {
+  tempo: number;      // BPM
+  notes: PlaybackNote[];
+}
+
+export interface PlaybackResult {
+  status: 'success' | 'error';
+  data?: PlaybackData;
+  error?: CompileError;
+}
+
+export interface PlaybackAdapter {
+  generatePlaybackData(source: string, options: CompileOptions): Promise<PlaybackResult>;
+}

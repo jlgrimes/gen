@@ -168,6 +168,7 @@ pub struct Metadata {
     pub time_signature: TimeSignature,
     pub key_signature: KeySignature,
     pub written_pitch: Pitch,
+    pub tempo: Option<u16>, // BPM (default 120 if not specified)
 }
 
 /// Raw metadata for YAML deserialization
@@ -179,6 +180,7 @@ pub struct RawMetadata {
     pub time_signature: Option<String>,
     pub key_signature: Option<String>,
     pub written_pitch: Option<String>,
+    pub tempo: Option<u16>,
 }
 
 /// Note names A through G
@@ -238,6 +240,23 @@ impl Duration {
             Duration::Sixteenth => 0.0625,
             Duration::ThirtySecond => 0.03125,
         }
+    }
+
+    /// Returns duration in beats based on time signature
+    /// In 4/4 time: quarter = 1 beat, eighth = 0.5 beats, etc.
+    /// In 6/8 time: eighth = 1 beat, quarter = 2 beats, etc.
+    pub fn as_beats(&self, time_sig: &TimeSignature) -> f64 {
+        // Calculate based on what note type gets the beat
+        // beat_type of 4 means quarter note gets the beat (1/4 of whole note)
+        // beat_type of 8 means eighth note gets the beat (1/8 of whole note)
+
+        // Fraction of a whole note that gets one beat
+        let beat_value = 1.0 / time_sig.beat_type as f64;
+
+        // This note's fraction of a whole note divided by the beat value
+        // Example in 4/4: quarter note (0.25) / beat_value (0.25) = 1.0 beat
+        // Example in 4/4: eighth note (0.125) / beat_value (0.25) = 0.5 beats
+        self.as_fraction() / beat_value
     }
 
     /// MusicXML type name
@@ -302,11 +321,87 @@ pub struct Note {
     pub chord: Option<String>,  // Optional chord symbol to display above this note
 }
 
+impl Note {
+    /// Returns total duration in beats including dotted and tuplet modifiers
+    pub fn total_beats(&self, time_sig: &TimeSignature) -> f64 {
+        let base = self.duration.as_beats(time_sig);
+        let with_dot = if self.dotted { base * 1.5 } else { base };
+
+        match &self.tuplet {
+            Some(tuplet) => with_dot * (tuplet.normal_notes as f64 / tuplet.actual_notes as f64),
+            None => with_dot,
+        }
+    }
+
+    /// Returns MIDI note number (C4 = 60, middle C)
+    /// Takes into account: note name, explicit accidental, octave offset, key signature
+    pub fn to_midi_note(&self, key_sig: &KeySignature, clef_offset: i8) -> u8 {
+        // Base MIDI numbers for each note (C4=60)
+        let base_midi = match self.name {
+            NoteName::C => 60,
+            NoteName::D => 62,
+            NoteName::E => 64,
+            NoteName::F => 65,
+            NoteName::G => 67,
+            NoteName::A => 69,
+            NoteName::B => 71,
+        };
+
+        // Apply key signature accidentals if note doesn't have explicit accidental
+        let accidental_offset = match self.accidental {
+            Accidental::Sharp => 1,
+            Accidental::Flat => -1,
+            Accidental::ForceNatural => 0,
+            Accidental::Natural => {
+                // Follow key signature
+                match key_sig.accidental_for_note(self.name) {
+                    Accidental::Sharp => 1,
+                    Accidental::Flat => -1,
+                    _ => 0,
+                }
+            }
+        };
+
+        // Apply octave offset (^ = +12, _ = -12, etc.)
+        let octave_offset = match self.octave {
+            Octave::DoubleLow => -24,
+            Octave::Low => -12,
+            Octave::Middle => 0,
+            Octave::High => 12,
+            Octave::DoubleHigh => 24,
+        };
+
+        // Apply clef offset (treble vs bass, etc.)
+        let total = base_midi + accidental_offset + octave_offset + (clef_offset * 12);
+
+        // Clamp to valid MIDI range (0-127)
+        total.clamp(0, 127) as u8
+    }
+}
+
 /// An element in a measure: either a note or a rest
 #[derive(Debug, Clone, PartialEq)]
 pub enum Element {
     Note(Note),
     Rest { duration: Duration, dotted: bool, tuplet: Option<TupletInfo>, chord: Option<String> },
+}
+
+impl Element {
+    /// Returns total duration in beats
+    pub fn total_beats(&self, time_sig: &TimeSignature) -> f64 {
+        match self {
+            Element::Note(note) => note.total_beats(time_sig),
+            Element::Rest { duration, dotted, tuplet, .. } => {
+                let base = duration.as_beats(time_sig);
+                let with_dot = if *dotted { base * 1.5 } else { base };
+
+                match tuplet {
+                    Some(t) => with_dot * (t.normal_notes as f64 / t.actual_notes as f64),
+                    None => with_dot,
+                }
+            }
+        }
+    }
 }
 
 /// Ending type for volta brackets (1st/2nd endings)

@@ -139,6 +139,7 @@ impl Parser {
             time_signature,
             key_signature,
             written_pitch,
+            tempo: raw.tempo,
         })
     }
 
