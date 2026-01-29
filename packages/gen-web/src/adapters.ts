@@ -18,7 +18,8 @@ export const wasmCompiler: CompilerAdapter = {
         source,
         options.clef,
         options.octaveShift,
-        options.instrumentGroup ?? undefined
+        options.instrumentGroup ?? undefined,
+        options.transposeKey ?? undefined
       );
       return { status: 'success', xml };
     } catch (e: unknown) {
