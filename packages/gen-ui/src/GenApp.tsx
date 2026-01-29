@@ -27,6 +27,8 @@ import type {
   ModPoints,
 } from './types';
 import { PlaybackEngine } from './lib/playback';
+import { PlaybackHighlightController } from './lib/playbackHighlightController';
+import { NoteheadColorStrategy } from './lib/highlightStrategy';
 import { Play, Pause, Square } from 'lucide-react';
 
 // URL parameter helpers (hash-based routing)
@@ -272,6 +274,10 @@ export function GenApp({ compiler, files, playback, scores }: GenAppProps) {
   const [playbackData, setPlaybackData] = useState<PlaybackData | null>(null);
   const [isLoadingPlayback, setIsLoadingPlayback] = useState(false);
 
+  // Highlight controller for visual feedback during playback
+  const highlightControllerRef = useRef<PlaybackHighlightController | null>(null);
+  const [osmdRenderCount, setOsmdRenderCount] = useState(0);
+
   // Get current instrument group from preset
   const currentInstrumentGroup = useMemo((): InstrumentGroup | undefined => {
     if (instrumentIndex >= INSTRUMENT_PRESETS.length) return undefined;
@@ -452,7 +458,10 @@ export function GenApp({ compiler, files, playback, scores }: GenAppProps) {
 
       await playbackEngineRef.current.play(
         playbackData,
-        (beat: number) => setCurrentBeat(beat),
+        (beat: number) => {
+          setCurrentBeat(beat);
+          highlightControllerRef.current?.updateHighlight(beat);
+        },
         () => setIsPlaying(false)
       );
       setIsPlaying(true);
@@ -463,11 +472,13 @@ export function GenApp({ compiler, files, playback, scores }: GenAppProps) {
 
   const handlePause = useCallback(() => {
     playbackEngineRef.current?.pause();
+    highlightControllerRef.current?.reset();
     setIsPlaying(false);
   }, []);
 
   const handleStop = useCallback(() => {
     playbackEngineRef.current?.stop();
+    highlightControllerRef.current?.reset();
     setIsPlaying(false);
     setCurrentBeat(0);
   }, []);
@@ -550,6 +561,7 @@ export function GenApp({ compiler, files, playback, scores }: GenAppProps) {
           // Scale down the notation to fit more measures per page
           osmdRef.current.Zoom = zoom;
           osmdRef.current.render();
+          setOsmdRenderCount(prev => prev + 1);
         }
       } catch (e) {
         setError({ message: String(e), line: null, column: null });
@@ -594,14 +606,42 @@ export function GenApp({ compiler, files, playback, scores }: GenAppProps) {
     if (osmdRef.current) {
       osmdRef.current.Zoom = zoom;
       osmdRef.current.render();
+      setOsmdRenderCount(prev => prev + 1);
     }
   }, [zoom]);
+
+  // Initialize highlight controller when playback data and OSMD are ready
+  useEffect(() => {
+    if (!playbackData || !osmdRef.current || osmdRenderCount === 0) {
+      highlightControllerRef.current = null;
+      return;
+    }
+
+    try {
+      console.log('Initializing PlaybackHighlightController...');
+      const strategy = new NoteheadColorStrategy('#007bff');
+      highlightControllerRef.current = new PlaybackHighlightController(
+        playbackData,
+        osmdRef.current,
+        strategy
+      );
+      console.log('PlaybackHighlightController initialized successfully');
+    } catch (err) {
+      console.error('Failed to initialize highlight controller:', err);
+      highlightControllerRef.current = null;
+    }
+
+    return () => {
+      highlightControllerRef.current?.reset();
+    };
+  }, [playbackData, osmdRenderCount]);
 
   const handleScoreSelect = useCallback((score: ScoreInfo) => {
     setGenSource(score.content);
     setSelectedScore(score.name);
     // Reset playback state when changing songs
     playbackEngineRef.current?.stop();
+    highlightControllerRef.current?.reset();
     setIsPlaying(false);
     setCurrentBeat(0);
   }, []);

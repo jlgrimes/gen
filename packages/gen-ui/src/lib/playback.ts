@@ -1,15 +1,5 @@
 import Soundfont from 'soundfont-player';
-
-export interface PlaybackNote {
-  midiNote: number;
-  startTime: number;  // in beats
-  duration: number;   // in beats
-}
-
-export interface PlaybackData {
-  tempo: number;      // BPM
-  notes: PlaybackNote[];
-}
+import type { PlaybackData } from '../types';
 
 export type PlaybackState = 'stopped' | 'playing' | 'paused';
 
@@ -23,7 +13,8 @@ function midiToNoteName(midi: number): string {
 
 export class PlaybackEngine {
   private audioContext: AudioContext;
-  private instrument: any; // Soundfont.Player
+  private instrument: any; // Soundfont.Player for melody
+  private pianoInstrument: any; // Soundfont.Player for chords (always piano)
   private instrumentName: string | null = null;
   private startTime: number = 0;
   private pausedAt: number = 0;
@@ -47,11 +38,24 @@ export class PlaybackEngine {
 
     this.instrumentName = instrumentName;
     try {
+      // Load melody instrument
       this.instrument = await Soundfont.instrument(
         this.audioContext,
-        instrumentName,
+        instrumentName as any,
         { soundfont: 'MusyngKite' } // High-quality soundfont from CDN
       );
+
+      // Always load piano for chords (if not already the melody instrument)
+      if (instrumentName !== 'acoustic_grand_piano' && !this.pianoInstrument) {
+        this.pianoInstrument = await Soundfont.instrument(
+          this.audioContext,
+          'acoustic_grand_piano' as any,
+          { soundfont: 'MusyngKite' }
+        );
+      } else if (instrumentName === 'acoustic_grand_piano') {
+        // If melody is piano, use same instrument for chords
+        this.pianoInstrument = this.instrument;
+      }
     } catch (err) {
       console.error('Failed to load instrument:', err);
       throw err;
@@ -67,11 +71,16 @@ export class PlaybackEngine {
     if (this.audioContext.state === 'closed') {
       this.audioContext = new AudioContext();
       this.instrument = null; // Need to reload instrument with new context
+      this.pianoInstrument = null;
       this.instrumentName = null;
     }
 
     if (!this.instrument) {
       throw new Error('Instrument not loaded');
+    }
+
+    if (!this.pianoInstrument) {
+      throw new Error('Piano instrument not loaded');
     }
 
     // Resume audio context if suspended (browser autoplay policy)
@@ -92,12 +101,15 @@ export class PlaybackEngine {
     const beatsPerSecond = data.tempo / 60;
 
     // Calculate total duration
-    this.totalBeats = Math.max(
-      ...data.notes.map(n => n.startTime + n.duration),
-      0
-    );
+    const maxNoteEnd = data.notes.length > 0
+      ? Math.max(...data.notes.map(n => n.startTime + n.duration))
+      : 0;
+    const maxChordEnd = data.chords.length > 0
+      ? Math.max(...data.chords.map(c => c.startTime + c.duration))
+      : 0;
+    this.totalBeats = Math.max(maxNoteEnd, maxChordEnd, 0);
 
-    // Schedule all notes
+    // Schedule all melody notes
     // Add small buffer (50ms) to ensure first note plays
     const startBuffer = 0.05;
     for (const note of data.notes) {
@@ -119,12 +131,37 @@ export class PlaybackEngine {
       }
     }
 
+    // Schedule all chord notes (always on piano)
+    for (const chord of data.chords) {
+      const timeInSeconds = chord.startTime / beatsPerSecond;
+      const durationInSeconds = chord.duration / beatsPerSecond;
+      const absoluteTime = this.audioContext.currentTime + startBuffer + timeInSeconds - this.pausedAt;
+
+      // Only schedule chords that haven't passed yet
+      if (absoluteTime > this.audioContext.currentTime) {
+        // Play each note in the chord
+        for (const midiNote of chord.midiNotes) {
+          const noteName = midiToNoteName(midiNote);
+          this.pianoInstrument.play(
+            noteName,
+            absoluteTime,
+            {
+              duration: durationInSeconds,
+              gain: 0.6  // Slightly softer for accompaniment
+            }
+          );
+        }
+      }
+    }
+
     // Progress tracking
     const updateProgress = () => {
       if (this.state !== 'playing') return;
 
       const elapsed = this.audioContext.currentTime - this.startTime;
-      this.currentBeat = elapsed * beatsPerSecond;
+      // Subtract the start buffer to sync with audio scheduling
+      const adjustedElapsed = Math.max(0, elapsed - startBuffer);
+      this.currentBeat = adjustedElapsed * beatsPerSecond;
 
       if (this.onProgressCallback) {
         this.onProgressCallback(this.currentBeat);
@@ -155,6 +192,9 @@ export class PlaybackEngine {
 
     // Stop all scheduled notes
     this.instrument?.stop();
+    if (this.pianoInstrument && this.pianoInstrument !== this.instrument) {
+      this.pianoInstrument.stop();
+    }
   }
 
   stop(): void {
@@ -169,6 +209,9 @@ export class PlaybackEngine {
 
     // Stop all scheduled notes
     this.instrument?.stop();
+    if (this.pianoInstrument && this.pianoInstrument !== this.instrument) {
+      this.pianoInstrument.stop();
+    }
   }
 
   async seek(beat: number): Promise<void> {

@@ -43,14 +43,22 @@ export interface FileAdapter {
 }
 
 export interface PlaybackNote {
-  midiNote: number;
-  startTime: number;  // in beats
-  duration: number;   // in beats
+  midiNote: number;         // Concert pitch (for playback)
+  displayMidiNote: number;  // Display pitch (transposed, matches sheet music)
+  startTime: number;        // in beats
+  duration: number;         // in beats
+}
+
+export interface PlaybackChord {
+  midiNotes: number[];  // multiple MIDI notes played simultaneously
+  startTime: number;    // in beats
+  duration: number;     // in beats
 }
 
 export interface PlaybackData {
   tempo: number;      // BPM
   notes: PlaybackNote[];
+  chords: PlaybackChord[];  // chord accompaniment (always piano)
 }
 
 export interface PlaybackResult {

@@ -14,4 +14,9 @@ export type {
   CompileError,
   CompileOptions,
   ScoreInfo,
+  PlaybackAdapter,
+  PlaybackResult,
+  PlaybackData,
+  PlaybackNote,
+  PlaybackChord,
 } from './types';

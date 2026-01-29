@@ -25,7 +25,7 @@ describe('tauriCompiler', () => {
     const options: CompileOptions = {
       clef: 'treble',
       octaveShift: 0,
-      instrumentGroup: 'Bb',
+      instrumentGroup: 'bb',
       transposeKey: 'Bb',
     };
 
@@ -198,7 +198,7 @@ describe('tauriCompiler', () => {
     const options: CompileOptions = {
       clef: 'bass',
       octaveShift: -1,
-      instrumentGroup: 'Eb',
+      instrumentGroup: 'eb',
       transposeKey: 'F',
     };
 
@@ -227,7 +227,7 @@ describe('tauriCompiler', () => {
     const options: CompileOptions = {
       clef: 'treble',
       octaveShift: 0,
-      instrumentGroup: 'Eb',
+      instrumentGroup: 'eb',
     };
 
     await tauriCompiler.compile(source, options);
@@ -251,7 +251,7 @@ describe('tauriCompiler', () => {
     vi.mocked(invoke).mockResolvedValue(mockResult);
 
     const source = '---\ntitle: Test\n---\nC D E F';
-    const clefs: Array<'treble' | 'bass' | 'alto' | 'tenor'> = ['treble', 'bass', 'alto', 'tenor'];
+    const clefs: Array<'treble' | 'bass'> = ['treble', 'bass'];
 
     for (const clef of clefs) {
       vi.clearAllMocks();

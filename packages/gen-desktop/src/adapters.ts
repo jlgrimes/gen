@@ -1,10 +1,17 @@
 import { invoke } from '@tauri-apps/api/core';
 import { save } from '@tauri-apps/plugin-dialog';
 import { writeFile } from '@tauri-apps/plugin-fs';
-import type { CompilerAdapter, FileAdapter, CompileResult, PlaybackAdapter, PlaybackResult } from 'gen-ui';
+import type {
+  CompilerAdapter,
+  FileAdapter,
+  CompileResult,
+  CompileOptions,
+  PlaybackAdapter,
+  PlaybackResult
+} from 'gen-ui';
 
 export const tauriCompiler: CompilerAdapter = {
-  async compile(source, options) {
+  async compile(source: string, options: CompileOptions): Promise<CompileResult> {
     return invoke<CompileResult>('compile_gen_with_mod_points', {
       source,
       clef: options.clef,
@@ -16,7 +23,7 @@ export const tauriCompiler: CompilerAdapter = {
 };
 
 export const tauriFiles: FileAdapter = {
-  async savePdf(data, suggestedName) {
+  async savePdf(data: Uint8Array, suggestedName: string): Promise<void> {
     const filePath = await save({
       defaultPath: suggestedName,
       filters: [{ name: 'PDF', extensions: ['pdf'] }],
@@ -28,7 +35,7 @@ export const tauriFiles: FileAdapter = {
 };
 
 export const tauriPlayback: PlaybackAdapter = {
-  async generatePlaybackData(source, options) {
+  async generatePlaybackData(source: string, options: CompileOptions): Promise<PlaybackResult> {
     return invoke<PlaybackResult>('generate_playback_data', {
       source,
       clef: options.clef,

@@ -61,9 +61,19 @@ pub fn compile_with_mod_points(
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PlaybackNote {
-    pub midi_note: u8,      // MIDI note number (0-127, C4 = 60)
-    pub start_time: f64,    // Time in beats from start
-    pub duration: f64,      // Duration in beats
+    pub midi_note: u8,          // Concert pitch MIDI note (for playback)
+    pub display_midi_note: u8,  // Display MIDI note (transposed, matches sheet music)
+    pub start_time: f64,        // Time in beats from start
+    pub duration: f64,          // Duration in beats
+}
+
+/// Playback data for a chord (multiple notes played simultaneously)
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlaybackChord {
+    pub midi_notes: Vec<u8>, // MIDI note numbers for chord
+    pub start_time: f64,     // Time in beats from start
+    pub duration: f64,       // Duration in beats
 }
 
 /// Playback data for an entire score
@@ -72,6 +82,82 @@ pub struct PlaybackNote {
 pub struct PlaybackData {
     pub tempo: u16,           // BPM
     pub notes: Vec<PlaybackNote>,
+    pub chords: Vec<PlaybackChord>, // Chord accompaniment (always piano)
+}
+
+/// Parse a chord symbol into MIDI notes
+/// Returns a Vec of MIDI note numbers relative to C4 (60)
+fn parse_chord_symbol(chord_symbol: &str) -> Vec<u8> {
+    // Extract root note and chord quality
+    let chars: Vec<char> = chord_symbol.chars().collect();
+    if chars.is_empty() {
+        return vec![];
+    }
+
+    // Parse root note
+    let root_name = chars[0];
+    let mut idx = 1;
+
+    // Check for accidental
+    let accidental = if idx < chars.len() && (chars[idx] == '#' || chars[idx] == 'b') {
+        idx += 1;
+        if chars[idx - 1] == '#' { 1 } else { -1 }
+    } else {
+        0
+    };
+
+    // Base MIDI note for root (C4 = 60, but we'll use C3 = 48 for chords)
+    let base_midi = match root_name {
+        'C' => 48,
+        'D' => 50,
+        'E' => 52,
+        'F' => 53,
+        'G' => 55,
+        'A' => 57,
+        'B' => 59,
+        _ => return vec![],
+    };
+    let root = (base_midi + accidental) as u8;
+
+    // Parse chord quality from remaining string
+    let quality = &chord_symbol[idx..];
+
+    // Return intervals relative to root
+    // Using common jazz/pop chord voicings
+    match quality {
+        // Major triads
+        "" | "maj" | "M" => vec![root, root + 4, root + 7],
+
+        // Minor triads
+        "m" | "min" | "-" => vec![root, root + 3, root + 7],
+
+        // Dominant 7th
+        "7" => vec![root, root + 4, root + 7, root + 10],
+
+        // Major 7th
+        "maj7" | "M7" => vec![root, root + 4, root + 7, root + 11],
+
+        // Minor 7th
+        "m7" | "min7" | "-7" => vec![root, root + 3, root + 7, root + 10],
+
+        // Diminished
+        "dim" | "°" => vec![root, root + 3, root + 6],
+
+        // Augmented
+        "aug" | "+" => vec![root, root + 4, root + 8],
+
+        // Sus chords
+        "sus4" => vec![root, root + 5, root + 7],
+        "sus2" => vec![root, root + 2, root + 7],
+
+        // Extended chords
+        "9" => vec![root, root + 4, root + 7, root + 10, root + 14],
+        "maj9" | "M9" => vec![root, root + 4, root + 7, root + 11, root + 14],
+        "m9" | "min9" => vec![root, root + 3, root + 7, root + 10, root + 14],
+
+        // Default to major if unknown
+        _ => vec![root, root + 4, root + 7],
+    }
 }
 
 /// Generate playback data from a Gen source string
@@ -95,6 +181,7 @@ pub fn generate_playback_data(
 
     let mut current_time = 0.0;
     let mut notes = Vec::new();
+    let mut chords = Vec::new();
     let mut current_key = score.metadata.key_signature.clone();
     let mut pending_tie: Option<(usize, f64)> = None; // (note index, accumulated duration)
 
@@ -109,11 +196,24 @@ pub fn generate_playback_data(
 
             match element {
                 Element::Note(note) => {
+                    // Handle chord symbol if present
+                    if let Some(chord_symbol) = &note.chord {
+                        let chord_notes = parse_chord_symbol(chord_symbol);
+                        if !chord_notes.is_empty() {
+                            chords.push(PlaybackChord {
+                                midi_notes: chord_notes,
+                                start_time: current_time,
+                                duration,
+                            });
+                        }
+                    }
+
                     if note.tie_start && !note.tie_stop {
                         // Start of a tied group - create note and track it
                         let note_idx = notes.len();
                         notes.push(PlaybackNote {
-                            midi_note: note.to_midi_note(&current_key, total_offset),
+                            midi_note: note.to_midi_note(&current_key, 0), // Concert pitch (no offset)
+                            display_midi_note: note.to_midi_note(&current_key, total_offset), // Display pitch (with offset)
                             start_time: current_time,
                             duration,
                         });
@@ -133,14 +233,26 @@ pub fn generate_playback_data(
                     } else {
                         // Regular note (not tied)
                         notes.push(PlaybackNote {
-                            midi_note: note.to_midi_note(&current_key, total_offset),
+                            midi_note: note.to_midi_note(&current_key, 0), // Concert pitch (no offset)
+                            display_midi_note: note.to_midi_note(&current_key, total_offset), // Display pitch (with offset)
                             start_time: current_time,
                             duration,
                         });
                         pending_tie = None;
                     }
                 }
-                Element::Rest { .. } => {
+                Element::Rest { chord, .. } => {
+                    // Handle chord symbol on rest if present
+                    if let Some(chord_symbol) = chord {
+                        let chord_notes = parse_chord_symbol(chord_symbol);
+                        if !chord_notes.is_empty() {
+                            chords.push(PlaybackChord {
+                                midi_notes: chord_notes,
+                                start_time: current_time,
+                                duration,
+                            });
+                        }
+                    }
                     // Rests just advance time
                     pending_tie = None;
                 }
@@ -153,6 +265,7 @@ pub fn generate_playback_data(
     Ok(PlaybackData {
         tempo: score.metadata.tempo.unwrap_or(120),
         notes,
+        chords,
     })
 }
 
@@ -249,6 +362,49 @@ dC /C /C C
     }
 
     #[test]
+    fn test_playback_ode_to_joy() {
+        let source = r#"---
+title: Ode to Joy
+tempo: 160
+time-signature: 4/4
+---
+E E F G
+G F E D
+"#;
+        let result = generate_playback_data(source, "treble", 0, None);
+        assert!(result.is_ok());
+        let data = result.unwrap();
+
+        // First 8 notes: E E F G G F E D
+        assert_eq!(data.notes.len(), 8);
+
+        // E4=64, F4=65, G4=67, D4=62
+        assert_eq!(data.notes[0].midi_note, 64); // E4
+        assert_eq!(data.notes[0].start_time, 0.0);
+
+        assert_eq!(data.notes[1].midi_note, 64); // E4
+        assert_eq!(data.notes[1].start_time, 1.0);
+
+        assert_eq!(data.notes[2].midi_note, 65); // F4
+        assert_eq!(data.notes[2].start_time, 2.0);
+
+        assert_eq!(data.notes[3].midi_note, 67); // G4
+        assert_eq!(data.notes[3].start_time, 3.0);
+
+        assert_eq!(data.notes[4].midi_note, 67); // G4
+        assert_eq!(data.notes[4].start_time, 4.0);
+
+        assert_eq!(data.notes[5].midi_note, 65); // F4
+        assert_eq!(data.notes[5].start_time, 5.0);
+
+        assert_eq!(data.notes[6].midi_note, 64); // E4
+        assert_eq!(data.notes[6].start_time, 6.0);
+
+        assert_eq!(data.notes[7].midi_note, 62); // D4
+        assert_eq!(data.notes[7].start_time, 7.0);
+    }
+
+    #[test]
     fn test_playback_with_rests() {
         let source = r#"---
 tempo: 120
@@ -317,6 +473,101 @@ F G A
         assert_eq!(data.notes[0].midi_note, 66); // F#4
         assert_eq!(data.notes[1].midi_note, 67); // G4
         assert_eq!(data.notes[2].midi_note, 69); // A4
+    }
+
+    #[test]
+    fn test_playback_with_chords() {
+        let source = r#"---
+tempo: 120
+---
+C D E F
+"#;
+        let result = generate_playback_data(source, "treble", 0, None);
+        assert!(result.is_ok());
+        let data = result.unwrap();
+
+        // Should have melody notes but no chords (no chord symbols in source)
+        assert_eq!(data.notes.len(), 4);
+        assert_eq!(data.chords.len(), 0);
+    }
+
+    #[test]
+    fn test_playback_chord_extraction() {
+        let source = r#"---
+tempo: 120
+---
+@ch:C C @ch:G D @ch:Am E @ch:F F
+"#;
+        let result = generate_playback_data(source, "treble", 0, None);
+        assert!(result.is_ok());
+        let data = result.unwrap();
+
+        // Should have 4 melody notes and 4 chords
+        assert_eq!(data.notes.len(), 4);
+        assert_eq!(data.chords.len(), 4);
+
+        // Verify first chord (C major: C3, E3, G3)
+        assert_eq!(data.chords[0].midi_notes, vec![48, 52, 55]);
+        assert_eq!(data.chords[0].start_time, 0.0);
+        assert_eq!(data.chords[0].duration, 1.0); // Quarter note
+
+        // Verify second chord (G major: G3, B3, D4)
+        assert_eq!(data.chords[1].midi_notes, vec![55, 59, 62]);
+        assert_eq!(data.chords[1].start_time, 1.0);
+
+        // Verify third chord (A minor: A3, C4, E4)
+        assert_eq!(data.chords[2].midi_notes, vec![57, 60, 64]);
+        assert_eq!(data.chords[2].start_time, 2.0);
+
+        // Verify fourth chord (F major: F3, A3, C4)
+        assert_eq!(data.chords[3].midi_notes, vec![53, 57, 60]);
+        assert_eq!(data.chords[3].start_time, 3.0);
+    }
+
+    #[test]
+    fn test_playback_chord_on_rest() {
+        let source = r#"---
+tempo: 120
+---
+@ch:C $ C C C
+"#;
+        let result = generate_playback_data(source, "treble", 0, None);
+        assert!(result.is_ok());
+        let data = result.unwrap();
+
+        // Should have 3 melody notes and 1 chord (on the rest)
+        assert_eq!(data.notes.len(), 3);
+        assert_eq!(data.chords.len(), 1);
+
+        // Chord should be at start (during the rest)
+        assert_eq!(data.chords[0].start_time, 0.0);
+        assert_eq!(data.chords[0].midi_notes, vec![48, 52, 55]); // C major
+    }
+
+    #[test]
+    fn test_chord_parsing() {
+        // Test major chord
+        let c_major = parse_chord_symbol("C");
+        assert_eq!(c_major, vec![48, 52, 55]); // C3, E3, G3
+
+        // Test minor chord
+        let d_minor = parse_chord_symbol("Dm");
+        assert_eq!(d_minor, vec![50, 53, 57]); // D3, F3, A3
+
+        // Test dominant 7th
+        let g7 = parse_chord_symbol("G7");
+        assert_eq!(g7, vec![55, 59, 62, 65]); // G3, B3, D4, F4
+
+        // Test major 7th
+        let cmaj7 = parse_chord_symbol("Cmaj7");
+        assert_eq!(cmaj7, vec![48, 52, 55, 59]); // C3, E3, G3, B3
+
+        // Test with accidentals
+        let f_sharp_major = parse_chord_symbol("F#");
+        assert_eq!(f_sharp_major, vec![54, 58, 61]); // F#3, A#3, C#4
+
+        let b_flat_minor = parse_chord_symbol("Bbm");
+        assert_eq!(b_flat_minor, vec![58, 61, 65]); // Bb3, Db4, F4
     }
 
     // Compilation tests
