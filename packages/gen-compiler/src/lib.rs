@@ -96,6 +96,7 @@ pub fn generate_playback_data(
     let mut current_time = 0.0;
     let mut notes = Vec::new();
     let mut current_key = score.metadata.key_signature.clone();
+    let mut pending_tie: Option<(usize, f64)> = None; // (note index, accumulated duration)
 
     for measure in &score.measures {
         // Check for key changes
@@ -108,18 +109,40 @@ pub fn generate_playback_data(
 
             match element {
                 Element::Note(note) => {
-                    // Skip tied notes that are continuations (tie_stop without tie_start)
-                    // Only play the first note of a tied group
-                    if !note.tie_stop || note.tie_start {
+                    if note.tie_start && !note.tie_stop {
+                        // Start of a tied group - create note and track it
+                        let note_idx = notes.len();
                         notes.push(PlaybackNote {
                             midi_note: note.to_midi_note(&current_key, total_offset),
                             start_time: current_time,
                             duration,
                         });
+                        pending_tie = Some((note_idx, duration));
+                    } else if note.tie_stop && note.tie_start {
+                        // Middle of a tied group - extend the first note's duration
+                        if let Some((idx, accumulated)) = pending_tie {
+                            notes[idx].duration = accumulated + duration;
+                            pending_tie = Some((idx, accumulated + duration));
+                        }
+                    } else if note.tie_stop && !note.tie_start {
+                        // End of a tied group - extend the first note's duration
+                        if let Some((idx, accumulated)) = pending_tie {
+                            notes[idx].duration = accumulated + duration;
+                            pending_tie = None;
+                        }
+                    } else {
+                        // Regular note (not tied)
+                        notes.push(PlaybackNote {
+                            midi_note: note.to_midi_note(&current_key, total_offset),
+                            start_time: current_time,
+                            duration,
+                        });
+                        pending_tie = None;
                     }
                 }
                 Element::Rest { .. } => {
                     // Rests just advance time
+                    pending_tie = None;
                 }
             }
 
