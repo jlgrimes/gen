@@ -227,12 +227,32 @@ pub fn generate_playback_data(
         }
     }
 
-    // Convert tempo to quarter note BPM for MIDI playback
-    let tempo_bpm = if let Some(ref tempo) = score.metadata.tempo {
-        tempo.to_quarter_note_bpm() as u16
+    // Get tempo and calculate beat conversion
+    // If tempo specifies a rhythm (e.g., "*88" = dotted quarter), use that as the beat unit
+    // Otherwise default to quarter note
+    let (tempo_bpm, tempo_beat_duration) = if let Some(ref tempo) = score.metadata.tempo {
+        let beat_duration = tempo.duration.as_beats(&score.metadata.time_signature);
+        let with_dot = if tempo.dotted { beat_duration * 1.5 } else { beat_duration };
+        (tempo.bpm, with_dot)
     } else {
-        120 // Default to 120 quarter notes per minute
+        // Default: 120 quarter-note BPM
+        let quarter_duration = crate::ast::Duration::Quarter.as_beats(&score.metadata.time_signature);
+        (120, quarter_duration)
     };
+
+    // Convert all startTime and duration from time-signature beats to tempo's beat unit
+    // For example: tempo "*88" in 12/8 has tempo_beat_duration = 3 (dotted quarter = 3 eighths)
+    // So we divide all times by 3 to convert from eighth-note beats to dotted-quarter beats
+    for note in &mut notes {
+        note.start_time /= tempo_beat_duration;
+        note.duration /= tempo_beat_duration;
+        note.beat_in_measure /= tempo_beat_duration;
+    }
+
+    for chord in &mut chords {
+        chord.start_time /= tempo_beat_duration;
+        chord.duration /= tempo_beat_duration;
+    }
 
     Ok(PlaybackData {
         tempo: tempo_bpm,

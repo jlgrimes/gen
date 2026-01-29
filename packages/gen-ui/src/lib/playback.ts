@@ -98,7 +98,9 @@ export class PlaybackEngine {
     this.onProgressCallback = onProgress;
     this.onEndCallback = onEnd;
     this.startTime = this.audioContext.currentTime - this.pausedAt;
+    console.log('[Playback] Tempo from backend:', data.tempo, 'BPM');
     const beatsPerSecond = data.tempo / 60;
+    console.log('[Playback] Beats per second:', beatsPerSecond);
 
     // Calculate total duration
     const maxNoteEnd = data.notes.length > 0
