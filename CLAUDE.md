@@ -78,11 +78,21 @@ title: Song Title
 composer: Composer Name
 time-signature: 4/4
 key-signature: G
+tempo: 120
 ---
 
 C D E F
 G A B C^
 ```
+
+**Tempo field:**
+The `tempo` field accepts BPM with optional rhythm modifiers:
+- `tempo: 120` - Quarter note at 120 BPM (default)
+- `tempo: d160` - Half note at 160 BPM (quarter = 320 BPM)
+- `tempo: /180` - Eighth note at 180 BPM (quarter = 90 BPM)
+- `tempo: o60` - Whole note at 60 BPM (quarter = 240 BPM)
+- `tempo: "*120"` - Dotted quarter at 120 BPM (quarter = 180 BPM, must quote)
+- `tempo: "d*80"` - Dotted half at 80 BPM (quarter = 240 BPM, must quote)
 
 **Key signatures support both major and minor keys:**
 - Major keys: `C`, `G`, `D`, `A`, `E`, `B`, `F#`, `C#`, `F`, `Bb`, `Eb`, `Ab`, `Db`, `Gb`, `Cb`
