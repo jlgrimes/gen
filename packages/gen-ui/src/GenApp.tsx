@@ -386,6 +386,13 @@ export function GenApp({ compiler, files, playback, scores }: GenAppProps) {
 
   // Generate playback data when source or settings change
   useEffect(() => {
+    // Stop playback when source or settings change
+    if (playbackEngineRef.current) {
+      playbackEngineRef.current.stop();
+      setIsPlaying(false);
+      setCurrentBeat(0);
+    }
+
     if (!playback || !genSource.trim()) {
       setPlaybackData(null);
       setTotalBeats(0);

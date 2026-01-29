@@ -160,6 +160,166 @@ pub fn generate_playback_data(
 mod integration_tests {
     use super::*;
 
+    // Playback tests
+    #[test]
+    fn test_playback_basic_timing() {
+        let source = r#"---
+tempo: 120
+---
+C D E F
+"#;
+        let result = generate_playback_data(source, "treble", 0, None);
+        assert!(result.is_ok());
+        let data = result.unwrap();
+
+        assert_eq!(data.tempo, 120);
+        assert_eq!(data.notes.len(), 4);
+
+        // Each quarter note should be 1 beat
+        assert_eq!(data.notes[0].start_time, 0.0);
+        assert_eq!(data.notes[0].duration, 1.0);
+        assert_eq!(data.notes[1].start_time, 1.0);
+        assert_eq!(data.notes[1].duration, 1.0);
+        assert_eq!(data.notes[2].start_time, 2.0);
+        assert_eq!(data.notes[3].start_time, 3.0);
+    }
+
+    #[test]
+    fn test_playback_midi_notes() {
+        let source = r#"---
+key-signature: C
+---
+C D E F G A B C^
+"#;
+        let result = generate_playback_data(source, "treble", 0, None);
+        assert!(result.is_ok());
+        let data = result.unwrap();
+
+        // C4=60, D4=62, E4=64, F4=65, G4=67, A4=69, B4=71, C5=72
+        assert_eq!(data.notes[0].midi_note, 60); // C4
+        assert_eq!(data.notes[1].midi_note, 62); // D4
+        assert_eq!(data.notes[2].midi_note, 64); // E4
+        assert_eq!(data.notes[3].midi_note, 65); // F4
+        assert_eq!(data.notes[4].midi_note, 67); // G4
+        assert_eq!(data.notes[5].midi_note, 69); // A4
+        assert_eq!(data.notes[6].midi_note, 71); // B4
+        assert_eq!(data.notes[7].midi_note, 72); // C5
+    }
+
+    #[test]
+    fn test_playback_with_ties() {
+        let source = r#"---
+tempo: 120
+---
+C- C d$
+"#;
+        let result = generate_playback_data(source, "treble", 0, None);
+        assert!(result.is_ok());
+        let data = result.unwrap();
+
+        // Should have 2 notes: C (tied, duration 2 beats) and half rest
+        assert_eq!(data.notes.len(), 1);
+        assert_eq!(data.notes[0].midi_note, 60); // C4
+        assert_eq!(data.notes[0].start_time, 0.0);
+        assert_eq!(data.notes[0].duration, 2.0); // Two quarter notes tied
+    }
+
+    #[test]
+    fn test_playback_different_rhythms() {
+        let source = r#"---
+tempo: 120
+---
+dC /C /C C
+"#;
+        let result = generate_playback_data(source, "treble", 0, None);
+        assert!(result.is_ok());
+        let data = result.unwrap();
+
+        assert_eq!(data.notes.len(), 4);
+        assert_eq!(data.notes[0].duration, 2.0); // Half note
+        assert_eq!(data.notes[1].duration, 0.5); // Eighth note
+        assert_eq!(data.notes[2].duration, 0.5); // Eighth note
+        assert_eq!(data.notes[3].duration, 1.0); // Quarter note
+
+        // Check timing
+        assert_eq!(data.notes[0].start_time, 0.0);
+        assert_eq!(data.notes[1].start_time, 2.0);
+        assert_eq!(data.notes[2].start_time, 2.5);
+        assert_eq!(data.notes[3].start_time, 3.0);
+    }
+
+    #[test]
+    fn test_playback_with_rests() {
+        let source = r#"---
+tempo: 120
+---
+C $ C $
+"#;
+        let result = generate_playback_data(source, "treble", 0, None);
+        assert!(result.is_ok());
+        let data = result.unwrap();
+
+        // Should have 2 notes (rests don't produce notes)
+        assert_eq!(data.notes.len(), 2);
+        assert_eq!(data.notes[0].start_time, 0.0);
+        assert_eq!(data.notes[1].start_time, 2.0); // After quarter rest
+    }
+
+    #[test]
+    fn test_playback_default_tempo() {
+        let source = "C D E F";
+        let result = generate_playback_data(source, "treble", 0, None);
+        assert!(result.is_ok());
+        let data = result.unwrap();
+
+        // Should default to 120 BPM
+        assert_eq!(data.tempo, 120);
+    }
+
+    #[test]
+    fn test_playback_bass_clef() {
+        let source = "C D E";
+        let result = generate_playback_data(source, "bass", 0, None);
+        assert!(result.is_ok());
+        let data = result.unwrap();
+
+        // Bass clef is 2 octaves lower: C2=36, D2=38, E2=40
+        assert_eq!(data.notes[0].midi_note, 36);
+        assert_eq!(data.notes[1].midi_note, 38);
+        assert_eq!(data.notes[2].midi_note, 40);
+    }
+
+    #[test]
+    fn test_playback_octave_shift() {
+        let source = "C D E";
+        let result = generate_playback_data(source, "treble", 1, None);
+        assert!(result.is_ok());
+        let data = result.unwrap();
+
+        // C5=72, D5=74, E5=76 (one octave up)
+        assert_eq!(data.notes[0].midi_note, 72);
+        assert_eq!(data.notes[1].midi_note, 74);
+        assert_eq!(data.notes[2].midi_note, 76);
+    }
+
+    #[test]
+    fn test_playback_key_signature() {
+        let source = r#"---
+key-signature: G
+---
+F G A
+"#;
+        let result = generate_playback_data(source, "treble", 0, None);
+        assert!(result.is_ok());
+        let data = result.unwrap();
+
+        // In G major, F is F# (66), G is natural (67), A is natural (69)
+        assert_eq!(data.notes[0].midi_note, 66); // F#4
+        assert_eq!(data.notes[1].midi_note, 67); // G4
+        assert_eq!(data.notes[2].midi_note, 69); // A4
+    }
+
+    // Compilation tests
     #[test]
     fn test_compile_with_rhythm_groupings() {
         // 8 sixteenth notes = 2 beats, + 2 quarter notes = 4 beats total
