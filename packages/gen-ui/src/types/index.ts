@@ -56,8 +56,9 @@ export interface PlaybackNote {
 
 export interface PlaybackChord {
   midiNotes: number[];  // multiple MIDI notes played simultaneously
-  startTime: number;    // in beats
+  startTime: number;    // in beats (for audio playback)
   duration: number;     // in beats
+  osmdTimestamp: number; // OSMD's display timestamp (for visual highlighting)
 }
 
 export interface PlaybackData {

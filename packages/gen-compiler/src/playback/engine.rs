@@ -167,10 +167,12 @@ pub fn generate_playback_data(
                         if !chord_notes.is_empty() {
                             // Use chord's own duration (defaults to whole note)
                             let chord_duration = chord_ann.duration_beats(&score.metadata.time_signature);
+                            let osmd_quarter_time = osmd_time * osmd_to_quarter_multiplier;
                             chords.push(PlaybackChord {
                                 midi_notes: chord_notes,
                                 start_time: current_time,
                                 duration: chord_duration,
+                                osmd_timestamp: osmd_quarter_time,
                             });
                         }
                     }
@@ -235,10 +237,12 @@ pub fn generate_playback_data(
                         if !chord_notes.is_empty() {
                             // Use chord's own duration (defaults to whole note)
                             let chord_duration = chord_ann.duration_beats(&score.metadata.time_signature);
+                            let osmd_quarter_time = osmd_time * osmd_to_quarter_multiplier;
                             chords.push(PlaybackChord {
                                 midi_notes: chord_notes,
                                 start_time: current_time,
                                 duration: chord_duration,
+                                osmd_timestamp: osmd_quarter_time,
                             });
                         }
                     }

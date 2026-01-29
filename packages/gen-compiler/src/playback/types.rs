@@ -66,14 +66,16 @@ pub struct PlaybackNote {
 ///
 /// # Fields
 /// - `midi_notes`: MIDI note numbers for all notes in the chord
-/// - `start_time`: Time in beats from start of the score
+/// - `start_time`: Time in beats from start of the score (for audio playback)
 /// - `duration`: Duration in beats
+/// - `osmd_timestamp`: OSMD's display timestamp (for visual highlighting)
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PlaybackChord {
     pub midi_notes: Vec<u8>,
     pub start_time: f64,
     pub duration: f64,
+    pub osmd_timestamp: f64,
 }
 
 /// Playback data for an entire score

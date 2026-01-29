@@ -36,8 +36,8 @@
 /// // F# major: F#3, A#3, C#4
 /// assert_eq!(parse_chord_symbol("F#"), vec![54, 58, 61]);
 ///
-/// // C/E (C major with E in bass): E2, C3, G3
-/// assert_eq!(parse_chord_symbol("C/E"), vec![40, 48, 55]);
+/// // C/E (C major with E in bass): E3, C3, G3
+/// assert_eq!(parse_chord_symbol("C/E"), vec![52, 48, 55]);
 /// ```
 ///
 /// # MIDI Note Reference
