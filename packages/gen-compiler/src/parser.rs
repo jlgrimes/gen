@@ -1,3 +1,65 @@
+//! # Parser Module
+//!
+//! This module parses tokens from the lexer into an Abstract Syntax Tree (AST).
+//!
+//! ## Purpose
+//! The parser is the second stage of the compilation pipeline. It takes the flat
+//! stream of tokens from the lexer and builds a structured AST representing the
+//! musical score.
+//!
+//! ## Two-Pass Parsing Algorithm
+//!
+//! ### First Pass: Context Collection
+//! Scans the entire source to collect:
+//! - YAML metadata (title, composer, key signature, time signature, tempo)
+//! - Mod points (`@Eb:^`, `@Bb:`) for instrument-specific octave shifts
+//! - Key changes (`@key:G`) for mid-score key signature changes
+//! - Chord annotations (`@ch:C`, `@ch:Am7`) for chord symbols
+//! - Measure octave modifiers (`@:^`, `@:_`) for measure-wide octave shifts
+//!
+//! ### Second Pass: Music Parsing
+//! Parses music using context from first pass:
+//! - Notes and rests with durations, dotted rhythms, tuplets
+//! - Ties (`-` prefix/suffix) and slurs (`(`, `)`)
+//! - Repeat markers (`||:`, `:||`) and endings (`|1`, `|2`)
+//! - Octave modifiers (`^`, `_`) and accidentals (`#`, `b`, `%`)
+//!
+//! ## Key Data Structures
+//!
+//! ### Parser
+//! Main parser state with token position, chord annotations, and measure tracking.
+//!
+//! ### ChordAnnotations
+//! Maps measure and note indices to chord symbols for playback.
+//!
+//! ### TupletContext
+//! Tracks default duration within tuplet/bracket groups.
+//!
+//! ## Entry Point
+//! `parse(source: &str) -> Result<Score, GenError>`
+//!
+//! ## Example
+//! ```rust
+//! use gen::parse;
+//!
+//! let source = r#"---
+//! title: My Song
+//! time-signature: 4/4
+//! ---
+//! C D E F
+//! "#;
+//!
+//! let score = parse(source)?;
+//! assert_eq!(score.metadata.title, Some("My Song".to_string()));
+//! assert_eq!(score.measures.len(), 1);
+//! assert_eq!(score.measures[0].elements.len(), 4);
+//! ```
+//!
+//! ## Related Modules
+//! - `lexer` - Provides tokens to parse
+//! - `ast` - Defines all AST types (Score, Measure, Note, etc.)
+//! - `error` - Returns ParseError with line/column info
+
 use crate::ast::*;
 use crate::error::GenError;
 use crate::lexer::{Lexer, LocatedToken, Token};
@@ -133,13 +195,19 @@ impl Parser {
             Pitch::default()
         };
 
+        let tempo = if let Some(ref tempo_str) = raw.tempo {
+            Some(self.parse_tempo(tempo_str)?)
+        } else {
+            None
+        };
+
         Ok(Metadata {
             title: raw.title,
             composer: raw.composer,
             time_signature,
             key_signature,
             written_pitch,
-            tempo: raw.tempo,
+            tempo,
         })
     }
 
@@ -188,6 +256,68 @@ impl Parser {
         }
 
         Ok(Pitch { note, octave_offset })
+    }
+
+    fn parse_tempo(&self, s: &str) -> Result<Tempo, GenError> {
+        let s = s.trim();
+
+        // Parse rhythm modifiers at the start of the tempo string
+        let mut chars = s.chars().peekable();
+        let mut duration = Duration::Quarter; // Default to quarter note
+        let mut dotted = false;
+        let mut pos = 0;
+
+        // Check for rhythm modifiers
+        while let Some(&c) = chars.peek() {
+            match c {
+                'o' => {
+                    duration = Duration::Whole;
+                    chars.next();
+                    pos += 1;
+                }
+                'd' => {
+                    duration = Duration::Half;
+                    chars.next();
+                    pos += 1;
+                }
+                '/' => {
+                    // Count consecutive slashes for eighth/sixteenth/32nd
+                    let mut slash_count = 0;
+                    while chars.peek() == Some(&'/') {
+                        slash_count += 1;
+                        chars.next();
+                        pos += 1;
+                    }
+                    duration = match slash_count {
+                        1 => Duration::Eighth,
+                        2 => Duration::Sixteenth,
+                        3 => Duration::ThirtySecond,
+                        _ => return Err(GenError::MetadataError(format!(
+                            "Invalid tempo rhythm: too many slashes ({})",
+                            slash_count
+                        ))),
+                    };
+                }
+                '*' => {
+                    dotted = true;
+                    chars.next();
+                    pos += 1;
+                }
+                _ => break, // Stop at first non-rhythm character
+            }
+        }
+
+        // Parse the BPM number from the remaining string
+        let bpm_str = &s[pos..];
+        let bpm = bpm_str.parse::<u16>().map_err(|_| {
+            GenError::MetadataError(format!("Invalid tempo BPM: {}", bpm_str))
+        })?;
+
+        if bpm == 0 {
+            return Err(GenError::MetadataError("Tempo BPM must be greater than 0".to_string()));
+        }
+
+        Ok(Tempo { bpm, duration, dotted })
     }
 
     /// Parse a single measure (one line)

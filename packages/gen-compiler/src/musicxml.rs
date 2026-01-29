@@ -1,9 +1,97 @@
+//! # MusicXML Generator Module
+//!
+//! This module generates MusicXML output from the Gen AST.
+//!
+//! ## Purpose
+//! The MusicXML generator is the final stage of the compilation pipeline.
+//! It takes the validated AST and produces industry-standard MusicXML 3.1
+//! output that can be rendered by notation software.
+//!
+//! ## Supported Features
+//!
+//! ### Basic Music Notation
+//! - Notes and rests with all durations (whole, half, quarter, eighth, sixteenth, 32nd)
+//! - Dotted rhythms
+//! - Tuplets (triplets, quintuplets, sextuplets, etc.)
+//! - Ties and slurs
+//! - Accidentals (sharp, flat, natural)
+//! - Octave modifiers
+//!
+//! ### Score Structure
+//! - Metadata (title, composer, tempo)
+//! - Key signatures (all major and minor keys)
+//! - Time signatures (simple and compound meters)
+//! - Repeat markers and endings
+//! - Mid-score key changes
+//!
+//! ### Advanced Features
+//! - **Instrument Transposition**: Automatic transposition for Bb, Eb, F instruments
+//! - **Clef Support**: Treble and bass clefs with automatic octave adjustment
+//! - **Mod Points**: Instrument-specific octave shifts per line
+//! - **Chord Symbols**: Lead sheet chord notation
+//! - **Automatic Beaming**: Intelligent beam grouping based on time signature
+//!
+//! ## Entry Points
+//!
+//! ### Basic Compilation
+//! ```rust
+//! use gen::{parse, to_musicxml};
+//!
+//! let score = parse("C D E F")?;
+//! let musicxml = to_musicxml(&score);
+//! // Write to .musicxml file or render with notation software
+//! ```
+//!
+//! ### With Transposition
+//! ```rust
+//! use gen::{parse, to_musicxml_with_options, Clef, Transposition};
+//!
+//! let score = parse("C D E F")?;
+//! let transposition = Transposition::for_key("Bb"); // Bb instrument
+//! let musicxml = to_musicxml_with_options(&score, transposition, Clef::Treble, 0);
+//! ```
+//!
+//! ### With Mod Points
+//! ```rust
+//! use gen::{parse, to_musicxml_with_mod_points, Clef};
+//!
+//! let score = parse("@Eb:^ C D E F")?;  // Eb instrument, up one octave
+//! let musicxml = to_musicxml_with_mod_points(&score, None, Clef::Treble, 0, Some("eb"));
+//! ```
+//!
+//! ## MusicXML Compatibility
+//! Generates MusicXML 3.1 compatible output tested with:
+//! - MuseScore 3/4
+//! - Finale
+//! - Sibelius (via MusicXML import)
+//! - OpenSheetMusicDisplay (OSMD) for web rendering
+//!
+//! ## Beaming Algorithm
+//! Automatically groups eighth and sixteenth notes into beams based on:
+//! - Time signature beat structure
+//! - Note durations
+//! - Measure position
+//!
+//! ## Transposition System
+//! - Concert pitch (C) instruments: No transposition
+//! - Bb instruments: Written major 2nd higher (transposition up 2 semitones)
+//! - Eb instruments: Written major 6th higher (transposition up 9 semitones)
+//! - F instruments: Written perfect 4th higher (transposition up 5 semitones)
+//!
+//! ## Related Modules
+//! - `ast` - Defines Score and all music types
+//! - `parser` - Creates AST from Gen source
+//! - `semantic` - Validates AST before generation
+
 use crate::ast::*;
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 use quick_xml::Writer;
 use std::io::Cursor;
 
 /// Clef type for the score
+///
+/// Determines which staff lines are used for note placement.
+/// Treble clef is standard for most instruments; bass clef is for lower-pitched instruments.
 #[derive(Clone, Copy, Default, PartialEq)]
 pub enum Clef {
     #[default]

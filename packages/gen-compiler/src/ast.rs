@@ -231,6 +231,50 @@ impl KeySignature {
     }
 }
 
+/// Tempo specification with optional rhythm modifier
+#[derive(Debug, Clone, PartialEq)]
+pub struct Tempo {
+    pub bpm: u16,              // Beats per minute at the specified duration
+    pub duration: Duration,    // Which note duration gets the beat (default: Quarter)
+    pub dotted: bool,          // Whether the duration is dotted (1.5x the duration)
+}
+
+impl Default for Tempo {
+    fn default() -> Self {
+        Self {
+            bpm: 120,
+            duration: Duration::Quarter,
+            dotted: false,
+        }
+    }
+}
+
+impl Tempo {
+    /// Convert to quarter note BPM (standard MIDI tempo)
+    /// For example, if tempo is "d160" (half note = 160), quarter note = 320
+    /// Or if tempo is "*120" (dotted quarter = 120), quarter note = 120 * (1.0 / 1.5) = 80
+    pub fn to_quarter_note_bpm(&self) -> f64 {
+        // Calculate the multiplier based on the rhythm duration
+        let mut multiplier = match self.duration {
+            Duration::Whole => 4.0,       // Whole note = 4 quarters
+            Duration::Half => 2.0,         // Half note = 2 quarters
+            Duration::Quarter => 1.0,      // Quarter note = 1 quarter
+            Duration::Eighth => 0.5,       // Eighth note = 0.5 quarters
+            Duration::Sixteenth => 0.25,   // Sixteenth = 0.25 quarters
+            Duration::ThirtySecond => 0.125, // 32nd = 0.125 quarters
+        };
+
+        // If dotted, the duration is 1.5x longer, so we need to adjust the multiplier
+        // For example: dotted quarter at 120 BPM means the dotted quarter (1.5 quarters) = 120 BPM
+        // So quarter note BPM = 120 * (1.0 / 1.5) = 80
+        if self.dotted {
+            multiplier = multiplier * 1.5;
+        }
+
+        self.bpm as f64 * multiplier
+    }
+}
+
 /// Document metadata from YAML header
 #[derive(Debug, Clone, Default)]
 pub struct Metadata {
@@ -239,7 +283,7 @@ pub struct Metadata {
     pub time_signature: TimeSignature,
     pub key_signature: KeySignature,
     pub written_pitch: Pitch,
-    pub tempo: Option<u16>, // BPM (default 120 if not specified)
+    pub tempo: Option<Tempo>, // Tempo with optional rhythm modifier (default 120 quarter notes if not specified)
 }
 
 /// Raw metadata for YAML deserialization
@@ -251,7 +295,7 @@ pub struct RawMetadata {
     pub time_signature: Option<String>,
     pub key_signature: Option<String>,
     pub written_pitch: Option<String>,
-    pub tempo: Option<u16>,
+    pub tempo: Option<String>, // Can be just "120" or with rhythm "d160" or "*120"
 }
 
 /// Note names A through G

@@ -1,6 +1,49 @@
+//! # Lexer Module
+//!
+//! This module tokenizes Gen source code into a stream of tokens.
+//!
+//! ## Purpose
+//! The lexer (lexical analyzer) is the first stage of the compilation pipeline.
+//! It reads the raw Gen source string and converts it into a sequence of tokens
+//! with line and column information for error reporting.
+//!
+//! ## Token Types
+//! - **Rhythm modifiers**: `/` (eighth), `d` (half), `o` (whole), `*` (dotted)
+//! - **Note names**: A-G, `$` (rest)
+//! - **Pitch modifiers**: `#` (sharp), `b` (flat), `%` (natural), `^` (up octave), `_` (down octave)
+//! - **Tuplets**: `[`, `]`, numbers (2-9)
+//! - **Ties**: `-` (hyphen)
+//! - **Slurs**: `(`, `)`
+//! - **Repeats**: `||:` (start), `:||` (end)
+//! - **Endings**: `|1`, `|2` (first/second endings)
+//! - **Structure**: Newline, whitespace, `---` (metadata delimiter)
+//!
+//! ## Entry Point
+//! `Lexer::tokenize(source: &str) -> Vec<LocatedToken>`
+//!
+//! ## Example
+//! ```rust
+//! use gen::lexer::Lexer;
+//!
+//! let source = "C D E F";
+//! let tokens = Lexer::tokenize(source);
+//! // Returns: [NoteC, Whitespace, NoteD, Whitespace, NoteE, Whitespace, NoteF]
+//! ```
+//!
+//! ## Location Tracking
+//! Every token includes line and column information via `LocatedToken`.
+//! This enables precise error messages pointing to the exact location in the source.
+//!
+//! ## Related Modules
+//! - `parser` - Consumes tokens to build AST
+//! - `error` - Returns ParseError with line/column from LocatedToken
+
 use crate::error::GenError;
 
 /// Token types for the Gen language
+///
+/// Each variant represents a distinct lexical element in Gen syntax.
+/// These tokens are produced by the lexer and consumed by the parser.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
     // Rhythm modifiers

@@ -27,6 +27,7 @@ all available fields for metadata are
 | time-signature | Time signature that the song defaults to if none explicitly specified | `4/4`   |
 | key-signature  | Key signature of the piece (see table below)                          | `C`     |
 | written-pitch  | What the document is written in. Defaults to concert pitch (C)        | `C`     |
+| tempo          | Tempo in BPM with optional rhythm modifier (see table below)          | `120`   |
 
 ### Key Signatures
 
@@ -129,6 +130,48 @@ E F^ G A
 ```
 
 Note: In A minor, all notes follow the natural minor scale without explicit accidentals.
+
+### Tempo
+
+The `tempo` field specifies the tempo in beats per minute (BPM). You can optionally specify which note duration receives the beat by using rhythm modifiers before the BPM number.
+
+**Syntax:** `[rhythm]BPM`
+
+**Examples:**
+- `tempo: 120` - Quarter note at 120 BPM (default)
+- `tempo: d160` - Half note at 160 BPM (equivalent to quarter note at 320 BPM)
+- `tempo: /180` - Eighth note at 180 BPM (equivalent to quarter note at 90 BPM)
+- `tempo: o60` - Whole note at 60 BPM (equivalent to quarter note at 240 BPM)
+- `tempo: "*120"` - Dotted quarter note at 120 BPM (equivalent to quarter note at 180 BPM)
+- `tempo: "d*80"` - Dotted half note at 80 BPM (equivalent to quarter note at 240 BPM)
+
+**Note:** When using the `*` (dotted) modifier, you must quote the tempo value in YAML because `*` is a special character.
+
+**Rhythm modifiers for tempo:**
+| Modifier | Note duration      | Example | Quarter note equivalent |
+| -------- | ------------------ | ------- | ----------------------- |
+| (none)   | Quarter note       | `120`   | 120 BPM                 |
+| `d`      | Half note          | `d120`  | 240 BPM                 |
+| `o`      | Whole note         | `o60`   | 240 BPM                 |
+| `/`      | Eighth note        | `/120`  | 60 BPM                  |
+| `//`     | Sixteenth note     | `//240` | 60 BPM                  |
+| `*`      | Dotted (1.5x)      | `"*120"`| 180 BPM                 |
+| `d*`     | Dotted half note   | `"d*80"`| 240 BPM                 |
+
+**Example in metadata:**
+```
+---
+title: Fast Song
+composer: Speed Demon
+tempo: d160
+time-signature: 4/4
+---
+
+C D E F
+G A B C^
+```
+
+In this example, the half note is at 160 BPM, which means quarter notes play at 320 BPM (very fast!).
 
 Each line is its own measure. If you do a new line, it will do a new measure.
 # Anatomy of a note

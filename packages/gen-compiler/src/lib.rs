@@ -1,3 +1,117 @@
+//! # Gen Music Notation Compiler
+//!
+//! A text-based music notation language compiler that generates industry-standard MusicXML.
+//!
+//! ## Compilation Pipeline
+//!
+//! ```text
+//! .gen source → Lexer → Parser → Semantic → MusicXML Generator → .musicxml
+//! ```
+//!
+//! 1. **Lexer** ([`lexer`]) - Tokenizes Gen source into tokens with location info
+//! 2. **Parser** ([`parser`]) - Parses tokens into Abstract Syntax Tree
+//!    - First pass: Extract metadata, mod points, key changes, chord annotations
+//!    - Second pass: Parse music with context from first pass
+//! 3. **Semantic** ([`semantic`]) - Validates AST (measure durations, repeats, endings)
+//! 4. **MusicXML Generator** ([`musicxml`]) - Generates MusicXML output
+//! 5. **Playback** (this module) - Optional MIDI playback data generation
+//!
+//! ## Quick Start
+//!
+//! ```rust
+//! use gen::compile;
+//!
+//! let source = r#"---
+//! title: My Song
+//! composer: Me
+//! time-signature: 4/4
+//! key-signature: C
+//! tempo: 120
+//! ---
+//! C D E F
+//! G A B C^
+//! "#;
+//!
+//! let musicxml = compile(source)?;
+//! // Write musicxml to file or render with notation software
+//! # Ok::<(), gen::GenError>(())
+//! ```
+//!
+//! ## Public API Entry Points
+//!
+//! ### Compilation Functions
+//! - [`compile()`] - Full compilation with validation (recommended)
+//! - [`compile_unchecked()`] - Skip validation (for partial/incomplete scores)
+//! - [`compile_with_options()`] - Custom clef, octave shift, transposition
+//! - [`compile_with_mod_points()`] - Instrument-specific rendering with mod points
+//!
+//! ### Playback Functions
+//! - [`generate_playback_data()`] - Generate MIDI playback data with timing info
+//!
+//! ### Low-Level API
+//! - [`parse()`] - Parse Gen source into AST
+//! - [`validate()`] - Validate AST semantic correctness
+//! - [`to_musicxml()`] - Generate MusicXML from AST
+//!
+//! ## Gen Language Syntax Overview
+//!
+//! ### Note Format
+//! `[rhythm][note][pitch]`
+//!
+//! - **Rhythm modifiers**: `/` (eighth), `//` (sixteenth), `d` (half), `o` (whole), `*` (dotted)
+//! - **Notes**: A-G or `$` (rest)
+//! - **Pitch modifiers**: `#` (sharp), `b` (flat), `^` (octave up), `_` (octave down)
+//!
+//! ### Examples
+//! - `C` - C quarter note
+//! - `/E` - E eighth note
+//! - `dG*` - G dotted half note
+//! - `//F#^` - F# sixteenth note, one octave up
+//! - `$` - quarter rest
+//!
+//! ### Tuplets
+//! - `3[C D E]` - Quarter note triplet (3 notes in time of 2)
+//! - `/3[A B C]` - Eighth note triplet
+//! - `5[C D E F G]` - Quintuplet (5 in time of 4)
+//!
+//! ### Ties and Slurs
+//! - `C-C` - Two tied quarter notes (play as half note)
+//! - `(C D E F)` - Slurred phrase
+//!
+//! ### Repeats and Endings
+//! - `||:` - Repeat start
+//! - `:||` - Repeat end
+//! - `|1` - First ending
+//! - `|2` - Second ending
+//!
+//! ## Module Structure
+//!
+//! - [`ast`] - Abstract Syntax Tree type definitions (Score, Measure, Note, etc.)
+//! - [`error`] - Error types (GenError variants)
+//! - [`lexer`] - Tokenization (String → Vec<Token>)
+//! - [`parser`] - Parsing (Vec<Token> → Score AST)
+//! - [`semantic`] - Validation (measure durations, repeats)
+//! - [`musicxml`] - MusicXML generation (Score → MusicXML string)
+//!
+//! ## Additional Resources
+//!
+//! - **ARCHITECTURE.md** - Detailed architectural documentation for agents
+//! - **CLAUDE.md** - High-level project overview and language syntax
+//! - **gen-docs** - Complete language documentation and examples
+//!
+//! ## Features
+//!
+//! - ✅ All standard music notation (notes, rests, ties, slurs, tuplets)
+//! - ✅ Full key signature support (major and minor keys)
+//! - ✅ Any time signature (4/4, 3/4, 6/8, 5/4, 7/8, etc.)
+//! - ✅ Instrument transposition (Bb, Eb, F)
+//! - ✅ Chord symbols for lead sheets
+//! - ✅ Repeats and endings
+//! - ✅ Mid-score key changes
+//! - ✅ Automatic beaming
+//! - ✅ MIDI playback data generation
+//! - ✅ Integration with OpenSheetMusicDisplay (OSMD)
+
 pub mod ast;
 pub mod error;
 pub mod lexer;
@@ -14,7 +128,27 @@ pub use parser::parse;
 pub use semantic::validate;
 
 /// Compile a Gen source string to MusicXML.
-/// This is the main entry point for the library.
+///
+/// This is the main entry point for the library. It performs full compilation with validation.
+///
+/// # Pipeline
+/// 1. Tokenize source with [`lexer`]
+/// 2. Parse tokens into AST with [`parse()`]
+/// 3. Validate AST with [`validate()`]
+/// 4. Generate MusicXML with [`to_musicxml()`]
+///
+/// # Example
+/// ```rust
+/// use gen::compile;
+///
+/// let source = "C D E F";
+/// let musicxml = compile(source)?;
+/// // Write to .musicxml file or render
+/// # Ok::<(), gen::GenError>(())
+/// ```
+///
+/// # Errors
+/// Returns [`GenError`] if parsing, validation, or generation fails.
 pub fn compile(source: &str) -> Result<String, GenError> {
     let score = parse(source)?;
     validate(&score)?;
@@ -319,8 +453,15 @@ pub fn generate_playback_data(
         }
     }
 
+    // Convert tempo to quarter note BPM for MIDI playback
+    let tempo_bpm = if let Some(ref tempo) = score.metadata.tempo {
+        tempo.to_quarter_note_bpm() as u16
+    } else {
+        120 // Default to 120 quarter notes per minute
+    };
+
     Ok(PlaybackData {
-        tempo: score.metadata.tempo.unwrap_or(120),
+        tempo: tempo_bpm,
         notes,
         chords,
     })
@@ -487,6 +628,106 @@ C $ C $
 
         // Should default to 120 BPM
         assert_eq!(data.tempo, 120);
+    }
+
+    #[test]
+    fn test_tempo_quarter_note() {
+        let source = r#"---
+tempo: 160
+---
+C D E F"#;
+        let result = generate_playback_data(source, "treble", 0, None);
+        assert!(result.is_ok());
+        let data = result.unwrap();
+
+        // Quarter note at 160 BPM
+        assert_eq!(data.tempo, 160);
+    }
+
+    #[test]
+    fn test_tempo_half_note() {
+        let source = r#"---
+tempo: d160
+---
+C D E F"#;
+        let result = generate_playback_data(source, "treble", 0, None);
+        assert!(result.is_ok());
+        let data = result.unwrap();
+
+        // Half note at 160 BPM = quarter note at 320 BPM
+        assert_eq!(data.tempo, 320);
+    }
+
+    #[test]
+    fn test_tempo_whole_note() {
+        let source = r#"---
+tempo: o60
+---
+C D E F"#;
+        let result = generate_playback_data(source, "treble", 0, None);
+        assert!(result.is_ok());
+        let data = result.unwrap();
+
+        // Whole note at 60 BPM = quarter note at 240 BPM
+        assert_eq!(data.tempo, 240);
+    }
+
+    #[test]
+    fn test_tempo_eighth_note() {
+        let source = r#"---
+tempo: /120
+---
+C D E F"#;
+        let result = generate_playback_data(source, "treble", 0, None);
+        assert!(result.is_ok());
+        let data = result.unwrap();
+
+        // Eighth note at 120 BPM = quarter note at 60 BPM
+        assert_eq!(data.tempo, 60);
+    }
+
+    #[test]
+    fn test_tempo_sixteenth_note() {
+        let source = r#"---
+tempo: //240
+---
+C D E F"#;
+        let result = generate_playback_data(source, "treble", 0, None);
+        assert!(result.is_ok());
+        let data = result.unwrap();
+
+        // Sixteenth note at 240 BPM = quarter note at 60 BPM
+        assert_eq!(data.tempo, 60);
+    }
+
+    #[test]
+    fn test_tempo_dotted_quarter() {
+        let source = r#"---
+tempo: "*120"
+---
+C D E F"#;
+        let result = generate_playback_data(source, "treble", 0, None);
+        assert!(result.is_ok());
+        let data = result.unwrap();
+
+        // Dotted quarter at 120 BPM = quarter note at 180 BPM
+        // (dotted quarter = 1.5 quarter notes, so 120 * 1.5 = 180)
+        assert_eq!(data.tempo, 180);
+    }
+
+    #[test]
+    fn test_tempo_dotted_half() {
+        let source = r#"---
+tempo: "d*160"
+---
+C D E F"#;
+        let result = generate_playback_data(source, "treble", 0, None);
+        assert!(result.is_ok());
+        let data = result.unwrap();
+
+        // Dotted half note at 160 BPM = quarter note at 480 BPM
+        // (dotted half = 3 quarter notes, so 160 * 3 = 480)
+        assert_eq!(data.tempo, 480);
     }
 
     #[test]

@@ -1,7 +1,56 @@
+//! # Semantic Validation Module
+//!
+//! This module validates the semantic correctness of a parsed Gen score.
+//!
+//! ## Purpose
+//! After parsing, the AST may be syntactically valid but semantically incorrect.
+//! This module checks for logical errors that would make the score invalid:
+//! - Measure durations that don't match the time signature
+//! - Unmatched repeat markers
+//! - Incorrectly structured first/second endings
+//!
+//! ## Validation Rules
+//!
+//! ### Measure Duration
+//! - Each measure's total duration (sum of all note/rest durations) must match the time signature
+//! - Example: In 4/4 time, each measure must have exactly 4 beats
+//! - Dotted notes and tuplets are correctly calculated
+//!
+//! ### Repeat Markers
+//! - `||:` (repeat start) must be paired with `:||` (repeat end)
+//! - No nested repeats without closing the previous one
+//! - No repeat end without a matching repeat start
+//!
+//! ### Endings
+//! - First ending (`|1`) must come before second ending (`|2`)
+//! - Second ending must exist if first ending exists
+//! - Endings must be within a repeat structure
+//!
+//! ## Entry Point
+//! `validate(score: &Score) -> Result<(), GenError>`
+//!
+//! ## Example
+//! ```rust
+//! use gen::{parse, validate};
+//!
+//! let source = "C D E F";  // 4 quarter notes = 4 beats (valid in 4/4)
+//! let score = parse(source)?;
+//! validate(&score)?;  // Passes validation
+//! ```
+//!
+//! ## Related Modules
+//! - `ast` - Defines Score and Measure types
+//! - `error` - Returns GenError::SemanticError with measure numbers
+
 use crate::ast::*;
 use crate::error::GenError;
 
 /// Validate a score for semantic correctness
+///
+/// Checks three main validation rules:
+/// 1. Measure durations match time signature
+/// 2. Repeat markers are properly matched
+/// 3. Endings are correctly structured
 pub fn validate(score: &Score) -> Result<(), GenError> {
     for (i, measure) in score.measures.iter().enumerate() {
         validate_measure(measure, &score.metadata.time_signature, i + 1)?;
