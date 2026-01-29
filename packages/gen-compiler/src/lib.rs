@@ -254,8 +254,8 @@ pub fn generate_playback_data(
                         let beat_in_measure = current_time - measure_start_time;
                         let display_midi = note.to_midi_note(&current_key, total_offset);
                         notes.push(PlaybackNote {
-                            midi_note: note.to_midi_note(&current_key, 0), // Concert pitch (no offset)
-                            display_midi_note: display_midi, // Display pitch (with offset)
+                            midi_note: note.to_midi_note(&current_key, octave_shift), // Playback pitch (with octave shift, no clef offset)
+                            display_midi_note: display_midi, // Display pitch (with full offset)
                             start_time: current_time,
                             duration,
                             note_index,
@@ -283,8 +283,8 @@ pub fn generate_playback_data(
                         let beat_in_measure = current_time - measure_start_time;
                         let display_midi = note.to_midi_note(&current_key, total_offset);
                         notes.push(PlaybackNote {
-                            midi_note: note.to_midi_note(&current_key, 0), // Concert pitch (no offset)
-                            display_midi_note: display_midi, // Display pitch (with offset)
+                            midi_note: note.to_midi_note(&current_key, octave_shift), // Playback pitch (with octave shift, no clef offset)
+                            display_midi_note: display_midi, // Display pitch (with full offset)
                             start_time: current_time,
                             duration,
                             note_index,
@@ -496,10 +496,14 @@ C $ C $
         assert!(result.is_ok());
         let data = result.unwrap();
 
-        // Bass clef is 2 octaves lower: C2=36, D2=38, E2=40
-        assert_eq!(data.notes[0].midi_note, 36);
-        assert_eq!(data.notes[1].midi_note, 38);
-        assert_eq!(data.notes[2].midi_note, 40);
+        // With no octave shift, playback should be at base pitch: C4=60, D4=62, E4=64
+        assert_eq!(data.notes[0].midi_note, 60);
+        assert_eq!(data.notes[1].midi_note, 62);
+        assert_eq!(data.notes[2].midi_note, 64);
+        // Display MIDI should include bass clef offset (-2 octaves): C2=36, D2=38, E2=40
+        assert_eq!(data.notes[0].display_midi_note, 36);
+        assert_eq!(data.notes[1].display_midi_note, 38);
+        assert_eq!(data.notes[2].display_midi_note, 40);
     }
 
     #[test]
@@ -509,10 +513,14 @@ C $ C $
         assert!(result.is_ok());
         let data = result.unwrap();
 
-        // C5=72, D5=74, E5=76 (one octave up)
+        // C5=72, D5=74, E5=76 (one octave up) - playback should reflect the shift
         assert_eq!(data.notes[0].midi_note, 72);
         assert_eq!(data.notes[1].midi_note, 74);
         assert_eq!(data.notes[2].midi_note, 76);
+        // Display MIDI should match playback MIDI when there's no clef offset
+        assert_eq!(data.notes[0].display_midi_note, 72);
+        assert_eq!(data.notes[1].display_midi_note, 74);
+        assert_eq!(data.notes[2].display_midi_note, 76);
     }
 
     #[test]
@@ -793,17 +801,17 @@ C /3[D E F] G
         // Duration of each = 1.0 / 3 = 0.333...
         assert_eq!(data.notes[1].midi_note, 62); // D
         assert!((data.notes[1].start_time - 1.0).abs() < 0.0001);
-        assert!((data.notes[1].duration - 0.6666666666666666).abs() < 0.0001);
+        assert!((data.notes[1].duration - 0.3333333333333333).abs() < 0.0001);
 
         assert_eq!(data.notes[2].midi_note, 64); // E
-        assert!((data.notes[2].start_time - 1.6666666666666667).abs() < 0.0001);
+        assert!((data.notes[2].start_time - 1.3333333333333333).abs() < 0.0001);
 
         assert_eq!(data.notes[3].midi_note, 65); // F
-        assert!((data.notes[3].start_time - 2.3333333333333335).abs() < 0.0001);
+        assert!((data.notes[3].start_time - 1.6666666666666667).abs() < 0.0001);
 
-        // G at beat 3
+        // G at beat 2 (triplet takes 1 beat total: from 1.0 to 2.0)
         assert_eq!(data.notes[4].midi_note, 67);
-        assert_eq!(data.notes[4].start_time, 3.0);
+        assert!((data.notes[4].start_time - 2.0).abs() < 0.0001);
     }
 
     #[test]
@@ -883,12 +891,13 @@ C D E
         assert!(result.is_ok());
         let data = result.unwrap();
 
-        // C4 shifted up 1 octave = C5 = MIDI 72 (display MIDI used directly)
-        assert_eq!(data.notes[0].midi_note, 60);  // Concert pitch unchanged
+        // C4 shifted up 1 octave = C5 = MIDI 72 (both playback and display)
+        assert_eq!(data.notes[0].midi_note, 72);  // Playback includes octave shift
         assert_eq!(data.notes[0].display_midi_note, 72);  // Display shifted up
         assert_eq!(data.notes[0].osmd_match_key, "72_0.000");
 
         // D4 shifted up 1 octave = D5 = MIDI 74
+        assert_eq!(data.notes[1].midi_note, 74);
         assert_eq!(data.notes[1].display_midi_note, 74);
         assert_eq!(data.notes[1].osmd_match_key, "74_1.000");
     }
