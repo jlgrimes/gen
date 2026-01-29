@@ -70,21 +70,82 @@ struct TupletContext {
     default_duration: Duration,
 }
 
-/// Chord annotations: measure index → note index → chord symbol
+//// Parsed chord data from annotation (symbol + optional duration)
+#[derive(Debug, Clone)]
+pub(crate) struct ParsedChord {
+    pub symbol: String,
+    pub duration: Duration,
+    pub dotted: bool,
+}
+
+impl ParsedChord {
+    /// Parse a chord annotation string like "Cmaj7" or "dAbm" (half note Abm)
+    /// Rhythm modifiers: o=whole, d=half, (none)=quarter, /=eighth, //=sixteenth
+    /// Dotted: * suffix on rhythm (e.g., d*Cmaj7 = dotted half)
+    /// Default duration is whole note
+    pub fn parse(s: &str) -> Self {
+        let mut chars = s.chars().peekable();
+        let mut duration = Duration::Whole; // Default to whole note
+        let mut dotted = false;
+
+        // Check for rhythm prefix
+        match chars.peek() {
+            Some('o') => {
+                duration = Duration::Whole;
+                chars.next();
+            }
+            Some('d') => {
+                duration = Duration::Half;
+                chars.next();
+            }
+            Some('/') => {
+                chars.next();
+                if chars.peek() == Some(&'/') {
+                    chars.next();
+                    if chars.peek() == Some(&'/') {
+                        chars.next();
+                        duration = Duration::ThirtySecond;
+                    } else {
+                        duration = Duration::Sixteenth;
+                    }
+                } else {
+                    duration = Duration::Eighth;
+                }
+            }
+            _ => {
+                // Check if starts with uppercase letter (chord root) - no rhythm modifier
+                // Keep default whole note
+            }
+        }
+
+        // Check for dotted modifier after rhythm
+        if chars.peek() == Some(&'*') {
+            dotted = true;
+            chars.next();
+        }
+
+        // Rest is the chord symbol
+        let symbol: String = chars.collect();
+
+        Self { symbol, duration, dotted }
+    }
+}
+
+// Chord annotations: measure index → note index → parsed chord
 #[derive(Debug, Clone, Default)]
 pub(crate) struct ChordAnnotations {
-    chords: HashMap<usize, HashMap<usize, String>>,
+    chords: HashMap<usize, HashMap<usize, ParsedChord>>,
 }
 
 impl ChordAnnotations {
-    fn set_chord(&mut self, measure_idx: usize, note_idx: usize, chord: String) {
+    fn set_chord(&mut self, measure_idx: usize, note_idx: usize, chord: ParsedChord) {
         self.chords
             .entry(measure_idx)
             .or_insert_with(HashMap::new)
             .insert(note_idx, chord);
     }
 
-    fn get_chord(&self, measure_idx: usize, note_idx: usize) -> Option<&String> {
+    fn get_chord(&self, measure_idx: usize, note_idx: usize) -> Option<&ParsedChord> {
         self.chords
             .get(&measure_idx)
             .and_then(|notes| notes.get(&note_idx))
@@ -452,8 +513,12 @@ impl Parser {
                     // Apply chord annotations and measure octave modifier to notes in the bracket group
                     for element in &mut grouped_elements {
                         if let Element::Note(note) = element {
-                            if let Some(chord) = self.chord_annotations.get_chord(self.current_measure_index, note_index_in_measure) {
-                                note.chord = Some(chord.clone());
+                            if let Some(parsed) = self.chord_annotations.get_chord(self.current_measure_index, note_index_in_measure) {
+                                note.chord = Some(ChordAnnotation::with_duration(
+                                    parsed.symbol.clone(),
+                                    parsed.duration,
+                                    parsed.dotted,
+                                ));
                             }
                             // Apply measure octave modifier
                             if let Some(&offset) = self.measure_octave_modifiers.get(&self.current_measure_index) {
@@ -520,13 +585,21 @@ impl Parser {
                 // Apply chord annotation to notes or rests
                 match &mut element {
                     Element::Note(note) => {
-                        if let Some(chord) = self.chord_annotations.get_chord(self.current_measure_index, note_index_in_measure) {
-                            note.chord = Some(chord.clone());
+                        if let Some(parsed) = self.chord_annotations.get_chord(self.current_measure_index, note_index_in_measure) {
+                            note.chord = Some(ChordAnnotation::with_duration(
+                                parsed.symbol.clone(),
+                                parsed.duration,
+                                parsed.dotted,
+                            ));
                         }
                     }
                     Element::Rest { chord, .. } => {
-                        if let Some(chord_symbol) = self.chord_annotations.get_chord(self.current_measure_index, note_index_in_measure) {
-                            *chord = Some(chord_symbol.clone());
+                        if let Some(parsed) = self.chord_annotations.get_chord(self.current_measure_index, note_index_in_measure) {
+                            *chord = Some(ChordAnnotation::with_duration(
+                                parsed.symbol.clone(),
+                                parsed.duration,
+                                parsed.dotted,
+                            ));
                         }
                     }
                 }
@@ -1149,14 +1222,14 @@ pub(crate) fn extract_chords(source: &str) -> ChordAnnotations {
 
         // Parse line to find chords and map to notes
         let mut note_index = 0;
-        let mut pending_chord: Option<String> = None;
+        let mut pending_chord: Option<ParsedChord> = None;
         let mut i = 0;
         let line_bytes = line.as_bytes();
 
         while i < line.len() {
             // Check for @ch: annotation
             if i + 4 <= line.len() && &line[i..i + 4] == "@ch:" {
-                // Extract chord symbol (until whitespace or @)
+                // Extract chord annotation (until whitespace or @)
                 let start = i + 4;
                 let mut end = start;
                 while end < line.len() {
@@ -1166,7 +1239,8 @@ pub(crate) fn extract_chords(source: &str) -> ChordAnnotations {
                     }
                     end += 1;
                 }
-                pending_chord = Some(line[start..end].to_string());
+                // Parse the chord with optional rhythm modifier
+                pending_chord = Some(ParsedChord::parse(&line[start..end]));
                 i = end;
                 // Skip whitespace after chord annotation
                 while i < line.len() {
@@ -2244,12 +2318,19 @@ time-signature: 6/8
         }
     }
 
+    /// Helper to extract chord symbol from a ChordAnnotation Option
+    fn chord_symbol(chord: &Option<ChordAnnotation>) -> Option<&str> {
+        chord.as_ref().map(|c| c.symbol.as_str())
+    }
+
     #[test]
     fn test_chord_single() {
         let score = parse("@ch:Cmaj7 C D E F").unwrap();
         if let Element::Note(n) = &score.measures[0].elements[0] {
-            assert_eq!(n.chord, Some("Cmaj7".to_string()));
+            assert_eq!(chord_symbol(&n.chord), Some("Cmaj7"));
             assert_eq!(n.name, NoteName::C);
+            // Default duration should be whole note
+            assert_eq!(n.chord.as_ref().unwrap().duration, Duration::Whole);
         } else {
             panic!("Expected Note element");
         }
@@ -2263,7 +2344,7 @@ time-signature: 6/8
     fn test_chord_multiple() {
         let score = parse("@ch:C C D @ch:G E F").unwrap();
         if let Element::Note(n) = &score.measures[0].elements[0] {
-            assert_eq!(n.chord, Some("C".to_string()));
+            assert_eq!(chord_symbol(&n.chord), Some("C"));
             assert_eq!(n.name, NoteName::C);
         } else {
             panic!("Expected Note element");
@@ -2273,7 +2354,7 @@ time-signature: 6/8
             assert_eq!(n.name, NoteName::D);
         }
         if let Element::Note(n) = &score.measures[0].elements[2] {
-            assert_eq!(n.chord, Some("G".to_string()));
+            assert_eq!(chord_symbol(&n.chord), Some("G"));
             assert_eq!(n.name, NoteName::E);
         } else {
             panic!("Expected Note element");
@@ -2284,12 +2365,12 @@ time-signature: 6/8
     fn test_chord_complex_symbols() {
         let score = parse("@ch:Dm7b5 C @ch:F#maj7#11 D").unwrap();
         if let Element::Note(n) = &score.measures[0].elements[0] {
-            assert_eq!(n.chord, Some("Dm7b5".to_string()));
+            assert_eq!(chord_symbol(&n.chord), Some("Dm7b5"));
         } else {
             panic!("Expected Note element");
         }
         if let Element::Note(n) = &score.measures[0].elements[1] {
-            assert_eq!(n.chord, Some("F#maj7#11".to_string()));
+            assert_eq!(chord_symbol(&n.chord), Some("F#maj7#11"));
         } else {
             panic!("Expected Note element");
         }
@@ -2299,7 +2380,7 @@ time-signature: 6/8
     fn test_chord_with_bracket_group() {
         let score = parse("@ch:Am /[C E A]").unwrap();
         if let Element::Note(n) = &score.measures[0].elements[0] {
-            assert_eq!(n.chord, Some("Am".to_string()));
+            assert_eq!(chord_symbol(&n.chord), Some("Am"));
             assert_eq!(n.duration, Duration::Eighth);
         } else {
             panic!("Expected Note element");
@@ -2324,12 +2405,50 @@ time-signature: 6/8
 
         // First measure
         if let Element::Note(n) = &score.measures[0].elements[0] {
-            assert_eq!(n.chord, Some("C".to_string()));
+            assert_eq!(chord_symbol(&n.chord), Some("C"));
         }
 
         // Second measure
         if let Element::Note(n) = &score.measures[1].elements[0] {
-            assert_eq!(n.chord, Some("G".to_string()));
+            assert_eq!(chord_symbol(&n.chord), Some("G"));
+        }
+    }
+
+    #[test]
+    fn test_chord_with_duration() {
+        // Test half note chord duration
+        let score = parse("@ch:dAm C D E F").unwrap();
+        if let Element::Note(n) = &score.measures[0].elements[0] {
+            assert_eq!(chord_symbol(&n.chord), Some("Am"));
+            assert_eq!(n.chord.as_ref().unwrap().duration, Duration::Half);
+            assert!(!n.chord.as_ref().unwrap().dotted);
+        } else {
+            panic!("Expected Note element");
+        }
+    }
+
+    #[test]
+    fn test_chord_with_dotted_duration() {
+        // Test dotted half note chord duration
+        let score = parse("@ch:d*G7 C D E F").unwrap();
+        if let Element::Note(n) = &score.measures[0].elements[0] {
+            assert_eq!(chord_symbol(&n.chord), Some("G7"));
+            assert_eq!(n.chord.as_ref().unwrap().duration, Duration::Half);
+            assert!(n.chord.as_ref().unwrap().dotted);
+        } else {
+            panic!("Expected Note element");
+        }
+    }
+
+    #[test]
+    fn test_chord_eighth_duration() {
+        // Test eighth note chord duration
+        let score = parse("@ch:/F C D").unwrap();
+        if let Element::Note(n) = &score.measures[0].elements[0] {
+            assert_eq!(chord_symbol(&n.chord), Some("F"));
+            assert_eq!(n.chord.as_ref().unwrap().duration, Duration::Eighth);
+        } else {
+            panic!("Expected Note element");
         }
     }
 

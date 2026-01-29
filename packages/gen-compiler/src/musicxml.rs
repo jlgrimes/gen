@@ -750,8 +750,8 @@ fn write_element<W: std::io::Write>(writer: &mut Writer<W>, element: &Element, b
             chord,
         } => {
             // Write harmony before rest if chord symbol exists
-            if let Some(ref chord_symbol) = chord {
-                write_harmony(writer, chord_symbol, transposition);
+            if let Some(ref chord_ann) = chord {
+                write_harmony(writer, &chord_ann.symbol, transposition);
             }
             write_rest(writer, *duration, *dotted, *tuplet);
         }
@@ -821,8 +821,8 @@ fn transpose_pitch(note_name: NoteName, accidental: Accidental, diatonic: i8, ch
 
 fn write_note<W: std::io::Write>(writer: &mut Writer<W>, note: &Note, beam_state: BeamState, octave_shift: i8, key_signature: &KeySignature, transposition: Option<&Transposition>) {
     // Write harmony BEFORE note element if chord symbol exists
-    if let Some(ref chord_symbol) = note.chord {
-        write_harmony(writer, chord_symbol, transposition);
+    if let Some(ref chord_ann) = note.chord {
+        write_harmony(writer, &chord_ann.symbol, transposition);
     }
 
     writer

@@ -8,7 +8,7 @@ tempo: 120
 ---
 C D E F
 "#;
-    let result = generate_playback_data(source, "treble", 0, None);
+    let result = generate_playback_data(source, "treble", 0, None, None);
     assert!(result.is_ok());
     let data = result.unwrap();
 
@@ -31,7 +31,7 @@ key-signature: C
 ---
 C D E F G A B C^
 "#;
-    let result = generate_playback_data(source, "treble", 0, None);
+    let result = generate_playback_data(source, "treble", 0, None, None);
     assert!(result.is_ok());
     let data = result.unwrap();
 
@@ -53,7 +53,7 @@ tempo: 120
 ---
 C- C d$
 "#;
-    let result = generate_playback_data(source, "treble", 0, None);
+    let result = generate_playback_data(source, "treble", 0, None, None);
     assert!(result.is_ok());
     let data = result.unwrap();
 
@@ -71,7 +71,7 @@ tempo: 120
 ---
 dC /C /C C
 "#;
-    let result = generate_playback_data(source, "treble", 0, None);
+    let result = generate_playback_data(source, "treble", 0, None, None);
     assert!(result.is_ok());
     let data = result.unwrap();
 
@@ -98,7 +98,7 @@ time-signature: 4/4
 E E F G
 G F E D
 "#;
-    let result = generate_playback_data(source, "treble", 0, None);
+    let result = generate_playback_data(source, "treble", 0, None, None);
     assert!(result.is_ok());
     let data = result.unwrap();
 
@@ -138,7 +138,7 @@ tempo: 120
 ---
 C $ C $
 "#;
-    let result = generate_playback_data(source, "treble", 0, None);
+    let result = generate_playback_data(source, "treble", 0, None, None);
     assert!(result.is_ok());
     let data = result.unwrap();
 
@@ -151,7 +151,7 @@ C $ C $
 #[test]
 fn test_playback_default_tempo() {
     let source = "C D E F";
-    let result = generate_playback_data(source, "treble", 0, None);
+    let result = generate_playback_data(source, "treble", 0, None, None);
     assert!(result.is_ok());
     let data = result.unwrap();
 
@@ -165,7 +165,7 @@ fn test_tempo_quarter_note() {
 tempo: 160
 ---
 C D E F"#;
-    let result = generate_playback_data(source, "treble", 0, None);
+    let result = generate_playback_data(source, "treble", 0, None, None);
     assert!(result.is_ok());
     let data = result.unwrap();
 
@@ -179,7 +179,7 @@ fn test_tempo_half_note() {
 tempo: d160
 ---
 C D E F"#;
-    let result = generate_playback_data(source, "treble", 0, None);
+    let result = generate_playback_data(source, "treble", 0, None, None);
     assert!(result.is_ok());
     let data = result.unwrap();
 
@@ -193,7 +193,7 @@ fn test_tempo_whole_note() {
 tempo: o60
 ---
 C D E F"#;
-    let result = generate_playback_data(source, "treble", 0, None);
+    let result = generate_playback_data(source, "treble", 0, None, None);
     assert!(result.is_ok());
     let data = result.unwrap();
 
@@ -207,7 +207,7 @@ fn test_tempo_eighth_note() {
 tempo: /120
 ---
 C D E F"#;
-    let result = generate_playback_data(source, "treble", 0, None);
+    let result = generate_playback_data(source, "treble", 0, None, None);
     assert!(result.is_ok());
     let data = result.unwrap();
 
@@ -221,7 +221,7 @@ fn test_tempo_sixteenth_note() {
 tempo: //240
 ---
 C D E F"#;
-    let result = generate_playback_data(source, "treble", 0, None);
+    let result = generate_playback_data(source, "treble", 0, None, None);
     assert!(result.is_ok());
     let data = result.unwrap();
 
@@ -235,7 +235,7 @@ fn test_tempo_dotted_quarter() {
 tempo: "*120"
 ---
 C D E F"#;
-    let result = generate_playback_data(source, "treble", 0, None);
+    let result = generate_playback_data(source, "treble", 0, None, None);
     assert!(result.is_ok());
     let data = result.unwrap();
 
@@ -250,7 +250,7 @@ fn test_tempo_dotted_half() {
 tempo: "d*160"
 ---
 C D E F"#;
-    let result = generate_playback_data(source, "treble", 0, None);
+    let result = generate_playback_data(source, "treble", 0, None, None);
     assert!(result.is_ok());
     let data = result.unwrap();
 
@@ -262,7 +262,7 @@ C D E F"#;
 #[test]
 fn test_playback_bass_clef() {
     let source = "C D E";
-    let result = generate_playback_data(source, "bass", 0, None);
+    let result = generate_playback_data(source, "bass", 0, None, None);
     assert!(result.is_ok());
     let data = result.unwrap();
 
@@ -279,7 +279,7 @@ fn test_playback_bass_clef() {
 #[test]
 fn test_playback_octave_shift() {
     let source = "C D E";
-    let result = generate_playback_data(source, "treble", 1, None);
+    let result = generate_playback_data(source, "treble", 1, None, None);
     assert!(result.is_ok());
     let data = result.unwrap();
 
@@ -300,7 +300,7 @@ key-signature: G
 ---
 F G A
 "#;
-    let result = generate_playback_data(source, "treble", 0, None);
+    let result = generate_playback_data(source, "treble", 0, None, None);
     assert!(result.is_ok());
     let data = result.unwrap();
 
@@ -317,7 +317,7 @@ tempo: 120
 ---
 C D E F
 "#;
-    let result = generate_playback_data(source, "treble", 0, None);
+    let result = generate_playback_data(source, "treble", 0, None, None);
     assert!(result.is_ok());
     let data = result.unwrap();
 
@@ -333,7 +333,7 @@ tempo: 120
 ---
 @ch:C C @ch:G D @ch:Am E @ch:F F
 "#;
-    let result = generate_playback_data(source, "treble", 0, None);
+    let result = generate_playback_data(source, "treble", 0, None, None);
     assert!(result.is_ok());
     let data = result.unwrap();
 
@@ -344,7 +344,7 @@ tempo: 120
     // Verify first chord (C major: C3, E3, G3)
     assert_eq!(data.chords[0].midi_notes, vec![48, 52, 55]);
     assert_eq!(data.chords[0].start_time, 0.0);
-    assert_eq!(data.chords[0].duration, 1.0); // Quarter note
+    assert_eq!(data.chords[0].duration, 4.0); // Whole note (default)
 
     // Verify second chord (G major: G3, B3, D4)
     assert_eq!(data.chords[1].midi_notes, vec![55, 59, 62]);
@@ -360,13 +360,30 @@ tempo: 120
 }
 
 #[test]
+fn test_playback_chord_with_duration() {
+    // Test chord with explicit half note duration
+    let source = r#"---
+tempo: 120
+---
+@ch:dC C D E F
+"#;
+    let result = generate_playback_data(source, "treble", 0, None, None);
+    assert!(result.is_ok());
+    let data = result.unwrap();
+
+    assert_eq!(data.chords.len(), 1);
+    assert_eq!(data.chords[0].midi_notes, vec![48, 52, 55]); // C major
+    assert_eq!(data.chords[0].duration, 2.0); // Half note duration
+}
+
+#[test]
 fn test_playback_chord_on_rest() {
     let source = r#"---
 tempo: 120
 ---
 @ch:C $ C C C
 "#;
-    let result = generate_playback_data(source, "treble", 0, None);
+    let result = generate_playback_data(source, "treble", 0, None, None);
     assert!(result.is_ok());
     let data = result.unwrap();
 
@@ -412,7 +429,7 @@ tempo: 120
 ---
 C /3[D E F] G
 "#;
-    let result = generate_playback_data(source, "treble", 0, None);
+    let result = generate_playback_data(source, "treble", 0, None, None);
     assert!(result.is_ok());
     let data = result.unwrap();
 
@@ -456,7 +473,7 @@ tempo: 120
 ---
 C D E
 "#;
-    let result = generate_playback_data(source, "treble", 0, None);
+    let result = generate_playback_data(source, "treble", 0, None, None);
     assert!(result.is_ok());
     let data = result.unwrap();
 
@@ -477,7 +494,7 @@ tempo: 120
 ---
 C 3[D E F] G
 "#;
-    let result = generate_playback_data(source, "treble", 0, None);
+    let result = generate_playback_data(source, "treble", 0, None, None);
     assert!(result.is_ok());
     let data = result.unwrap();
 
@@ -524,7 +541,7 @@ C D E
 "#;
 
     // Octave shift up (+1 octave = +12 semitones)
-    let result = generate_playback_data(source, "treble", 1, None);
+    let result = generate_playback_data(source, "treble", 1, None, None);
     assert!(result.is_ok());
     let data = result.unwrap();
 

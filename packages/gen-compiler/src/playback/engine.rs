@@ -80,6 +80,7 @@ pub fn generate_playback_data(
     clef: &str,
     octave_shift: i8,
     instrument_group: Option<&str>,
+    transpose_key: Option<&str>,
 ) -> Result<PlaybackData, GenError> {
     let score = parse(source)?;
 
@@ -88,6 +89,17 @@ pub fn generate_playback_data(
     let clef_offset = match clef {
         "bass" => -2,  // Bass clef is 2 octaves lower
         _ => 0,        // Treble clef is the base
+    };
+
+    // Calculate transposition offset for display MIDI (in semitones)
+    // For transposing instruments, the written pitch is transposed UP from concert pitch
+    // E.g., Eb instrument: concert C (60) appears as D (62) on the page, so chromatic = +2 semitones
+    let transposition_chromatic: i8 = if let Some(key) = transpose_key {
+        crate::musicxml::Transposition::for_key(key)
+            .map(|t| t.chromatic)
+            .unwrap_or(0)
+    } else {
+        0
     };
 
     let total_offset = clef_offset + octave_shift;
@@ -149,14 +161,16 @@ pub fn generate_playback_data(
 
             match element {
                 Element::Note(note) => {
-                    // Handle chord symbol if present
-                    if let Some(chord_symbol) = &note.chord {
-                        let chord_notes = parse_chord_symbol(chord_symbol);
+                    // Handle chord symbol if present - uses its own duration (independent from melody)
+                    if let Some(chord_ann) = &note.chord {
+                        let chord_notes = parse_chord_symbol(&chord_ann.symbol);
                         if !chord_notes.is_empty() {
+                            // Use chord's own duration (defaults to whole note)
+                            let chord_duration = chord_ann.duration_beats(&score.metadata.time_signature);
                             chords.push(PlaybackChord {
                                 midi_notes: chord_notes,
                                 start_time: current_time,
-                                duration,
+                                duration: chord_duration,
                             });
                         }
                     }
@@ -165,11 +179,12 @@ pub fn generate_playback_data(
                         // Start of a tied group - create note and track it
                         let note_idx = notes.len();
                         let beat_in_measure = current_time - measure_start_time;
-                        let display_midi = note.to_midi_note(&current_key, total_offset);
+                        let display_midi_base = note.to_midi_note(&current_key, total_offset);
+                        let display_midi = (display_midi_base as i16 + transposition_chromatic as i16).clamp(0, 127) as u8;
                         let osmd_quarter_time = osmd_time * osmd_to_quarter_multiplier;
                         notes.push(PlaybackNote {
                             midi_note: note.to_midi_note(&current_key, octave_shift), // Playback pitch (with octave shift, no clef offset)
-                            display_midi_note: display_midi, // Display pitch (with full offset)
+                            display_midi_note: display_midi, // Display pitch (with full offset + transposition)
                             start_time: current_time,
                             duration,
                             note_index,
@@ -195,11 +210,12 @@ pub fn generate_playback_data(
                     } else {
                         // Regular note (not tied)
                         let beat_in_measure = current_time - measure_start_time;
-                        let display_midi = note.to_midi_note(&current_key, total_offset);
+                        let display_midi_base = note.to_midi_note(&current_key, total_offset);
+                        let display_midi = (display_midi_base as i16 + transposition_chromatic as i16).clamp(0, 127) as u8;
                         let osmd_quarter_time = osmd_time * osmd_to_quarter_multiplier;
                         notes.push(PlaybackNote {
                             midi_note: note.to_midi_note(&current_key, octave_shift), // Playback pitch (with octave shift, no clef offset)
-                            display_midi_note: display_midi, // Display pitch (with full offset)
+                            display_midi_note: display_midi, // Display pitch (with full offset + transposition)
                             start_time: current_time,
                             duration,
                             note_index,
@@ -213,14 +229,16 @@ pub fn generate_playback_data(
                     }
                 }
                 Element::Rest { chord, .. } => {
-                    // Handle chord symbol on rest if present
-                    if let Some(chord_symbol) = chord {
-                        let chord_notes = parse_chord_symbol(chord_symbol);
+                    // Handle chord symbol on rest if present - uses its own duration
+                    if let Some(chord_ann) = chord {
+                        let chord_notes = parse_chord_symbol(&chord_ann.symbol);
                         if !chord_notes.is_empty() {
+                            // Use chord's own duration (defaults to whole note)
+                            let chord_duration = chord_ann.duration_beats(&score.metadata.time_signature);
                             chords.push(PlaybackChord {
                                 midi_notes: chord_notes,
                                 start_time: current_time,
-                                duration,
+                                duration: chord_duration,
                             });
                         }
                     }

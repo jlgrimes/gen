@@ -41,6 +41,7 @@ export const tauriPlayback: PlaybackAdapter = {
       clef: options.clef,
       octaveShift: options.octaveShift,
       instrumentGroup: options.instrumentGroup ?? null,
+      transposeKey: options.transposeKey ?? null,
     });
   },
 };

@@ -420,6 +420,40 @@ impl TupletInfo {
     }
 }
 
+/// Chord annotation with its own duration (independent from the melody)
+#[derive(Debug, Clone, PartialEq)]
+pub struct ChordAnnotation {
+    pub symbol: String,       // Chord symbol (e.g., "Cmaj7", "Dm", "G7")
+    pub duration: Duration,   // Duration for playback (default: Whole)
+    pub dotted: bool,         // Whether the duration is dotted
+}
+
+impl ChordAnnotation {
+    /// Create a new chord annotation with default whole-note duration
+    pub fn new(symbol: String) -> Self {
+        Self {
+            symbol,
+            duration: Duration::Whole,
+            dotted: false,
+        }
+    }
+
+    /// Create a chord annotation with a specific duration
+    pub fn with_duration(symbol: String, duration: Duration, dotted: bool) -> Self {
+        Self {
+            symbol,
+            duration,
+            dotted,
+        }
+    }
+
+    /// Returns duration in beats based on time signature
+    pub fn duration_beats(&self, time_sig: &TimeSignature) -> f64 {
+        let base = self.duration.as_beats(time_sig);
+        if self.dotted { base * 1.5 } else { base }
+    }
+}
+
 /// A musical note
 #[derive(Debug, Clone, PartialEq)]
 pub struct Note {
@@ -433,7 +467,7 @@ pub struct Note {
     pub tie_stop: bool,    // This note ends a tie (from the previous note)
     pub slur_start: bool,  // This note starts a slur
     pub slur_stop: bool,   // This note ends a slur
-    pub chord: Option<String>,  // Optional chord symbol to display above this note
+    pub chord: Option<ChordAnnotation>,  // Optional chord symbol with independent duration
 }
 
 impl Note {
@@ -498,7 +532,7 @@ impl Note {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Element {
     Note(Note),
-    Rest { duration: Duration, dotted: bool, tuplet: Option<TupletInfo>, chord: Option<String> },
+    Rest { duration: Duration, dotted: bool, tuplet: Option<TupletInfo>, chord: Option<ChordAnnotation> },
 }
 
 impl Element {

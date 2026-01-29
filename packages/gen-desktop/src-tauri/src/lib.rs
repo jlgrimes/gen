@@ -79,8 +79,9 @@ fn generate_playback_data(
     clef: &str,
     octave_shift: i8,
     instrument_group: Option<&str>,
+    transpose_key: Option<&str>,
 ) -> PlaybackResult {
-    match gen::generate_playback_data(source, clef, octave_shift, instrument_group) {
+    match gen::generate_playback_data(source, clef, octave_shift, instrument_group, transpose_key) {
         Ok(data) => PlaybackResult::Success { data },
         Err(e) => PlaybackResult::Error {
             error: error_to_compile_error(e),

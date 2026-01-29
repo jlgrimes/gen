@@ -1,8 +1,8 @@
-3[$ C D] 3[E D C]
-/B_ *C $ /[A_ B_]
-3[C D E-] 3[E D C]
-dB_ $ /[A_ B_]
-3[C D E-] E /[D C]
+@ch:Ab  3[$ C D] 3[E D C]
+@ch:C   /B_ *C $ /[A_ B_]
+@ch:Fm  3[C D E-] 3[E D C]
+@ch:C   dB_ $ /[A_ B_]
+@ch:Ab  3[C D E-] E /[D C]
 /B_ C /C-C /$ //[A_ B_]
 3[C D E] dA
 C^ A *C^ /B
