@@ -205,15 +205,32 @@ pub fn generate_playback_data(
         for element in &measure.elements {
             let duration = element.total_beats(&score.metadata.time_signature);
 
-            // Calculate base duration for OSMD (without triplet adjustment)
+            // OSMD accumulates using MusicXML duration values (quantized to divisions)
+            // For triplets, MusicXML uses floor((normal * base * divisions) / actual) / divisions
+            // With divisions=4: quarter triplet (3:2) = floor((2*1*4)/3)/4 = floor(2.67)/4 = 2/4 = 0.5
             let osmd_duration = match element {
                 Element::Note(note) => {
                     let base = note.duration.as_beats(&score.metadata.time_signature);
-                    if note.dotted { base * 1.5 } else { base }
+                    let with_dot = if note.dotted { base * 1.5 } else { base };
+                    if let Some(tuplet) = &note.tuplet {
+                        // Calculate MusicXML quantized duration
+                        let divisions = 4.0; // Standard: quarter note = 4 divisions
+                        let musicxml_dur = ((tuplet.normal_notes as f64 * with_dot * divisions) / tuplet.actual_notes as f64).floor();
+                        musicxml_dur / divisions
+                    } else {
+                        with_dot
+                    }
                 },
-                Element::Rest { duration: rest_dur, dotted, .. } => {
+                Element::Rest { duration: rest_dur, dotted, tuplet, .. } => {
                     let base = rest_dur.as_beats(&score.metadata.time_signature);
-                    if *dotted { base * 1.5 } else { base }
+                    let with_dot = if *dotted { base * 1.5 } else { base };
+                    if let Some(t) = tuplet {
+                        let divisions = 4.0;
+                        let musicxml_dur = ((t.normal_notes as f64 * with_dot * divisions) / t.actual_notes as f64).floor();
+                        musicxml_dur / divisions
+                    } else {
+                        with_dot
+                    }
                 },
             };
 
@@ -837,18 +854,18 @@ C 3[D E F] G
         assert_eq!(data.notes[1].osmd_timestamp, 1.0);
         assert_eq!(data.notes[1].osmd_match_key, "62_1.000");
 
-        // E: playback 1.667 (triplet math), OSMD 1.5 (base eighth = 0.5) - E4 = MIDI 64
+        // E: playback 1.667 (triplet math), OSMD 1.5 (MusicXML quantized) - E4 = MIDI 64
         assert!((data.notes[2].start_time - 1.6666666666666667).abs() < 0.0001);
         assert_eq!(data.notes[2].osmd_timestamp, 1.5);
         assert_eq!(data.notes[2].osmd_match_key, "64_1.500");
 
-        // F: playback 2.333 (triplet math), OSMD 2.0 (base eighth = 0.5) - F4 = MIDI 65
+        // F: playback 2.333 (triplet math), OSMD 2.0 (MusicXML quantized) - F4 = MIDI 65
         assert!((data.notes[3].start_time - 2.3333333333333335).abs() < 0.0001);
         assert_eq!(data.notes[3].osmd_timestamp, 2.0);
         assert_eq!(data.notes[3].osmd_match_key, "65_2.000");
 
-        // G: playback 3.0, OSMD 2.5 (base eighth = 0.5) - G4 = MIDI 67
-        assert_eq!(data.notes[4].start_time, 3.0);
+        // G: playback ~3.0 (floating point), OSMD 2.5 (MusicXML quantized) - G4 = MIDI 67
+        assert!((data.notes[4].start_time - 3.0).abs() < 0.0001);
         assert_eq!(data.notes[4].osmd_timestamp, 2.5);
         assert_eq!(data.notes[4].osmd_match_key, "67_2.500");
     }
