@@ -997,10 +997,20 @@ impl Parser {
         }
     }
 }
-
-/// Extract metadata block from source (can be at top or bottom)
+/// Extract metadata block from source (can be at top or bottom).
+///
 /// Returns (metadata_content, remaining_source)
-fn extract_metadata(source: &str) -> (Option<String>, String) {
+///
+/// # Example
+/// ```
+/// use gen::parser::first_pass::extract_metadata;
+///
+/// let source = "---\ntitle: My Song\n---\nC D E F";
+/// let (metadata, music) = extract_metadata(source);
+/// assert!(metadata.is_some());
+/// assert_eq!(music, "\nC D E F");
+/// ```
+pub(crate) fn extract_metadata(source: &str) -> (Option<String>, String) {
     let lines: Vec<&str> = source.lines().collect();
 
     // Find the metadata block (between --- markers)
@@ -1037,10 +1047,13 @@ fn extract_metadata(source: &str) -> (Option<String>, String) {
 }
 
 /// Extract mod points from inline annotations in the source.
-/// Annotations are in the format: @Eb:^ or @Bb:_
+///
+/// Annotations are in the format: `@Eb:^` or `@Bb:_`
+///
 /// Returns (ModPoints, line_to_measure mapping)
+///
 /// The line_to_measure maps 1-indexed source line numbers to measure indices.
-fn extract_mod_points(source: &str) -> (ModPoints, HashMap<usize, usize>) {
+pub(crate) fn extract_mod_points(source: &str) -> (ModPoints, HashMap<usize, usize>) {
     let mut mod_points = ModPoints::default();
     let mut line_to_measure: HashMap<usize, usize> = HashMap::new();
     let mut measure_index = 0;
@@ -1066,7 +1079,10 @@ fn extract_mod_points(source: &str) -> (ModPoints, HashMap<usize, usize>) {
         let content_before_annotation = if let Some(at_pos) = line.find('@') {
             // Check if this @ is followed by Eb: or Bb: pattern
             let rest = &line[at_pos..];
-            if rest.len() >= 4 && (rest[1..].to_lowercase().starts_with("eb:") || rest[1..].to_lowercase().starts_with("bb:")) {
+            if rest.len() >= 4
+                && (rest[1..].to_lowercase().starts_with("eb:")
+                    || rest[1..].to_lowercase().starts_with("bb:"))
+            {
                 &line[..at_pos]
             } else {
                 line
@@ -1111,9 +1127,10 @@ fn extract_mod_points(source: &str) -> (ModPoints, HashMap<usize, usize>) {
     (mod_points, line_to_measure)
 }
 
-/// Extract chord annotations from @ch:XXX patterns in source
+/// Extract chord annotations from `@ch:XXX` patterns in source.
+///
 /// Returns mapping: measure index → note index → chord symbol
-fn extract_chords(source: &str) -> ChordAnnotations {
+pub(crate) fn extract_chords(source: &str) -> ChordAnnotations {
     let mut annotations = ChordAnnotations::default();
     let mut measure_index = 0;
     let mut in_metadata = false;
@@ -1210,9 +1227,10 @@ fn extract_chords(source: &str) -> ChordAnnotations {
     annotations
 }
 
-/// Extract key change annotations from @key:XXX patterns in source
+/// Extract key change annotations from `@key:XXX` patterns in source.
+///
 /// Returns mapping: measure index → key signature
-fn extract_key_changes(source: &str) -> HashMap<usize, KeySignature> {
+pub(crate) fn extract_key_changes(source: &str) -> HashMap<usize, KeySignature> {
     let mut key_changes: HashMap<usize, KeySignature> = HashMap::new();
     let mut measure_index = 0;
     let mut in_metadata = false;
@@ -1230,7 +1248,9 @@ fn extract_key_changes(source: &str) -> HashMap<usize, KeySignature> {
         }
 
         // Check if line has music content (notes or rests)
-        let has_music = line.chars().any(|c| matches!(c, 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | '$'));
+        let has_music = line
+            .chars()
+            .any(|c| matches!(c, 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | '$'));
 
         // Look for @key: annotation
         if let Some(key_pos) = line.find("@key:") {
@@ -1264,9 +1284,10 @@ fn extract_key_changes(source: &str) -> HashMap<usize, KeySignature> {
     key_changes
 }
 
-/// Extract measure octave modifiers from @:^ or @:_ patterns in source
+/// Extract measure octave modifiers from `@:^` or `@:_` patterns in source.
+///
 /// Returns mapping: measure index → octave offset
-fn extract_measure_octave_modifiers(source: &str) -> HashMap<usize, i8> {
+pub(crate) fn extract_measure_octave_modifiers(source: &str) -> HashMap<usize, i8> {
     let mut modifiers = HashMap::new();
     let mut measure_index = 0;
     let mut in_metadata = false;
@@ -1323,7 +1344,8 @@ fn extract_measure_octave_modifiers(source: &str) -> HashMap<usize, i8> {
     modifiers
 }
 
-/// Main parsing function
+/// Extract metadata block from source (can be at top or bottom)
+/// Returns (metadata_content, remaining_source)
 pub fn parse(source: &str) -> Result<Score, GenError> {
     // Extract mod points from comments first (before any other processing)
     // This needs the original source to get correct line numbers
