@@ -499,7 +499,7 @@ gen/
 │   ├── gen-compiler/      # Rust compiler (this document describes this)
 │   ├── gen-scores/        # Embedded score library
 │   ├── gen-ui/            # Shared React/TypeScript UI components
-│   ├── gen-desktop/       # Tauri v2 desktop app
+│   ├── gen-app/           # Tauri v2 app (desktop + mobile)
 │   ├── gen-wasm/          # WebAssembly bindings
 │   ├── gen-web/           # Web application
 │   └── gen-docs/          # Documentation package (npm exportable)
