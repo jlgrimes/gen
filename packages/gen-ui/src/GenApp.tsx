@@ -8,7 +8,7 @@ import { jsPDF } from 'jspdf';
 import 'svg2pdf.js';
 import { Download, Code, Music2 } from 'lucide-react';
 import { Sidebar } from '@/components/ui/sidebar';
-import { GenEditor } from '@/components/GenEditor';
+import { GenMonacoEditor } from '@/editor/GenMonacoEditor';
 import {
   ResizablePanelGroup,
   ResizablePanel,
@@ -691,7 +691,7 @@ export function GenApp({ compiler, files, playback, scores }: GenAppProps) {
         </h2>
       </div>
       <div className='flex-1 overflow-hidden'>
-        <GenEditor
+        <GenMonacoEditor
           value={genSource}
           onChange={setGenSource}
           error={error}

@@ -1,0 +1,1 @@
+export { GenMonacoEditor } from './GenMonacoEditor';

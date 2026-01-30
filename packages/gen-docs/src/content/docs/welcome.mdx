@@ -1,0 +1,63 @@
+---
+title: Welcome to Gen
+description: A text-based music notation language that compiles to MusicXML
+---
+
+Gen is a text-based music notation language that compiles to MusicXML for rendering as sheet music.
+
+## Quick Example
+
+Write music with simple text syntax:
+
+```
+---
+title: Twinkle Twinkle
+time-signature: 4/4
+key-signature: C
+---
+
+C C G G
+A A Gp
+F F E E
+D D Cp
+```
+
+## Why Gen?
+
+- **Simple syntax** - Write notes as text, not XML
+- **Human readable** - Your source files are easy to read and edit
+- **Version control friendly** - Diff and merge music like code
+- **MusicXML output** - Compatible with all major notation software
+
+## Project Structure
+
+```
+gen/
+├── packages/
+│   ├── gen-compiler/    # Rust compiler
+│   ├── gen-scores/      # Embedded score library
+│   ├── gen-ui/          # Desktop application
+│   └── gen-web/         # Web application
+└── gen-docs/            # This documentation
+```
+
+## Getting Started
+
+### Try Online
+
+Visit [gen.band](https://gen.band) to try Gen in your browser.
+
+### Run the Desktop App
+
+```bash
+cd packages/gen-ui
+pnpm install
+pnpm tauri dev
+```
+
+### Compile from Command Line
+
+```bash
+cd packages/gen-compiler
+cargo run -- path/to/score.gen
+```

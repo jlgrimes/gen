@@ -1,0 +1,12 @@
+/* Custom styles for Gen documentation */
+
+:root {
+  --sl-color-accent-low: #1a365d;
+  --sl-color-accent: #3182ce;
+  --sl-color-accent-high: #90cdf4;
+}
+
+/* Code blocks for .gen syntax */
+pre code {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+}

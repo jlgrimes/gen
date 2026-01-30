@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <defs>
+    <linearGradient id="noteGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#7c3aed"/>
+      <stop offset="100%" style="stop-color:#a855f7"/>
+    </linearGradient>
+  </defs>
+  <!-- Music note -->
+  <ellipse cx="10" cy="24" rx="5" ry="4" fill="url(#noteGradient)"/>
+  <rect x="14" y="6" width="3" height="18" fill="url(#noteGradient)"/>
+  <path d="M17 6 Q24 4 24 10 Q24 14 17 12" fill="url(#noteGradient)"/>
+</svg>

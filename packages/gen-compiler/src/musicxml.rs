@@ -441,7 +441,7 @@ fn calculate_beam_states(elements: &[Element], time_signature: &TimeSignature) -
 fn write_tempo_direction<W: std::io::Write>(
     writer: &mut Writer<W>,
     tempo: &crate::ast::Tempo,
-    time_signature: &TimeSignature,
+    _time_signature: &TimeSignature,
 ) {
     writer
         .write_event(Event::Start(BytesStart::new("direction")))

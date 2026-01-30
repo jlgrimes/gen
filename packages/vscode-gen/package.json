@@ -25,7 +25,11 @@
         "id": "gen",
         "extensions": [".gen"],
         "aliases": ["Gen", "gen"],
-        "configuration": "./language-configuration.json"
+        "configuration": "./language-configuration.json",
+        "icon": {
+          "light": "./icons/gen-icon.svg",
+          "dark": "./icons/gen-icon.svg"
+        }
       }
     ],
     "grammars": [

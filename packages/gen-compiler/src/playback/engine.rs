@@ -445,7 +445,7 @@ pub fn generate_playback_data(
     // Get tempo and calculate beat conversion
     // If tempo specifies a rhythm (e.g., "*88" = dotted quarter), use that as the beat unit
     // Otherwise default to quarter note
-    let (tempo_bpm, tempo_beat_duration) = if let Some(ref tempo) = score.metadata.tempo {
+    let (_tempo_bpm, tempo_beat_duration) = if let Some(ref tempo) = score.metadata.tempo {
         let beat_duration = tempo.duration.as_beats(&score.metadata.time_signature);
         let with_dot = if tempo.dotted { beat_duration * 1.5 } else { beat_duration };
         (tempo.bpm, with_dot)

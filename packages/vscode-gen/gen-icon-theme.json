@@ -1,0 +1,10 @@
+{
+  "iconDefinitions": {
+    "gen": {
+      "iconPath": "./icons/gen-icon.svg"
+    }
+  },
+  "fileExtensions": {
+    "gen": "gen"
+  }
+}

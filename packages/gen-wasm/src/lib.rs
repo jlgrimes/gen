@@ -117,6 +117,20 @@ pub fn compile_with_mod_points(
 
 /// Lint Gen source and return diagnostics as JSON array
 /// Returns diagnostics with line/column info for inline editor display
+/// Generate playback data for a score
+#[wasm_bindgen]
+pub fn generate_playback_data(
+    source: &str,
+    clef: &str,
+    octave_shift: i8,
+    instrument_group: Option<String>,
+    transpose_key: Option<String>,
+) -> Result<String, JsValue> {
+    gen::generate_playback_data(source, clef, octave_shift, instrument_group.as_deref(), transpose_key.as_deref())
+        .map(|data| serde_json::to_string(&data).unwrap())
+        .map_err(|e| JsValue::from_str(&serde_json::to_string(&error_to_compile_error(e)).unwrap()))
+}
+
 #[wasm_bindgen]
 pub fn lint(source: &str) -> String {
     let mut diagnostics: Vec<Diagnostic> = Vec::new();

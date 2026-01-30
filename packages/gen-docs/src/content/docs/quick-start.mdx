@@ -1,0 +1,67 @@
+---
+title: Quick Start
+description: Get up and running with Gen in 5 minutes
+---
+
+## Note Format
+
+Every note in Gen follows this pattern:
+
+```
+[octave][note][accidental][rhythm]
+```
+
+| Part | Description | Example |
+|------|-------------|---------|
+| Octave | `^` (up), `_` (down) | `^C` = C one octave up |
+| Note | A-G or `$` for rest | `C`, `D`, `E`, `$` |
+| Accidental | `#` (sharp), `b` (flat) | `F#`, `Bb` |
+| Rhythm | Duration modifier | `/` = eighth, `p` = half |
+
+## Examples
+
+```
+C           # Quarter note C
+E/          # Eighth note E
+Gp          # Half note G
+_Ab/        # Ab eighth note, one octave down
+^F#//       # F# sixteenth note, one octave up
+$           # Quarter rest
+$/          # Eighth rest
+Gp*         # Dotted half note G
+```
+
+## Rhythm Modifiers
+
+| Modifier | Duration |
+|----------|----------|
+| (none) | Quarter note |
+| `/` | Eighth note |
+| `//` | Sixteenth note |
+| `///` | 32nd note |
+| `p` | Half note |
+| `o` | Whole note |
+| `*` | Dotted (add after rhythm) |
+
+## Document Structure
+
+Every Gen file has optional metadata at the top, followed by measures (one per line):
+
+```
+---
+title: My Song
+composer: Me
+time-signature: 4/4
+key-signature: G
+tempo: 120
+---
+
+G A B ^C
+^D ^E ^F# ^G
+```
+
+## Next Steps
+
+- Read the full [Gen Basics](/guide/basics) guide
+- See [Examples](/guide/examples) of complete scores
+- Learn about the [Compiler Architecture](/reference/compiler)

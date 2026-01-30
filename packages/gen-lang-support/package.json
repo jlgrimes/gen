@@ -1,0 +1,28 @@
+{
+  "name": "gen-lang-support",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Shared language support for Gen music notation (syntax highlighting, language config)",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "exports": {
+    ".": "./index.js",
+    "./monarch": "./monarch.ts",
+    "./syntaxes/gen.tmLanguage.json": "./syntaxes/gen.tmLanguage.json",
+    "./language-configuration.json": "./language-configuration.json"
+  },
+  "files": [
+    "syntaxes",
+    "language-configuration.json",
+    "monarch.ts",
+    "index.js",
+    "index.d.ts",
+    "SYNTAX_RULES.md"
+  ],
+  "peerDependencies": {
+    "monaco-editor": ">=0.40.0"
+  },
+  "devDependencies": {
+    "monaco-editor": "^0.55.1"
+  }
+}

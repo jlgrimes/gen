@@ -1,0 +1,50 @@
+---
+title: Gen Documentation
+description: A text-based music notation language
+template: splash
+hero:
+  tagline: Write music as text. Compile to sheet music.
+  image:
+    file: ../../assets/music-note.svg
+  actions:
+    - text: Get Started
+      link: /welcome/
+      icon: right-arrow
+      variant: primary
+    - text: View on GitHub
+      link: https://github.com/jlgrimes/gen
+      icon: external
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+## Quick Example
+
+```
+---
+title: Twinkle Twinkle
+time-signature: 4/4
+---
+
+C C G G
+A A Gp
+F F E E
+D D Cp
+```
+
+## Learn Gen
+
+<CardGrid stagger>
+  <Card title="Quick Start" icon="rocket">
+    Get up and running in 5 minutes with the [Quick Start guide](/quick-start/).
+  </Card>
+  <Card title="Language Basics" icon="document">
+    Learn the complete syntax in the [Gen Basics guide](/guide/basics/).
+  </Card>
+  <Card title="Examples" icon="list-format">
+    See complete scores in the [Examples section](/guide/examples/).
+  </Card>
+  <Card title="Try Online" icon="laptop">
+    Write Gen in your browser at [gen.band](https://gen.band).
+  </Card>
+</CardGrid>
