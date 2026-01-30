@@ -4,7 +4,6 @@
   "scopeName": "source.gen",
   "patterns": [
     { "include": "#metadata" },
-    { "include": "#comments" },
     { "include": "#chords" },
     { "include": "#annotations" },
     { "include": "#repeats" },
@@ -36,21 +35,9 @@
         }
       ]
     },
-    "comments": {
-      "name": "comment.line.double-slash.gen",
-      "match": "//.*$"
-    },
     "chords": {
-      "name": "meta.chord.gen",
-      "match": "(\\{)([^\\}]+)(\\})(/{1,3}|p|o)?(\\*)?(:)?",
-      "captures": {
-        "1": { "name": "string.other.chord.gen" },
-        "2": { "name": "string.other.chord.gen" },
-        "3": { "name": "string.other.chord.gen" },
-        "4": { "name": "constant.numeric.rhythm.gen" },
-        "5": { "name": "constant.numeric.rhythm.gen" },
-        "6": { "name": "string.other.chord.gen" }
-      }
+      "name": "string.quoted.other.chord.gen",
+      "match": "\\{[^\\}]+\\}(/{1,3}|p|o)?(\\*)?(:)?"
     },
     "annotations": {
       "patterns": [
@@ -119,7 +106,7 @@
       "name": "meta.rest.gen",
       "match": "(\\$)(/{1,3}|p|o)?(\\*)?",
       "captures": {
-        "1": { "name": "variable.other.rest.gen" },
+        "1": { "name": "constant.numeric.rest.gen" },
         "2": { "name": "constant.numeric.rhythm.gen" },
         "3": { "name": "constant.numeric.rhythm.gen" }
       }
