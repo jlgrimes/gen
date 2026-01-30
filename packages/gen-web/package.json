@@ -13,13 +13,14 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@tailwindcss/vite": "^4.1.18",
+    "@vercel/analytics": "^1.6.1",
     "gen-scores": "workspace:*",
     "gen-ui": "workspace:*",
     "gen-wasm": "file:../gen-wasm/pkg",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "tailwindcss": "^4.1.18",
-    "@tailwindcss/vite": "^4.1.18"
+    "tailwindcss": "^4.1.18"
   },
   "devDependencies": {
     "@types/node": "^25.0.10",
@@ -29,8 +30,8 @@
     "jsdom": "^25.0.1",
     "typescript": "^5.8.3",
     "vite": "^6.3.5",
-    "vite-plugin-wasm": "^3.4.1",
     "vite-plugin-top-level-await": "^1.5.0",
+    "vite-plugin-wasm": "^3.4.1",
     "vitest": "^2.1.8"
   }
 }
