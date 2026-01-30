@@ -747,33 +747,6 @@ export function GenApp({ compiler, files, playback, url, scores }: GenAppProps) 
     </div>
   );
 
-  // Editor panel for mobile (combined header + body)
-  const editorPanel = (
-    <div className='h-full border-r border-border flex flex-col bg-white'>
-      <div className='p-3 border-b border-border flex items-center justify-between'>
-        <h2 className='font-semibold text-sm'>
-          Editor
-          {isCompiling && (
-            <span className='ml-2 text-xs text-muted-foreground'>
-              compiling...
-            </span>
-          )}
-        </h2>
-      </div>
-      <div className='flex-1 overflow-hidden'>
-        <GenMonacoEditor
-          value={genSource}
-          onChange={setGenSource}
-          error={error}
-          placeholder='Select a score or start typing...'
-          instrumentGroup={currentInstrumentGroup}
-          modPointsForGroup={modPointsForGroup}
-          onModPointToggle={handleModPointToggle}
-        />
-      </div>
-    </div>
-  );
-
   // Sheet music header (takes remaining width - 70% on desktop)
   const sheetMusicHeader = (
     <div className='flex-1 p-3 border-b border-border flex items-center justify-between bg-white'>
