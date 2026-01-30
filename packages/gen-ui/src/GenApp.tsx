@@ -6,13 +6,12 @@ import {
 } from 'opensheetmusicdisplay';
 import { jsPDF } from 'jspdf';
 import 'svg2pdf.js';
-import { Download, Eye, EyeOff } from 'lucide-react';
+import { Download, Eye, EyeOff, Menu, Code } from 'lucide-react';
 import { Sidebar } from '@/components/ui/sidebar';
 import { GenMonacoEditor } from '@/editor/GenMonacoEditor';
 import { useBreakpoint } from '@/hooks/useBreakpoint';
 import { SideDrawer } from '@/components/ui/side-drawer';
-import { MobileHeader } from '@/components/ui/mobile-header';
-import { BottomTabBar } from '@/components/ui/bottom-tab-bar';
+import { EditorOverlay } from '@/components/ui/editor-overlay';
 import type {
   CompilerAdapter,
   FileAdapter,
@@ -57,8 +56,8 @@ function updateUrl(score: string | null, instrumentId: string | null) {
   window.history.replaceState({}, '', hash);
 }
 
-// Mobile view tabs
-type MobileTab = 'editor' | 'sheet';
+// Editor overlay state for mobile/tablet
+// (removed MobileTab type - using overlay instead)
 
 // Clef options
 type Clef = 'treble' | 'bass';
@@ -222,7 +221,7 @@ export interface GenAppProps {
 }
 
 export function GenApp({ compiler, files, playback, url, scores }: GenAppProps) {
-  const { isMobile, isTablet, isDesktop, isMobileOrTablet } = useBreakpoint();
+  const { isTablet, isMobileOrTablet } = useBreakpoint();
 
   // Get initial values from URL
   const initialParams = useMemo(() => getUrlParams(), []);
@@ -236,7 +235,7 @@ export function GenApp({ compiler, files, playback, url, scores }: GenAppProps) 
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true); // Start collapsed, managed by drawer on mobile/tablet
   const [isDrawerOpen, setIsDrawerOpen] = useState(false); // Drawer state for mobile/tablet
   const [isEditorVisible, setIsEditorVisible] = useState(true); // Toggle editor visibility
-  const [mobileTab, setMobileTab] = useState<MobileTab>('sheet'); // Default to sheet view on mobile/tablet
+  const [isEditorOverlayOpen, setIsEditorOverlayOpen] = useState(false); // Editor overlay for mobile/tablet
   const [instrumentIndex, setInstrumentIndex] = useState(() =>
     getInstrumentIndexById(initialParams.instrument),
   ); // Index into INSTRUMENT_PRESETS, or CUSTOM_PRESET_INDEX for custom
@@ -826,290 +825,114 @@ export function GenApp({ compiler, files, playback, url, scores }: GenAppProps) 
     </div>
   );
 
-  // Sheet music body (toolbar + content, for desktop)
-  const sheetMusicBody = (
-    <div className='h-full flex flex-col bg-white min-w-0'>
-      {/* Toolbar */}
-      <div className='px-4 py-2 border-b border-border bg-gray-50 flex items-center gap-4 md:gap-6 flex-wrap'>
-        {/* Instrument preset dropdown */}
-        <div className='flex items-center gap-2'>
-          <label className='text-xs font-medium text-gray-600'>
-            Instrument:
-          </label>
-          <select
-            value={instrumentIndex}
-            onChange={e => {
-              const idx = Number(e.target.value);
-              setInstrumentIndex(idx);
-              if (idx < INSTRUMENT_PRESETS.length) {
-                const preset = INSTRUMENT_PRESETS[idx];
-                setTransposeIndex(preset.transposeIndex);
-                setOctaveShift(preset.octaveShift);
-                setClef(preset.clef);
-              }
-            }}
-            className='px-2 py-1 text-xs border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
-          >
-            {INSTRUMENT_PRESETS.map((preset, index) => (
-              <option key={preset.label} value={index}>
-                {preset.label}
-              </option>
-            ))}
-            <option value={CUSTOM_PRESET_INDEX}>Custom</option>
-          </select>
-        </div>
-
-        {/* Octave control - always visible */}
-        <div className='flex items-center gap-2'>
-          <label className='text-xs font-medium text-gray-600'>Octave:</label>
-          <select
-            value={octaveShift}
-            onChange={e => setOctaveShift(Number(e.target.value))}
-            className='px-2 py-1 text-xs border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
-          >
-            {OCTAVE_OPTIONS.map(option => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Custom controls - only shown when Custom is selected */}
-        {instrumentIndex === CUSTOM_PRESET_INDEX && (
-          <>
-            <div className='flex items-center gap-2'>
-              <label className='text-xs font-medium text-gray-600'>
-                Transpose:
-              </label>
-              <select
-                value={transposeIndex}
-                onChange={e => setTransposeIndex(Number(e.target.value))}
-                className='px-2 py-1 text-xs border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
-              >
-                {TRANSPOSE_OPTIONS.map((option, index) => (
-                  <option key={option.label} value={index}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className='flex items-center gap-2'>
-              <label className='text-xs font-medium text-gray-600'>Clef:</label>
-              <select
-                value={clef}
-                onChange={e => setClef(e.target.value as Clef)}
-                className='px-2 py-1 text-xs border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
-              >
-                {CLEF_OPTIONS.map(option => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </>
-        )}
-
-        {/* Zoom control - always visible */}
-        <div className='flex items-center gap-2'>
-          <label className='text-xs font-medium text-gray-600'>Zoom:</label>
-          <input
-            type='range'
-            min='0.3'
-            max='1.5'
-            step='0.05'
-            value={zoom}
-            onChange={e => setZoom(Number(e.target.value))}
-            className='w-20 md:w-24 h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer'
-          />
-          <span className='text-xs text-gray-500 w-10'>
-            {Math.round(zoom * 100)}%
-          </span>
-        </div>
+  // Toolbar component (shared across all layouts)
+  const sheetMusicToolbar = (
+    <div className='px-4 py-2 border-b border-border bg-gray-50 flex items-center gap-4 md:gap-6 flex-wrap'>
+      {/* Instrument preset dropdown */}
+      <div className='flex items-center gap-2'>
+        <label className='text-xs font-medium text-gray-600'>
+          Instrument:
+        </label>
+        <select
+          value={instrumentIndex}
+          onChange={e => {
+            const idx = Number(e.target.value);
+            setInstrumentIndex(idx);
+            if (idx < INSTRUMENT_PRESETS.length) {
+              const preset = INSTRUMENT_PRESETS[idx];
+              setTransposeIndex(preset.transposeIndex);
+              setOctaveShift(preset.octaveShift);
+              setClef(preset.clef);
+            }
+          }}
+          className='px-2 py-1 text-xs border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
+        >
+          {INSTRUMENT_PRESETS.map((preset, index) => (
+            <option key={preset.label} value={index}>
+              {preset.label}
+            </option>
+          ))}
+          <option value={CUSTOM_PRESET_INDEX}>Custom</option>
+        </select>
       </div>
-      <div className='flex-1 overflow-auto p-4'>
-        <div ref={sheetMusicRef} className='w-full' />
+
+      {/* Octave control - always visible */}
+      <div className='flex items-center gap-2'>
+        <label className='text-xs font-medium text-gray-600'>Octave:</label>
+        <select
+          value={octaveShift}
+          onChange={e => setOctaveShift(Number(e.target.value))}
+          className='px-2 py-1 text-xs border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
+        >
+          {OCTAVE_OPTIONS.map(option => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Custom controls - only shown when Custom is selected */}
+      {instrumentIndex === CUSTOM_PRESET_INDEX && (
+        <>
+          <div className='flex items-center gap-2'>
+            <label className='text-xs font-medium text-gray-600'>
+              Transpose:
+            </label>
+            <select
+              value={transposeIndex}
+              onChange={e => setTransposeIndex(Number(e.target.value))}
+              className='px-2 py-1 text-xs border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
+            >
+              {TRANSPOSE_OPTIONS.map((option, index) => (
+                <option key={option.label} value={index}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className='flex items-center gap-2'>
+            <label className='text-xs font-medium text-gray-600'>Clef:</label>
+            <select
+              value={clef}
+              onChange={e => setClef(e.target.value as Clef)}
+              className='px-2 py-1 text-xs border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
+            >
+              {CLEF_OPTIONS.map(option => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </>
+      )}
+
+      {/* Zoom control - always visible */}
+      <div className='flex items-center gap-2'>
+        <label className='text-xs font-medium text-gray-600'>Zoom:</label>
+        <input
+          type='range'
+          min='0.3'
+          max='1.5'
+          step='0.05'
+          value={zoom}
+          onChange={e => setZoom(Number(e.target.value))}
+          className='w-20 md:w-24 h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer'
+        />
+        <span className='text-xs text-gray-500 w-10'>
+          {Math.round(zoom * 100)}%
+        </span>
       </div>
     </div>
   );
 
-  // Sheet music panel content (shared between mobile and desktop)
-  const sheetMusicPanel = (
-    <div className='h-full flex flex-col bg-white min-w-0'>
-      <div className='p-3 border-b border-border flex items-center justify-between'>
-        <h2 className='font-semibold text-sm'>Sheet Music</h2>
-        <div className='flex items-center gap-2'>
-          {/* Playback controls - only show if playback adapter is available */}
-          {playback && playbackData && (
-            <div className='flex items-center gap-1.5 mr-2'>
-              {!isPlaying ? (
-                <button
-                  onClick={handlePlay}
-                  disabled={isLoadingPlayback}
-                  className='flex items-center gap-1 px-2 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed rounded-md transition-colors'
-                  title='Play'
-                >
-                  <Play size={14} />
-                </button>
-              ) : (
-                <button
-                  onClick={handlePause}
-                  className='flex items-center gap-1 px-2 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors'
-                  title='Pause'
-                >
-                  <Pause size={14} />
-                </button>
-              )}
-              <button
-                onClick={handleStop}
-                disabled={!isPlaying && currentBeat === 0}
-                className='flex items-center gap-1 px-2 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed rounded-md transition-colors'
-                title='Stop'
-              >
-                <Square size={14} />
-              </button>
-              <input
-                type='range'
-                min={0}
-                max={totalBeats}
-                step={0.01}
-                value={currentBeat}
-                onChange={e => handleSeek(Number(e.target.value))}
-                className='w-32 h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer'
-                title='Seek'
-              />
-              <span className='text-xs text-gray-500 min-w-12 text-right'>
-                {(() => {
-                  if (!playbackData) return '0:00';
-                  const seconds = (currentBeat / (playbackData.tempo / 60));
-                  const mins = Math.floor(seconds / 60);
-                  const secs = Math.floor(seconds % 60);
-                  return `${mins}:${secs.toString().padStart(2, '0')}`;
-                })()}
-              </span>
-            </div>
-          )}
-          <button
-            onClick={exportToPdf}
-            className='flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors'
-            title='Export to PDF'
-          >
-            <Download size={14} />
-            Export PDF
-          </button>
-        </div>
-      </div>
-      {/* Toolbar */}
-      <div className='px-4 py-2 border-b border-border bg-gray-50 flex items-center gap-4 md:gap-6 flex-wrap'>
-        {/* Instrument preset dropdown */}
-        <div className='flex items-center gap-2'>
-          <label className='text-xs font-medium text-gray-600'>
-            Instrument:
-          </label>
-          <select
-            value={instrumentIndex}
-            onChange={e => {
-              const idx = Number(e.target.value);
-              setInstrumentIndex(idx);
-              if (idx < INSTRUMENT_PRESETS.length) {
-                const preset = INSTRUMENT_PRESETS[idx];
-                setTransposeIndex(preset.transposeIndex);
-                setOctaveShift(preset.octaveShift);
-                setClef(preset.clef);
-              }
-            }}
-            className='px-2 py-1 text-xs border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
-          >
-            {INSTRUMENT_PRESETS.map((preset, index) => (
-              <option key={preset.label} value={index}>
-                {preset.label}
-              </option>
-            ))}
-            <option value={CUSTOM_PRESET_INDEX}>Custom</option>
-          </select>
-        </div>
-
-        {/* Octave control - always visible */}
-        <div className='flex items-center gap-2'>
-          <label className='text-xs font-medium text-gray-600'>Octave:</label>
-          <select
-            value={octaveShift}
-            onChange={e => setOctaveShift(Number(e.target.value))}
-            className='px-2 py-1 text-xs border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
-          >
-            {OCTAVE_OPTIONS.map(option => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Custom controls - only shown when Custom is selected */}
-        {instrumentIndex === CUSTOM_PRESET_INDEX && (
-          <>
-            <div className='flex items-center gap-2'>
-              <label className='text-xs font-medium text-gray-600'>
-                Transpose:
-              </label>
-              <select
-                value={transposeIndex}
-                onChange={e => setTransposeIndex(Number(e.target.value))}
-                className='px-2 py-1 text-xs border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
-              >
-                {TRANSPOSE_OPTIONS.map((option, index) => (
-                  <option key={option.label} value={index}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className='flex items-center gap-2'>
-              <label className='text-xs font-medium text-gray-600'>Clef:</label>
-              <select
-                value={clef}
-                onChange={e => setClef(e.target.value as Clef)}
-                className='px-2 py-1 text-xs border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
-              >
-                {CLEF_OPTIONS.map(option => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </>
-        )}
-
-        {/* Zoom control - always visible */}
-        <div className='flex items-center gap-2'>
-          <label className='text-xs font-medium text-gray-600'>Zoom:</label>
-          <input
-            type='range'
-            min='0.3'
-            max='1.5'
-            step='0.05'
-            value={zoom}
-            onChange={e => setZoom(Number(e.target.value))}
-            className='w-20 md:w-24 h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer'
-          />
-          <span className='text-xs text-gray-500 w-10'>
-            {Math.round(zoom * 100)}%
-          </span>
-        </div>
-      </div>
-      <div className='flex-1 overflow-auto p-4'>
-        <div ref={sheetMusicRef} className='w-full' />
-      </div>
-    </div>
-  );
-
-  // Mobile/Tablet layout
-  if (isMobileOrTablet) {
-    return (
-      <div className='flex flex-col h-screen w-screen'>
-        {/* Side Drawer for score selection */}
+  // UNIFIED LAYOUT - single return to keep sheetMusicRef stable across breakpoint changes
+  // The sheet music div with ref must ALWAYS be in the same position in the React tree
+  return (
+    <div className='flex h-screen w-screen'>
+      {/* Side Drawer for mobile/tablet score selection */}
+      {isMobileOrTablet && (
         <SideDrawer
           isOpen={isDrawerOpen}
           onClose={() => setIsDrawerOpen(false)}
@@ -1125,76 +948,131 @@ export function GenApp({ compiler, files, playback, url, scores }: GenAppProps) 
             onClose={() => setIsDrawerOpen(false)}
           />
         </SideDrawer>
+      )}
 
-        {/* Mobile Header */}
-        <MobileHeader
-          title={selectedScore?.split('/').pop()?.replace('.gen', '') || 'Gen'}
-          onMenuClick={() => setIsDrawerOpen(true)}
-          rightContent={
-            <button
-              onClick={exportToPdf}
-              className='p-3 -mr-1 rounded-md hover:bg-gray-100 text-gray-700'
-              title='Export to PDF'
-            >
-              <Download size={20} />
-            </button>
-          }
+      {/* Editor Overlay for mobile/tablet */}
+      {isMobileOrTablet && (
+        <EditorOverlay
+          isOpen={isEditorOverlayOpen}
+          onClose={() => setIsEditorOverlayOpen(false)}
+          title='Editor'
+          isCompiling={isCompiling}
+        >
+          <GenMonacoEditor
+            value={genSource}
+            onChange={setGenSource}
+            error={error}
+            placeholder='Select a score or start typing...'
+            instrumentGroup={currentInstrumentGroup}
+            modPointsForGroup={modPointsForGroup}
+            onModPointToggle={handleModPointToggle}
+          />
+        </EditorOverlay>
+      )}
+
+      {/* Desktop Sidebar - fixed on left */}
+      {!isMobileOrTablet && (
+        <Sidebar
+          scores={scores}
+          onScoreSelect={handleScoreSelect}
+          selectedScore={selectedScore}
+          isCollapsed={isSidebarCollapsed}
+          onToggleCollapse={toggleSidebar}
+          onOpenDocs={url ? handleOpenDocs : undefined}
+          variant='fixed'
         />
+      )}
 
-        {/* Main content area */}
-        <div className='flex-1 flex flex-col min-h-0 overflow-hidden'>
-          {/* Show active panel */}
-          <div
-            className={mobileTab === 'editor' ? 'flex-1 overflow-hidden' : 'hidden'}
-            role='tabpanel'
-            id='editor-panel'
-            aria-labelledby='editor-tab'
-          >
-            {editorPanel}
+      {/* Main content area */}
+      <div className='flex-1 h-full flex flex-col min-w-0'>
+        {/* Header - different for mobile/tablet vs desktop */}
+        {isMobileOrTablet ? (
+          <div className='flex border-b border-border bg-white shrink-0'>
+            {/* Hamburger + title */}
+            <div className='flex items-center'>
+              <button
+                onClick={() => setIsDrawerOpen(true)}
+                className='p-3 hover:bg-gray-100 text-gray-700'
+                aria-label='Open menu'
+              >
+                <Menu size={20} />
+              </button>
+              <h2 className='font-semibold text-sm'>
+                {selectedScore?.split('/').pop()?.replace('.gen', '') || 'Gen'}
+              </h2>
+            </div>
+
+            {/* Right side controls */}
+            <div className='flex-1 flex items-center justify-end gap-2 pr-3'>
+              {/* Playback controls */}
+              {playback && playbackData && (
+                <div className='flex items-center gap-1.5 mr-2'>
+                  {!isPlaying ? (
+                    <button
+                      onClick={handlePlay}
+                      disabled={isLoadingPlayback}
+                      className='flex items-center gap-1 px-2 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed rounded-md transition-colors'
+                      title='Play'
+                    >
+                      <Play size={14} />
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handlePause}
+                      className='flex items-center gap-1 px-2 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors'
+                      title='Pause'
+                    >
+                      <Pause size={14} />
+                    </button>
+                  )}
+                  <button
+                    onClick={handleStop}
+                    disabled={!isPlaying && currentBeat === 0}
+                    className='flex items-center gap-1 px-2 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed rounded-md transition-colors'
+                    title='Stop'
+                  >
+                    <Square size={14} />
+                  </button>
+                </div>
+              )}
+              <button
+                onClick={() => setIsEditorOverlayOpen(true)}
+                className='p-2 rounded-md hover:bg-gray-100 text-gray-700'
+                title='Open editor'
+              >
+                <Code size={18} />
+              </button>
+              <button
+                onClick={exportToPdf}
+                className='flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors'
+                title='Export to PDF'
+              >
+                <Download size={14} />
+                {isTablet && 'Export PDF'}
+              </button>
+            </div>
           </div>
-          <div
-            className={mobileTab === 'sheet' ? 'flex-1 overflow-hidden' : 'hidden'}
-            role='tabpanel'
-            id='sheet-panel'
-            aria-labelledby='sheet-tab'
-          >
-            {sheetMusicPanel}
+        ) : (
+          /* Desktop header row - editor header (40%) + sheet music header (60%) */
+          <div className='flex shrink-0'>
+            {editorHeader}
+            {sheetMusicHeader}
           </div>
-        </div>
+        )}
 
-        {/* Bottom Tab Bar */}
-        <BottomTabBar activeTab={mobileTab} onTabChange={setMobileTab} />
-      </div>
-    );
-  }
-
-  // Desktop layout
-  return (
-    <div className='flex h-screen w-screen'>
-      {/* Sidebar - fixed on desktop */}
-      <Sidebar
-        scores={scores}
-        onScoreSelect={handleScoreSelect}
-        selectedScore={selectedScore}
-        isCollapsed={isSidebarCollapsed}
-        onToggleCollapse={toggleSidebar}
-        onOpenDocs={url ? handleOpenDocs : undefined}
-        variant='fixed'
-      />
-
-      {/* Desktop layout - header row always full width, body changes */}
-      <div className='flex-1 h-full flex flex-col'>
-        {/* Header row - editor header (40%) + sheet music header (60%) */}
-        <div className='flex'>
-          {editorHeader}
-          {sheetMusicHeader}
-        </div>
-
-        {/* Body row - editor body (40% when visible) + sheet music body */}
+        {/* Body - editor + sheet music */}
         <div className='flex-1 flex min-h-0'>
-          {isEditorVisible && editorBody}
-          <div className={isEditorVisible ? 'w-[60%] h-full' : 'w-full h-full'}>
-            {sheetMusicBody}
+          {/* Desktop editor (inline, not overlay) */}
+          {!isMobileOrTablet && isEditorVisible && editorBody}
+
+          {/* Sheet music - ALWAYS rendered in the same position */}
+          <div className={!isMobileOrTablet && isEditorVisible ? 'w-[60%] h-full' : 'w-full h-full'}>
+            <div className='h-full flex flex-col'>
+              {sheetMusicToolbar}
+              <div className='flex-1 overflow-auto p-4'>
+                <div ref={sheetMusicRef} className='w-full' />
+              </div>
+            </div>
           </div>
         </div>
       </div>
