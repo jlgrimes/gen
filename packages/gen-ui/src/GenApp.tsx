@@ -10,6 +10,7 @@ import { Download, Eye, EyeOff, Menu, Code } from 'lucide-react';
 import { Sidebar } from '@/components/ui/sidebar';
 import { GenMonacoEditor } from '@/editor/GenMonacoEditor';
 import { useBreakpoint } from '@/hooks/useBreakpoint';
+import { useContainerWidth } from '@/hooks/useContainerWidth';
 import { SideDrawer } from '@/components/ui/side-drawer';
 import { EditorOverlay } from '@/components/ui/editor-overlay';
 import type {
@@ -265,6 +266,9 @@ export function GenApp({ compiler, files, playback, url, scores }: GenAppProps) 
   const sheetMusicRef = useRef<HTMLDivElement>(null);
   const osmdRef = useRef<OpenSheetMusicDisplay | null>(null);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Track container width to re-render OSMD when it changes
+  const containerWidth = useContainerWidth(sheetMusicRef);
 
   // Playback state
   const playbackEngineRef = useRef<PlaybackEngine | null>(null);
@@ -627,6 +631,18 @@ export function GenApp({ compiler, files, playback, url, scores }: GenAppProps) 
       return () => clearTimeout(timeout);
     }
   }, [isEditorVisible]);
+
+  // Re-render when container width changes (responsive layout)
+  useEffect(() => {
+    if (osmdRef.current && containerWidth !== null) {
+      // Debounce slightly to avoid excessive re-renders during resize
+      const timeout = setTimeout(() => {
+        osmdRef.current?.render();
+        setOsmdRenderCount(prev => prev + 1);
+      }, 100);
+      return () => clearTimeout(timeout);
+    }
+  }, [containerWidth]);
 
   // Initialize highlight controller when playback data and OSMD are ready
   useEffect(() => {
