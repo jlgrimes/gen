@@ -7,7 +7,7 @@ use crate::ast::*;
 use crate::error::GenError;
 use crate::parser::parse;
 use super::chord_parser::parse_chord_symbol;
-use super::types::{PlaybackData, PlaybackNote, PlaybackChord};
+use super::types::{PlaybackData, PlaybackNote, PlaybackChord, SwingType};
 
 /// Generate playback data from a Gen source string
 ///
@@ -289,9 +289,66 @@ pub fn generate_playback_data(
         120 // Default quarter-note BPM
     };
 
+    // Convert swing metadata to playback swing type
+    let swing = score.metadata.swing.map(|s| match s {
+        crate::ast::Swing::Eighth => SwingType::Eighth,
+        crate::ast::Swing::Sixteenth => SwingType::Sixteenth,
+    });
+
+    // Apply swing timing adjustments to notes
+    if let Some(ref swing_type) = swing {
+        apply_swing(&mut notes, swing_type, &score.metadata.time_signature);
+    }
+
     Ok(PlaybackData {
         tempo: quarter_note_bpm,
         notes,
         chords,
+        swing,
     })
+}
+
+/// Apply swing timing to notes
+///
+/// Swing adjusts the timing of pairs of notes at a specific subdivision.
+/// Standard jazz swing uses a 2:1 ratio (triplet-based):
+/// - First note of pair: gets 2/3 of the combined duration
+/// - Second note of pair: gets 1/3 of the combined duration, starts later
+///
+/// For eighth note swing in 4/4:
+/// - Beat positions 0, 1, 2, 3 are "on the beat" (unchanged)
+/// - Beat positions 0.5, 1.5, 2.5, 3.5 are "off the beat" (shifted later)
+///
+/// The off-beat note is delayed from 50% to 67% of the beat.
+fn apply_swing(notes: &mut Vec<PlaybackNote>, swing_type: &SwingType, time_sig: &TimeSignature) {
+    // Determine the swing unit size in beats
+    // For eighth swing: 0.5 beats (in 4/4), for sixteenth swing: 0.25 beats
+    let swing_unit = match swing_type {
+        SwingType::Eighth => crate::ast::Duration::Eighth.as_beats(time_sig),
+        SwingType::Sixteenth => crate::ast::Duration::Sixteenth.as_beats(time_sig),
+    };
+
+    // Swing ratio: 2:1 means the off-beat is at 2/3 instead of 1/2 of the beat pair
+    // A beat pair = 2 * swing_unit (e.g., 1.0 beats for eighth swing in 4/4)
+    // Off-beat moves from 0.5 to 0.667 of the beat pair
+    // Shift = (2/3 - 1/2) * beat_pair = 1/6 * 2 * swing_unit = swing_unit / 3
+    let swing_shift = swing_unit * 2.0 * (2.0 / 3.0 - 0.5); // ~0.167 for eighths in 4/4
+
+    for note in notes.iter_mut() {
+        // Check if this note falls on an "off-beat" position
+        // Off-beats are at odd multiples of the swing unit (1, 3, 5... units from start)
+        // In 4/4 with eighth swing: 0.5, 1.5, 2.5, 3.5 beats = 1, 3, 5, 7 eighth-note units
+        let position_in_units = note.start_time / swing_unit;
+        let rounded_units = position_in_units.round();
+
+        // Check if this position aligns with a swing unit boundary (within tolerance)
+        if (position_in_units - rounded_units).abs() < 0.01 {
+            // Check if it's an odd multiple (off-beat)
+            let unit_index = rounded_units as i64;
+            if unit_index % 2 == 1 {
+                // This is an off-beat note - delay it
+                note.start_time += swing_shift;
+            }
+        }
+    }
 }

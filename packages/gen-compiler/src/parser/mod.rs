@@ -261,6 +261,12 @@ impl Parser {
             None
         };
 
+        let swing = if let Some(ref swing_str) = raw.swing {
+            Some(self.parse_swing(swing_str)?)
+        } else {
+            None
+        };
+
         Ok(Metadata {
             title: raw.title,
             composer: raw.composer,
@@ -268,6 +274,7 @@ impl Parser {
             key_signature,
             written_pitch,
             tempo,
+            swing,
         })
     }
 
@@ -383,6 +390,18 @@ impl Parser {
         }
 
         Ok(Tempo { bpm, duration, dotted })
+    }
+
+    fn parse_swing(&self, s: &str) -> Result<Swing, GenError> {
+        let s = s.trim();
+        match s {
+            "/" => Ok(Swing::Eighth),
+            "//" => Ok(Swing::Sixteenth),
+            _ => Err(GenError::MetadataError(format!(
+                "Invalid swing value: '{}'. Use '/' for eighth note swing or '//' for sixteenth note swing",
+                s
+            ))),
+        }
     }
 
     /// Parse a single measure (one line)

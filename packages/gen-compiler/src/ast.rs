@@ -239,6 +239,14 @@ pub struct Tempo {
     pub dotted: bool,          // Whether the duration is dotted (1.5x the duration)
 }
 
+/// Swing feel specification
+/// Specifies which note duration should be played with swing feel
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Swing {
+    Eighth,     // Swing eighth notes (standard jazz swing)
+    Sixteenth,  // Swing sixteenth notes (sometimes used in funk/fusion)
+}
+
 impl Default for Tempo {
     fn default() -> Self {
         Self {
@@ -284,6 +292,7 @@ pub struct Metadata {
     pub key_signature: KeySignature,
     pub written_pitch: Pitch,
     pub tempo: Option<Tempo>, // Tempo with optional rhythm modifier (default 120 quarter notes if not specified)
+    pub swing: Option<Swing>, // Optional swing feel (eighth or sixteenth notes)
 }
 
 /// Raw metadata for YAML deserialization
@@ -296,6 +305,7 @@ pub struct RawMetadata {
     pub key_signature: Option<String>,
     pub written_pitch: Option<String>,
     pub tempo: Option<String>, // Can be just "120" or with rhythm "d160" or "*120"
+    pub swing: Option<String>, // "/" for eighth note swing, "//" for sixteenth note swing
 }
 
 /// Note names A through G

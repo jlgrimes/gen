@@ -555,3 +555,77 @@ C D E
     assert_eq!(data.notes[1].display_midi_note, 74);
     assert_eq!(data.notes[1].osmd_match_key, "74_1.000");
 }
+
+#[test]
+fn test_swing_eighth_notes() {
+    // Test swing with eighth notes
+    let source = r#"---
+swing: /
+---
+[C D E F]/
+"#;
+    let result = generate_playback_data(source, "treble", 0, None, None);
+    assert!(result.is_ok());
+    let data = result.unwrap();
+
+    // Check swing is set
+    assert_eq!(data.swing, Some(crate::playback::types::SwingType::Eighth));
+
+    // In swing, off-beat notes (at 0.5, 1.5, etc.) are delayed
+    // Note at 0.0 (on beat) - unchanged
+    assert!((data.notes[0].start_time - 0.0).abs() < 0.01, "Note 0: expected 0.0, got {}", data.notes[0].start_time);
+    // Note at 0.5 (off beat) - delayed to ~0.667
+    assert!((data.notes[1].start_time - 0.667).abs() < 0.02, "Note 1: expected 0.667, got {}", data.notes[1].start_time);
+    // Note at 1.0 (on beat) - unchanged
+    assert!((data.notes[2].start_time - 1.0).abs() < 0.01, "Note 2: expected 1.0, got {}", data.notes[2].start_time);
+    // Note at 1.5 (off beat) - delayed to ~1.667
+    assert!((data.notes[3].start_time - 1.667).abs() < 0.02, "Note 3: expected 1.667, got {}", data.notes[3].start_time);
+}
+
+#[test]
+fn test_swing_sixteenth_notes() {
+    // Test swing with sixteenth notes
+    let source = r#"---
+swing: //
+---
+[C D E F]//
+"#;
+    let result = generate_playback_data(source, "treble", 0, None, None);
+    assert!(result.is_ok());
+    let data = result.unwrap();
+
+    // Check swing is set
+    assert_eq!(data.swing, Some(crate::playback::types::SwingType::Sixteenth));
+
+    // In sixteenth swing, notes at 0.25, 0.75, 1.25, 1.75 etc. are delayed
+    // Note at 0.0 - unchanged
+    assert!((data.notes[0].start_time - 0.0).abs() < 0.01);
+    // Note at 0.25 (off beat) - delayed to ~0.333
+    assert!((data.notes[1].start_time - 0.333).abs() < 0.02);
+    // Note at 0.5 - unchanged (this is on the half-beat)
+    assert!((data.notes[2].start_time - 0.5).abs() < 0.01);
+    // Note at 0.75 (off beat) - delayed to ~0.833
+    assert!((data.notes[3].start_time - 0.833).abs() < 0.02);
+}
+
+#[test]
+fn test_no_swing_by_default() {
+    // Verify no swing is applied when not specified
+    let source = r#"---
+tempo: 120
+---
+[C D E F]/
+"#;
+    let result = generate_playback_data(source, "treble", 0, None, None);
+    assert!(result.is_ok());
+    let data = result.unwrap();
+
+    // Check no swing
+    assert_eq!(data.swing, None);
+
+    // Notes should be at straight timing: 0, 0.5, 1.0, 1.5
+    assert!((data.notes[0].start_time - 0.0).abs() < 0.01);
+    assert!((data.notes[1].start_time - 0.5).abs() < 0.01);
+    assert!((data.notes[2].start_time - 1.0).abs() < 0.01);
+    assert!((data.notes[3].start_time - 1.5).abs() < 0.01);
+}

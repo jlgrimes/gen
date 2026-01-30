@@ -78,6 +78,20 @@ pub struct PlaybackChord {
     pub osmd_timestamp: f64,
 }
 
+/// Swing feel for playback
+///
+/// Specifies which note duration should be played with swing feel.
+/// Standard jazz swing uses a 2:1 ratio (triplet-based), where the first note
+/// of a pair gets 2/3 of the beat and the second gets 1/3.
+#[derive(Debug, Clone, Copy, Serialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum SwingType {
+    /// Swing eighth notes (standard jazz swing)
+    Eighth,
+    /// Swing sixteenth notes (funk/fusion style)
+    Sixteenth,
+}
+
 /// Playback data for an entire score
 ///
 /// Contains all information needed to play back a score with audio and visual highlighting.
@@ -86,10 +100,13 @@ pub struct PlaybackChord {
 /// - `tempo`: Tempo in BPM (beats per minute, where beat = quarter note)
 /// - `notes`: All melody notes with timing and OSMD matching info
 /// - `chords`: Chord accompaniment (always piano, from @ch: annotations)
+/// - `swing`: Optional swing feel (eighth or sixteenth notes)
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PlaybackData {
     pub tempo: u16,
     pub notes: Vec<PlaybackNote>,
     pub chords: Vec<PlaybackChord>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub swing: Option<SwingType>,
 }
