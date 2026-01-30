@@ -20,4 +20,5 @@ export type {
   PlaybackNote,
   PlaybackChord,
   SwingType,
+  UrlAdapter,
 } from './types';

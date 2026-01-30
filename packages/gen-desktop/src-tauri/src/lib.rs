@@ -109,6 +109,11 @@ fn error_to_compile_error(e: gen::GenError) -> CompileError {
     }
 }
 
+#[command]
+fn open_external_url(url: &str) -> Result<(), String> {
+    open::that(url).map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -120,6 +125,7 @@ pub fn run() {
             compile_gen_with_options,
             compile_gen_with_mod_points,
             generate_playback_data,
+            open_external_url,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

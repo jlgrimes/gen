@@ -6,14 +6,9 @@ import {
 } from 'opensheetmusicdisplay';
 import { jsPDF } from 'jspdf';
 import 'svg2pdf.js';
-import { Download, Code, Music2 } from 'lucide-react';
+import { Download, Code, Music2, Eye, EyeOff } from 'lucide-react';
 import { Sidebar } from '@/components/ui/sidebar';
 import { GenMonacoEditor } from '@/editor/GenMonacoEditor';
-import {
-  ResizablePanelGroup,
-  ResizablePanel,
-  ResizableHandle,
-} from '@/components/ui/resizable';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import type {
@@ -25,6 +20,7 @@ import type {
   CompileError,
   InstrumentGroup,
   ModPoints,
+  UrlAdapter,
 } from './types';
 import { PlaybackEngine } from './lib/playback';
 import { PlaybackHighlightController } from './lib/playbackHighlightController';
@@ -219,10 +215,11 @@ export interface GenAppProps {
   compiler: CompilerAdapter;
   files: FileAdapter;
   playback?: PlaybackAdapter;
+  url?: UrlAdapter;
   scores: ScoreInfo[];
 }
 
-export function GenApp({ compiler, files, playback, scores }: GenAppProps) {
+export function GenApp({ compiler, files, playback, url, scores }: GenAppProps) {
   const isMobile = useIsMobile();
 
   // Get initial values from URL
@@ -235,6 +232,7 @@ export function GenApp({ compiler, files, playback, scores }: GenAppProps) {
   const [error, setError] = useState<CompileError | null>(null);
   const [isCompiling, setIsCompiling] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(isMobile); // Collapsed by default on mobile
+  const [isEditorVisible, setIsEditorVisible] = useState(true); // Toggle editor visibility
   const [mobileTab, setMobileTab] = useState<MobileTab>('sheet'); // Default to sheet view on mobile
   const [instrumentIndex, setInstrumentIndex] = useState(() =>
     getInstrumentIndexById(initialParams.instrument),
@@ -327,6 +325,10 @@ export function GenApp({ compiler, files, playback, scores }: GenAppProps) {
   const toggleSidebar = useCallback(() => {
     setIsSidebarCollapsed(prev => !prev);
   }, []);
+
+  const handleOpenDocs = useCallback(() => {
+    url?.openExternal('https://docs.gen.band');
+  }, [url]);
 
   // Collapse sidebar when switching to mobile
   useEffect(() => {
@@ -610,6 +612,18 @@ export function GenApp({ compiler, files, playback, scores }: GenAppProps) {
     }
   }, [zoom]);
 
+  // Re-render when layout changes (editor or sidebar visibility)
+  useEffect(() => {
+    if (osmdRef.current) {
+      // Longer delay to let the layout fully settle before re-rendering
+      const timeout = setTimeout(() => {
+        osmdRef.current?.render();
+        setOsmdRenderCount(prev => prev + 1);
+      }, 150);
+      return () => clearTimeout(timeout);
+    }
+  }, [isEditorVisible, isSidebarCollapsed]);
+
   // Initialize highlight controller when playback data and OSMD are ready
   useEffect(() => {
     if (!playbackData || !osmdRef.current || osmdRenderCount === 0) {
@@ -682,13 +696,20 @@ export function GenApp({ compiler, files, playback, scores }: GenAppProps) {
     <div className='h-full border-r border-border flex flex-col bg-white'>
       <div className='p-3 border-b border-border flex items-center justify-between'>
         <h2 className='font-semibold text-sm'>
-          {selectedScore || 'Editor'}
+          Editor
           {isCompiling && (
             <span className='ml-2 text-xs text-muted-foreground'>
               compiling...
             </span>
           )}
         </h2>
+        <button
+          onClick={() => setIsEditorVisible(false)}
+          className='p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors'
+          title='Hide editor'
+        >
+          <EyeOff size={16} />
+        </button>
       </div>
       <div className='flex-1 overflow-hidden'>
         <GenMonacoEditor
@@ -708,7 +729,18 @@ export function GenApp({ compiler, files, playback, scores }: GenAppProps) {
   const sheetMusicPanel = (
     <div className='h-full flex flex-col bg-white min-w-0'>
       <div className='p-3 border-b border-border flex items-center justify-between'>
-        <h2 className='font-semibold text-sm'>Sheet Music</h2>
+        <div className='flex items-center gap-2'>
+          {!isEditorVisible && (
+            <button
+              onClick={() => setIsEditorVisible(true)}
+              className='p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors'
+              title='Show editor'
+            >
+              <Eye size={16} />
+            </button>
+          )}
+          <h2 className='font-semibold text-sm'>Sheet Music</h2>
+        </div>
         <div className='flex items-center gap-2'>
           {/* Playback controls - only show if playback adapter is available */}
           {playback && playbackData && (
@@ -884,6 +916,7 @@ export function GenApp({ compiler, files, playback, scores }: GenAppProps) {
         selectedScore={selectedScore}
         isCollapsed={isSidebarCollapsed}
         onToggleCollapse={toggleSidebar}
+        onOpenDocs={url ? handleOpenDocs : undefined}
       />
 
       {/* Mobile layout with tabs */}
@@ -925,20 +958,20 @@ export function GenApp({ compiler, files, playback, scores }: GenAppProps) {
           </TabsContent>
         </Tabs>
       ) : (
-        /* Desktop layout with resizable panels */
-        <ResizablePanelGroup orientation='horizontal' className='flex-1 h-full'>
-          {/* Editor Panel */}
-          <ResizablePanel defaultSize={35} minSize={20}>
-            {editorPanel}
-          </ResizablePanel>
+        /* Desktop layout with 30/70 split */
+        <div className='flex-1 h-full flex'>
+          {/* Editor Panel - 30% width when visible */}
+          {isEditorVisible && (
+            <div className='w-[30%] h-full'>
+              {editorPanel}
+            </div>
+          )}
 
-          <ResizableHandle />
-
-          {/* Sheet Music Panel */}
-          <ResizablePanel defaultSize={65} minSize={30}>
+          {/* Sheet Music Panel - 70% or full width */}
+          <div className={isEditorVisible ? 'w-[70%] h-full' : 'w-full h-full'}>
             {sheetMusicPanel}
-          </ResizablePanel>
-        </ResizablePanelGroup>
+          </div>
+        </div>
       )}
     </div>
   );

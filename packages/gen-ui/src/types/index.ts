@@ -79,3 +79,7 @@ export interface PlaybackResult {
 export interface PlaybackAdapter {
   generatePlaybackData(source: string, options: CompileOptions): Promise<PlaybackResult>;
 }
+
+export interface UrlAdapter {
+  openExternal(url: string): Promise<void>;
+}

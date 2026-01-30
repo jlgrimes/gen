@@ -7,7 +7,8 @@ import type {
   CompileResult,
   CompileOptions,
   PlaybackAdapter,
-  PlaybackResult
+  PlaybackResult,
+  UrlAdapter,
 } from 'gen-ui';
 
 export const tauriCompiler: CompilerAdapter = {
@@ -43,5 +44,11 @@ export const tauriPlayback: PlaybackAdapter = {
       instrumentGroup: options.instrumentGroup ?? null,
       transposeKey: options.transposeKey ?? null,
     });
+  },
+};
+
+export const tauriUrl: UrlAdapter = {
+  async openExternal(url: string): Promise<void> {
+    await invoke('open_external_url', { url });
   },
 };

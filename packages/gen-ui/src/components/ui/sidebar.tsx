@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
-import { File, Music, Folder, ChevronRight, PanelLeftClose, PanelLeft } from "lucide-react";
+import { File, Music, Folder, ChevronRight, PanelLeftClose, PanelLeft, BookOpen } from "lucide-react";
 import type { ScoreInfo } from "../../types";
 
 interface SidebarProps {
@@ -9,6 +9,7 @@ interface SidebarProps {
   selectedScore: string | null;
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
+  onOpenDocs?: () => void;
 }
 
 interface FolderNode {
@@ -109,7 +110,7 @@ function FolderItem({
   );
 }
 
-export function Sidebar({ scores, onScoreSelect, selectedScore, isCollapsed, onToggleCollapse }: SidebarProps) {
+export function Sidebar({ scores, onScoreSelect, selectedScore, isCollapsed, onToggleCollapse, onOpenDocs }: SidebarProps) {
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(() => new Set());
   const tree = buildFolderTree(scores);
 
@@ -206,6 +207,28 @@ export function Sidebar({ scores, onScoreSelect, selectedScore, isCollapsed, onT
           <p className="text-sm text-muted-foreground px-3 py-2">
             No scores found
           </p>
+        )}
+      </div>
+      {/* Footer with docs link */}
+      <div className="p-2 border-t border-sidebar-border">
+        {onOpenDocs ? (
+          <button
+            onClick={onOpenDocs}
+            className="w-full flex items-center gap-2 px-3 py-1.5 text-sm rounded-md text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent transition-colors"
+          >
+            <BookOpen className="h-4 w-4 shrink-0" />
+            <span>Documentation</span>
+          </button>
+        ) : (
+          <a
+            href="https://docs.gen.band"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full flex items-center gap-2 px-3 py-1.5 text-sm rounded-md text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent transition-colors"
+          >
+            <BookOpen className="h-4 w-4 shrink-0" />
+            <span>Documentation</span>
+          </a>
         )}
       </div>
     </div>
