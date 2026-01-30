@@ -14,7 +14,7 @@ function ensureLanguageRegistered() {
 interface GenMonacoEditorProps {
   value: string;
   onChange: (value: string) => void;
-  error: CompileError | null;
+  error?: CompileError | null;
   placeholder?: string;
   instrumentGroup?: InstrumentGroup;
   modPointsForGroup?: Map<number, number>;
@@ -32,7 +32,6 @@ export function GenMonacoEditor({
 }: GenMonacoEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
-  const decorationsRef = useRef<monaco.editor.IEditorDecorationsCollection | null>(null);
   const valueRef = useRef(value);
   const isInternalChange = useRef(false);
 
@@ -70,7 +69,6 @@ export function GenMonacoEditor({
     });
 
     editorRef.current = editor;
-    decorationsRef.current = editor.createDecorationsCollection([]);
 
     // Listen for changes
     editor.onDidChangeModelContent(() => {
@@ -99,10 +97,10 @@ export function GenMonacoEditor({
     }
   }, [value]);
 
-  // Update error decorations
+  // Update error markers (squiggly underlines)
   useEffect(() => {
     const editor = editorRef.current;
-    if (!editor || !decorationsRef.current) return;
+    if (!editor) return;
 
     const model = editor.getModel();
     if (!model) return;
@@ -110,13 +108,14 @@ export function GenMonacoEditor({
     if (error && error.line !== null) {
       const line = error.line;
       const col = error.column ?? 1;
+      const lineCount = model.getLineCount();
 
-      if (line >= 1 && line <= model.getLineCount()) {
+      if (line >= 1 && line <= lineCount) {
         const lineLength = model.getLineLength(line);
         const startCol = Math.min(col, lineLength + 1);
         const endCol = lineLength + 1;
 
-        // Set error marker
+        // Set error marker - this shows as squiggly underline
         monaco.editor.setModelMarkers(model, 'gen', [{
           severity: monaco.MarkerSeverity.Error,
           message: error.message,
@@ -125,20 +124,10 @@ export function GenMonacoEditor({
           endLineNumber: line,
           endColumn: endCol,
         }]);
-
-        // Add line decoration
-        decorationsRef.current.set([{
-          range: new monaco.Range(line, 1, line, 1),
-          options: {
-            isWholeLine: true,
-            className: 'gen-error-line',
-          },
-        }]);
       }
     } else {
-      // Clear markers and decorations
+      // Clear markers
       monaco.editor.setModelMarkers(model, 'gen', []);
-      decorationsRef.current.set([]);
     }
   }, [error]);
 

@@ -10,7 +10,25 @@ export default defineConfig({
       social: {
         github: 'https://github.com/jlgrimes/gen',
       },
+      head: [
+        {
+          tag: 'link',
+          attrs: {
+            rel: 'icon',
+            href: '/favicon.svg',
+            type: 'image/svg+xml',
+          },
+        },
+      ],
+      components: {
+        SiteTitle: './src/components/SiteTitle.astro',
+      },
       sidebar: [
+        {
+          label: 'Try Gen',
+          link: 'https://gen.band',
+          attrs: { target: '_blank' },
+        },
         {
           label: 'Getting Started',
           items: [

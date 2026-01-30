@@ -701,12 +701,6 @@ export function GenApp({ compiler, files, playback, scores }: GenAppProps) {
           onModPointToggle={handleModPointToggle}
         />
       </div>
-      {error && (
-        <div className='p-3 text-sm text-red-600 border-t border-border bg-red-50 max-h-24 overflow-auto'>
-          {error.line !== null ? `Line ${error.line}: ` : ''}
-          {error.message}
-        </div>
-      )}
     </div>
   );
 
