@@ -182,6 +182,35 @@ Apply octave shift to ALL notes in a measure:
 - Stacks with individual and group modifiers: `^[A B] @:^` results in all notes ^^
 - Similar to instrument group modifiers (@Eb:^) but affects all notes
 
+### Chord Symbols
+Add chord symbols (lead sheet notation) above notes using curly braces:
+
+**Syntax:**
+```
+{Cmaj7}:G B D     # Attached - chord inherits G's duration
+{Cmaj7} G B D     # Standalone - chord has whole note duration (default)
+{Am7}p G B D      # Standalone - chord has half note duration
+{F}/ G B D        # Standalone - chord has eighth note duration
+```
+
+**Rule:**
+- `:` after `}` = attached (chord inherits the note's duration for playback)
+- No `:` = standalone with its own duration (default whole note, or specify with rhythm modifier)
+
+**Chord notation:**
+- Root note: `C`, `D`, `E`, `F`, `G`, `A`, `B`
+- Accidentals: `#` (sharp), `b` (flat) - e.g., `{F#}`, `{Bb7}`
+- Quality: `m` (minor), `maj7`, `7`, `m7`, `dim`, `aug`, etc.
+- Slash chords: `{C/E}` (C major with E in bass)
+
+**Examples:**
+```
+{C} C E G         # C major chord, whole note duration
+{Am7}:Gp E D      # Am7 attached to Gp, inherits half note duration
+{Dm7} [C E A]/    # Dm7 whole note, eighth note arpeggio
+{G7}p {C} G       # G7 half note, then C whole note on G
+```
+
 ## Building
 
 ### Full project

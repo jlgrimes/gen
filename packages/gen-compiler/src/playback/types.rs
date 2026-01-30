@@ -99,7 +99,7 @@ pub enum SwingType {
 /// # Fields
 /// - `tempo`: Tempo in BPM (beats per minute, where beat = quarter note)
 /// - `notes`: All melody notes with timing and OSMD matching info
-/// - `chords`: Chord accompaniment (always piano, from @ch: annotations)
+/// - `chords`: Chord accompaniment (always piano, from {chord} annotations)
 /// - `swing`: Optional swing feel (eighth or sixteenth notes)
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]

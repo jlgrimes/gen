@@ -6,7 +6,7 @@
 //! This module converts a parsed Gen score into MIDI playback data that can be used for:
 //! 1. **Audio playback** - MIDI note numbers, timing, and duration for synthesizers
 //! 2. **Visual highlighting** - Matching notes on the rendered sheet music during playback
-//! 3. **Chord accompaniment** - Piano chords from `@ch:` annotations
+//! 3. **Chord accompaniment** - Piano chords from `{chord}` annotations
 //!
 //! ## Sub-modules
 //! - `types` - PlaybackData, PlaybackNote, PlaybackChord type definitions

@@ -1830,7 +1830,7 @@ F F%"#;
 
     #[test]
     fn test_musicxml_harmony() {
-        let score = parse("@ch:Cmaj7 C").unwrap();
+        let score = parse("{Cmaj7} C").unwrap();
         let xml = to_musicxml(&score);
         assert!(xml.contains("<harmony"), "MusicXML should contain harmony element");
         assert!(xml.contains("Cmaj7"), "Chord symbol should appear in MusicXML");
@@ -1839,7 +1839,7 @@ F F%"#;
 
     #[test]
     fn test_musicxml_multiple_harmonies() {
-        let score = parse("@ch:C C @ch:G E").unwrap();
+        let score = parse("{C} C {G} E").unwrap();
         let xml = to_musicxml(&score);
         let harmony_count = xml.matches("<harmony").count();
         assert_eq!(harmony_count, 2, "Should have 2 harmony elements");
@@ -1849,7 +1849,7 @@ F F%"#;
 
     #[test]
     fn test_musicxml_harmony_with_sharp() {
-        let score = parse("@ch:F# F").unwrap();
+        let score = parse("{F#} F").unwrap();
         let xml = to_musicxml(&score);
         assert!(xml.contains("<root-step>F</root-step>"), "Root should be F");
         assert!(xml.contains("<root-alter>1</root-alter>"), "Should have sharp alteration");
@@ -1857,7 +1857,7 @@ F F%"#;
 
     #[test]
     fn test_musicxml_harmony_with_flat() {
-        let score = parse("@ch:Bb7 B").unwrap();
+        let score = parse("{Bb7} B").unwrap();
         let xml = to_musicxml(&score);
         assert!(xml.contains("<root-step>B</root-step>"), "Root should be B");
         assert!(xml.contains("<root-alter>-1</root-alter>"), "Should have flat alteration");
@@ -1874,7 +1874,7 @@ F F%"#;
     fn test_chord_transposition_bb_instrument() {
         // Bb instrument (Clarinet): transposes up a major 2nd
         // Concert C -> D, Concert G7 -> A7
-        let score = parse("@ch:C C @ch:G7 G").unwrap();
+        let score = parse("{C} C {G7} G").unwrap();
         let transposition = Transposition { diatonic: 1, chromatic: 2, fifths: 2 };
         let xml = to_musicxml_with_options(&score, Some(transposition), Clef::Treble, 0);
 
@@ -1886,7 +1886,7 @@ F F%"#;
     fn test_chord_transposition_eb_instrument() {
         // Eb instrument (Alto Sax): transposes up a major 6th
         // Concert C -> A, Concert F -> D, Concert G7 -> E7
-        let score = parse("@ch:C C @ch:F F @ch:G7 G").unwrap();
+        let score = parse("{C} C {F} F {G7} G").unwrap();
         let transposition = Transposition { diatonic: 5, chromatic: 9, fifths: 3 };
         let xml = to_musicxml_with_options(&score, Some(transposition), Clef::Treble, 0);
 
@@ -1898,7 +1898,7 @@ F F%"#;
     #[test]
     fn test_chord_transposition_with_accidentals() {
         // Bb instrument: Concert Bb7 -> C7, Concert Eb -> F
-        let score = parse("@ch:Bb7 B @ch:Eb E").unwrap();
+        let score = parse("{Bb7} B {Eb} E").unwrap();
         let transposition = Transposition { diatonic: 1, chromatic: 2, fifths: 2 };
         let xml = to_musicxml_with_options(&score, Some(transposition), Clef::Treble, 0);
 
@@ -1909,7 +1909,7 @@ F F%"#;
     #[test]
     fn test_chord_transposition_preserves_quality() {
         // Ensure quality (maj7, m7, dim, etc.) is preserved
-        let score = parse("@ch:Cmaj7 C @ch:Dm7 D @ch:Bdim B").unwrap();
+        let score = parse("{Cmaj7} C {Dm7} D {Bdim} B").unwrap();
         let transposition = Transposition { diatonic: 1, chromatic: 2, fifths: 2 }; // Bb instrument
         let xml = to_musicxml_with_options(&score, Some(transposition), Clef::Treble, 0);
 
@@ -1921,7 +1921,7 @@ F F%"#;
     #[test]
     fn test_chord_no_transposition_concert_pitch() {
         // Concert pitch (no transposition)
-        let score = parse("@ch:Cmaj7 C @ch:G7 G").unwrap();
+        let score = parse("{Cmaj7} C {G7} G").unwrap();
         let xml = to_musicxml(&score);
 
         assert!(xml.contains("text=\"Cmaj7\""), "Concert pitch should not transpose");

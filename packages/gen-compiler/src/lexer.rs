@@ -379,8 +379,68 @@ impl<'a> Lexer<'a> {
                     self.advance();
                     Token::Whitespace
                 }
+                '{' => {
+                    // Chord annotation: {Cmaj7}:G (attached) or {Cmaj7} G (standalone)
+                    // Syntax:
+                    //   {Gm}:G  - attached, inherits G's duration
+                    //   {Gm} G  - standalone, whole note (default)
+                    //   {Gm}p G - standalone, half note
+                    //   {Gm}/ G - standalone, eighth note
+                    self.advance();
+                    let start_pos = self.position;
+
+                    // Find closing brace
+                    while let Some(&ch) = self.peek() {
+                        if ch == '}' {
+                            break;
+                        }
+                        if ch == '\n' {
+                            return Err(GenError::ParseError {
+                                line,
+                                column,
+                                message: "Unclosed chord annotation - missing '}'".to_string(),
+                            });
+                        }
+                        self.advance();
+                    }
+
+                    let chord_symbol = &self.input[start_pos..self.position];
+                    if chord_symbol.is_empty() {
+                        return Err(GenError::ParseError {
+                            line,
+                            column,
+                            message: "Empty chord annotation '{}'".to_string(),
+                        });
+                    }
+
+                    // Skip the closing brace
+                    if self.peek() == Some(&'}') {
+                        self.advance();
+                    }
+
+                    // After '}', check what follows:
+                    // - ':' = attached chord (skip the colon, note follows)
+                    // - rhythm modifier (o, p, /, *) = standalone with duration (skip them)
+                    // - space/note = standalone with default whole note
+                    if self.peek() == Some(&':') {
+                        self.advance(); // Skip ':' for attached syntax
+                    } else {
+                        // Skip any rhythm modifiers for standalone chords
+                        // These are parsed by extract_chords in the parser
+                        while let Some(&ch) = self.peek() {
+                            if ch == 'o' || ch == 'p' || ch == '/' || ch == '*' {
+                                self.advance();
+                            } else {
+                                break;
+                            }
+                        }
+                    }
+
+                    // Chord annotation processed - continue (parser will extract it)
+                    continue;
+                }
                 '@' => {
-                    // Annotation/mod point - validate format: @Eb:^, @Bb:_, @ch:Cmaj7, or @:^
+                    // Annotation/mod point - validate format: @Eb:^, @Bb:_, @key:G, or @:^
                     self.advance();
 
                     // Collect the annotation content until whitespace, @ or newline
@@ -392,19 +452,6 @@ impl<'a> Lexer<'a> {
                         self.advance();
                     }
                     let annotation = &self.input[start_pos..self.position];
-
-                    // Check if this is a chord annotation (@ch:XXX)
-                    if annotation.starts_with("ch:") {
-                        if annotation.len() <= 3 {
-                            return Err(GenError::ParseError {
-                                line,
-                                column,
-                                message: "Chord annotation '@ch:' requires a chord symbol".to_string(),
-                            });
-                        }
-                        // Valid chord annotation - skip it (will be extracted by parser)
-                        continue;
-                    }
 
                     // Check if this is a key change annotation (@key:XXX)
                     if annotation.starts_with("key:") {
@@ -457,14 +504,14 @@ impl<'a> Lexer<'a> {
                             return Err(GenError::ParseError {
                                 line,
                                 column,
-                                message: format!("Invalid annotation '@{}'. Expected: @ch:ChordName, @key:KeySig, @Eb:^, @Bb:_, @:^, or @pickup", annotation.trim()),
+                                message: format!("Invalid annotation '@{}'. Expected: @key:KeySig, @Eb:^, @Bb:_, @:^, or @pickup", annotation.trim()),
                             });
                         }
                     } else {
                         return Err(GenError::ParseError {
                             line,
                             column,
-                            message: "Empty annotation. Expected: @ch:ChordName, @key:KeySig, @Eb:^, @Bb:_, @:^, or @pickup".to_string(),
+                            message: "Empty annotation. Expected: @key:KeySig, @Eb:^, @Bb:_, @:^, or @pickup".to_string(),
                         });
                     }
 

@@ -1,45 +1,45 @@
 @pickup      _A/
-||: @ch:Eb7 [_B Db F]3/ ^Cp [B F]/
-@ch:Dm7     G#/ A*-A* _A/
-@ch:Eb7     [_B Db F]3/ ^Cp [B F]/
-@ch:Dm7     Ap $ $/ _A/
-@ch:Eb7     [_B Db F]3/ ^Cp [B F]/
-@ch:Dm7     G#/ A*-Ap
-@ch:Eb7b5   [A B A G]/ @ch:A7b5 Eb [C# D-]/
-1. @ch:Dm7  Dp $ $/ _A/ :||
-2. @ch:Dm7  Dp* A
-@ch:Am7b5   ^Cp A* G/
-@ch:D7b9    F# [^Eb ^D-]/ ^D [^C A]/
-@ch:Gm      B/ G F#/-[F# G A G-]/
-@ch:Gm7     Gp @ch:C7 $p
-@ch:Gm7b5   Bp G* F/
-@ch:C7b9    E [^Db ^C-]/ ^C [B G#]/
-@ch:F6      A* F/ G [F E-]/
-@ch:Em7b5   Ep @ch:A7b5 $ $/ _A/
-@ch:Eb7     [_B Db F]3/ ^Cp [B F]/
-@ch:Dm7     G#/ A*-A* _A/
-@ch:Eb7     [_B Db F]3/ ^Cp [B F]/
-@ch:Dm7     Ap $ $/ _A/
-@ch:Eb7     [_B Db F]3/ ^Cp [B F]/
-@ch:Dm7     G#/ A*-Ap
-@ch:Eb7b5   [A B A G]/ @ch:A7b5 Eb [C# D-]/
-@ch:Dm7     D* A/ $/ A A/-
-@ch:Em7b5   A [G E]/ A [G E]/
-@ch:Em7b5   [A G E A]/ $ $/ A/-
-@ch:Eb7#11  A [F Db]/ A [F Db]/
-@ch:Eb7#11  [A F Db A]/ $ $/ A/-
-@ch:Em7b5   A [F D%]/ A [F D]/
-@ch:Em7b5   [A F D A]/ $ $/ A/-
-@ch:G7#11   A [F Db]/ A [F Db]/
-@ch:G7#11   [A F Db A]/ $ $/ A/-
-@ch:GmM7    A [F# D%]/ A [F# D]/
-@ch:Gm7     [A F% D A]/ $ $/ A/-
-@ch:Gb7#9   A [E D#]/ A [E D#]/
-@ch:Gb7#9   [A E Db A]/ $ [A ^C]/
-@ch:Fmaj7   $o
-@ch:Fmaj7   $o
-@ch:Ebm7b5  $o
-@ch:A7b9    $o
+||: {Eb7} [_B Db F]3/ ^Cp [B F]/
+{Dm7}     G#/ A*-A* _A/
+{Eb7}     [_B Db F]3/ ^Cp [B F]/
+{Dm7}     Ap $ $/ _A/
+{Eb7}     [_B Db F]3/ ^Cp [B F]/
+{Dm7}     G#/ A*-Ap
+{Eb7b5}   [A B A G]/ {A7b5}p Eb [C# D-]/
+1. {Dm7}  Dp $ $/ _A/ :||
+2. {Dm7}  Dp* A
+{Am7b5}   ^Cp A* G/
+{D7b9}    F# [^Eb ^D-]/ ^D [^C A]/
+{Gm}      B/ G F#/-[F# G A G-]/
+{Gm7}     Gp {C7}p $p
+{Gm7b5}   Bp G* F/
+{C7b9}    E [^Db ^C-]/ ^C [B G#]/
+{F6}      A* F/ G [F E-]/
+{Em7b5}   Ep {A7b5}p $ $/ _A/
+{Eb7}     [_B Db F]3/ ^Cp [B F]/
+{Dm7}     G#/ A*-A* _A/
+{Eb7}     [_B Db F]3/ ^Cp [B F]/
+{Dm7}     Ap $ $/ _A/
+{Eb7}     [_B Db F]3/ ^Cp [B F]/
+{Dm7}     G#/ A*-Ap
+{Eb7b5}   [A B A G]/ {A7b5}p Eb [C# D-]/
+{Dm7}     D* A/ $/ A A/-
+{Em7b5}   A [G E]/ A [G E]/
+{Em7b5}   [A G E A]/ $ $/ A/-
+{Eb7#11}  A [F Db]/ A [F Db]/
+{Eb7#11}  [A F Db A]/ $ $/ A/-
+{Em7b5}   A [F D%]/ A [F D]/
+{Em7b5}   [A F D A]/ $ $/ A/-
+{G7#11}   A [F Db]/ A [F Db]/
+{G7#11}   [A F Db A]/ $ $/ A/-
+{GmM7}    A [F# D%]/ A [F# D]/
+{Gm7}     [A F% D A]/ $ $/ A/-
+{Gb7#9}   A [E D#]/ A [E D#]/
+{Gb7#9}   [A E Db A]/ $ [A ^C]/
+{Fmaj7}   $o
+{Fmaj7}   $o
+{Ebm7b5}  $o
+{A7b9}    $o
 
 ---
 title: A Night in Tunisia

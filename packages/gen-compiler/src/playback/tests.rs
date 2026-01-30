@@ -331,7 +331,7 @@ fn test_playback_chord_extraction() {
     let source = r#"---
 tempo: 120
 ---
-@ch:C C @ch:G D @ch:Am E @ch:F F
+{C} C {G} D {Am} E {F} F
 "#;
     let result = generate_playback_data(source, "treble", 0, None, None);
     assert!(result.is_ok());
@@ -361,11 +361,11 @@ tempo: 120
 
 #[test]
 fn test_playback_chord_with_duration() {
-    // Test chord with explicit half note duration
+    // Test chord with explicit half note duration: {C}p
     let source = r#"---
 tempo: 120
 ---
-@ch:Cp C D E F
+{C}p C D E F
 "#;
     let result = generate_playback_data(source, "treble", 0, None, None);
     assert!(result.is_ok());
@@ -381,7 +381,7 @@ fn test_playback_chord_on_rest() {
     let source = r#"---
 tempo: 120
 ---
-@ch:C $ C C C
+{C} $ C C C
 "#;
     let result = generate_playback_data(source, "treble", 0, None, None);
     assert!(result.is_ok());

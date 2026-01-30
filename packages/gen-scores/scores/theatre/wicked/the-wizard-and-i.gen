@@ -1,16 +1,16 @@
-@ch:Ab      [$ C D]3 [E D C]3
-@ch:C       ^_B/ C* $ [^_A ^_B]/
-@ch:Fm/Ab   [C D E-]3 [E D C]3
-@ch:C/      ^_Bp $ [^_A ^_B]/
-@ch:Ab      [C D E-]3 E [D C]/
-@ch:C       ^_B/ C C/-C $/ [^_A ^_B]//
-@ch:Fm/Ab   [C D E]3 Ap
-@ch:Ab7p    ^C A @ch:Ab7#5p ^C* B/
-@ch:Dbmaj9  B/ A/-Ap*
-@ch:Bbm7p   $ D @ch:Eb7/Gp E F
-@ch:Cm7     Eo
-@ch:Gbadd9  $ ^_B C D
-@key:C @ch:C Co-
+{Ab}      [$ C D]3 [E D C]3
+{C}       ^_B/ C* $ [^_A ^_B]/
+{Fm/Ab}   [C D E-]3 [E D C]3
+{C}/      ^_Bp $ [^_A ^_B]/
+{Ab}      [C D E-]3 E [D C]/
+{C}       ^_B/ C C/-C $/ [^_A ^_B]//
+{Fm/Ab}   [C D E]3 Ap
+{Ab7}p    ^C A {Ab7#5}p ^C* B/
+{Dbmaj9}  B/ A/-Ap*
+{Bbm7}p   $ D {Eb7/G}p E F
+{Cm7}     Eo
+{Gbadd9}  $ ^_B C D
+@key:C {C} Co-
 Co
 $o
 $o
