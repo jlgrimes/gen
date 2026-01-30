@@ -1,22 +1,22 @@
-/C^ /A /C^ //D^ //C^-//C^ /*E /F /F#
-/G /$ //G /G //G $ /$ (//D //D#)
-||: (//[E D# E G]) //$ //A /G C /$ (//[G_ G#_]
-//[A_ G#_ A_ C]) //$ //D /C A_ /$ /Ab_
-//[(G_ F#_ G_) G] /$ //[(G_ F#_ G_) G] /$ //[(G_ F#_ G_) G]
-/$ /G //A /G //D *$ (//[D D#]
-//[E D# E G]) //$ //A /G Bb /$ /G#
-(//[A G# A C^]) //$ (//D^ /C^) A /$ /Ab
-//[(G F# G) G_ $ G_ (G F# G) G_ $ G_] /[E E]
-1. dC $ /$ (//[D D#]) :||
-2. dC $ (//[E F G G#])
-*A /Ab *G /Gb
-//F /$ //G /$ /E-E (//[E F G G#]
-*A) /Ab *G /Gb
-//F /$ //E /$ /C-C $
-/[A A Ab Ab G G Gb Gb]
-//F /$ //G /$ /E-dE
-/[A A Ab Ab G G Gb Gb]
-//F /$ //E /$ /C-dC
+^C/ A/ ^C/ ^D// ^C//-^C// E/* F/ F#/
+G/ $/ G// G/ G// $ $/ (D// D#//)
+||: ([E D# E G]//) $// A// G/ C $/ ([_G _G#]//
+[_A _G# _A C]//) $// D// C/ _A $/ _Ab/
+[(_G _F# _G) G]// $/ [(_G _F# _G) G]// $/ [(_G _F# _G) G]//
+$/ G/ A// G/ D// $* ([D D#]//
+[E D# E G]//) $// A// G/ Bb $/ G#/
+([A G# A ^C]//) $// (^D// ^C/) A $/ Ab/
+[(G F# G) _G $ _G (G F# G) _G $ _G]// [E E]/
+1. Cp $ $/ ([D D#]//) :||
+2. Cp $ ([E F G G#]//)
+A* Ab/ G* Gb/
+F// $/ G// $/ E/-E ([E F G G#]//
+A*) Ab/ G* Gb/
+F// $/ E// $/ C/-C $
+[A A Ab Ab G G Gb Gb]/
+F// $/ G// $/ E/-Ep
+[A A Ab Ab G G Gb Gb]/
+F// $/ E// $/ C/-Cp
 ---
 title: Bob-Omb Battlefield Theme
 composer: Koji

@@ -29,7 +29,7 @@
 //! tempo: 120
 //! ---
 //! C D E F
-//! G A B C^
+//! G A B ^C
 //! "#;
 //!
 //! let musicxml = compile(source)?;
@@ -58,21 +58,21 @@
 //! ### Note Format
 //! `[rhythm][note][pitch]`
 //!
-//! - **Rhythm modifiers**: `/` (eighth), `//` (sixteenth), `d` (half), `o` (whole), `*` (dotted)
+//! - **Rhythm modifiers**: `/` (eighth), `//` (sixteenth), `p` (half), `o` (whole), `*` (dotted)
 //! - **Notes**: A-G or `$` (rest)
 //! - **Pitch modifiers**: `#` (sharp), `b` (flat), `^` (octave up), `_` (octave down)
 //!
 //! ### Examples
 //! - `C` - C quarter note
-//! - `/E` - E eighth note
-//! - `dG*` - G dotted half note
-//! - `//F#^` - F# sixteenth note, one octave up
+//! - `E/` - E eighth note
+//! - `Gp*` - G dotted half note
+//! - `^F#//` - F# sixteenth note, one octave up
 //! - `$` - quarter rest
 //!
 //! ### Tuplets
-//! - `3[C D E]` - Quarter note triplet (3 notes in time of 2)
-//! - `/3[A B C]` - Eighth note triplet
-//! - `5[C D E F G]` - Quintuplet (5 in time of 4)
+//! - `[C D E]3` - Quarter note triplet (3 notes in time of 2)
+//! - `[A B C]3/` - Eighth note triplet
+//! - `[C D E F G]5` - Quintuplet (5 in time of 4)
 //!
 //! ### Ties and Slurs
 //! - `C-C` - Two tied quarter notes (play as half note)

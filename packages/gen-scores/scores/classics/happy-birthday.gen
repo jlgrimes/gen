@@ -5,13 +5,13 @@ time-signature: 3/4
 key-signature: C
 ---
 
-/$ /G G A
-dG dC^
-dB $ /$ /G
-G A dG
-dD^ dC^
-/$ /G G^ E^
-dC^ dB
-dA /$ /F^
-F^ E^ dC^
-dD^ dC^
+$/ G/ G A
+Gp ^Cp
+Bp $ $/ G/
+G A Gp
+^Dp ^Cp
+$/ G/ ^G ^E
+^Cp Bp
+Ap $/ ^F/
+^F ^E ^Cp
+^Dp ^Cp

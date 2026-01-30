@@ -31,12 +31,11 @@
 //! C D E F
 //! "#;
 //!
-//! let data = generate_playback_data(source, "treble", 0, None)?;
+//! let data = generate_playback_data(source, "treble", 0, None, None).unwrap();
 //!
 //! assert_eq!(data.tempo, 120);
 //! assert_eq!(data.notes.len(), 4);
 //! assert_eq!(data.notes[0].midi_note, 60); // C4
-//! # Ok::<(), gen::GenError>(())
 //! ```
 //!
 //! ## Dual-Timing System

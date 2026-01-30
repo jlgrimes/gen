@@ -19,7 +19,7 @@
 //! composer: Me
 //! ---
 //! C D E F
-//! G A B C^
+//! G A B ^C
 //! "#;
 //!
 //! let musicxml = compile(source)?;

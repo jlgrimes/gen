@@ -1,37 +1,37 @@
-D^ /[F^ D^ E^ D^ B D^]
-/$ /[C^ A C^] /$ /[B G] /$
-*A /A $ A-
-dA *F /F
-$ *dF-
-dF $ F
-*G /A-A B
-*C /D-D E             @:^
-*D /C-dC-            @:^
-C^ $ $ F
-*G /A-A B
-*C /D-D E             @:^
-D /E /F-dF           @:^
-d$ /$ /E /$ /D       @:^
-*C /D-D E             @:^
-dD dC               @:^
-*C^ /B-dB-
-dB d$
-B /$ /E^ $ /$ /G^     @Eb:_
-F^ /D^ /B E^ /$ /A    @Eb:_
-$ /$ /D^ C^ $         @Eb:_
-/A /B /$ /G-/G /G D^  @Eb:_
-E^ /$ /E^ G^ /F^ /D^  @Eb:_
-B /D^ /B E^ /C^ /B    @Eb:_
-/$ /F E-/E F /B
-*C^ /A#-/A# /G# F
-/[$ C F C G# C A# A%-]
-/A% F /F^ $ F^
-dE^ *D^ /B-
-oB
+^D [^F ^D ^E ^D B ^D]/
+$/ [^C A ^C]/ $/ [B G]/ $/
+A* A/ $ A-
+Ap F* F/
+$ Fp*-
+Fp $ F
+G* A/-A B
+C* D/-D E             @:^
+D* C/-Cp-            @:^
+^C $ $ F
+G* A/-A B
+C* D/-D E             @:^
+D E/ F/-Fp           @:^
+$p $/ E/ $/ D/       @:^
+C* D/-D E             @:^
+Dp Cp               @:^
+^C* B/-Bp-
+Bp $p
+B $/ ^E/ $ $/ ^G/     @Eb:_
+^F ^D/ B/ ^E $/ A/    @Eb:_
+$ $/ ^D/ ^C $         @Eb:_
+A/ B/ $/ G/-G/ G/ ^D  @Eb:_
+^E $/ ^E/ ^G ^F/ ^D/  @Eb:_
+B ^D/ B/ ^E ^C/ B/    @Eb:_
+$/ F/ E-E/ F B/
+^C* A#/-A#/ G#/ F
+[$ C F C G# C A# A%-]/
+A%/ F ^F/ $ ^F
+^Ep ^D* B/-
+Bo
 ---
 title: Spain
 composer: Chick Corea
 time-signature: 4/4
 key-signature: D
-tempo: d120
+tempo: 120p
 ---

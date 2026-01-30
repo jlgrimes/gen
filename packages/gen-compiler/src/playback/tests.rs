@@ -29,7 +29,7 @@ fn test_playback_midi_notes() {
     let source = r#"---
 key-signature: C
 ---
-C D E F G A B C^
+C D E F G A B ^C
 "#;
     let result = generate_playback_data(source, "treble", 0, None, None);
     assert!(result.is_ok());
@@ -51,7 +51,7 @@ fn test_playback_with_ties() {
     let source = r#"---
 tempo: 120
 ---
-C- C d$
+C- C $p
 "#;
     let result = generate_playback_data(source, "treble", 0, None, None);
     assert!(result.is_ok());
@@ -69,7 +69,7 @@ fn test_playback_different_rhythms() {
     let source = r#"---
 tempo: 120
 ---
-dC /C /C C
+Cp C/ C/ C
 "#;
     let result = generate_playback_data(source, "treble", 0, None, None);
     assert!(result.is_ok());
@@ -176,7 +176,7 @@ C D E F"#;
 #[test]
 fn test_tempo_half_note() {
     let source = r#"---
-tempo: d160
+tempo: 160p
 ---
 C D E F"#;
     let result = generate_playback_data(source, "treble", 0, None, None);
@@ -190,7 +190,7 @@ C D E F"#;
 #[test]
 fn test_tempo_whole_note() {
     let source = r#"---
-tempo: o60
+tempo: 60o
 ---
 C D E F"#;
     let result = generate_playback_data(source, "treble", 0, None, None);
@@ -204,7 +204,7 @@ C D E F"#;
 #[test]
 fn test_tempo_eighth_note() {
     let source = r#"---
-tempo: /120
+tempo: 120/
 ---
 C D E F"#;
     let result = generate_playback_data(source, "treble", 0, None, None);
@@ -218,7 +218,7 @@ C D E F"#;
 #[test]
 fn test_tempo_sixteenth_note() {
     let source = r#"---
-tempo: //240
+tempo: 240//
 ---
 C D E F"#;
     let result = generate_playback_data(source, "treble", 0, None, None);
@@ -232,7 +232,7 @@ C D E F"#;
 #[test]
 fn test_tempo_dotted_quarter() {
     let source = r#"---
-tempo: "*120"
+tempo: "120*"
 ---
 C D E F"#;
     let result = generate_playback_data(source, "treble", 0, None, None);
@@ -247,7 +247,7 @@ C D E F"#;
 #[test]
 fn test_tempo_dotted_half() {
     let source = r#"---
-tempo: "d*160"
+tempo: "160p*"
 ---
 C D E F"#;
     let result = generate_playback_data(source, "treble", 0, None, None);
@@ -365,7 +365,7 @@ fn test_playback_chord_with_duration() {
     let source = r#"---
 tempo: 120
 ---
-@ch:dC C D E F
+@ch:Cp C D E F
 "#;
     let result = generate_playback_data(source, "treble", 0, None, None);
     assert!(result.is_ok());
@@ -427,7 +427,7 @@ fn test_playback_triplets() {
     let source = r#"---
 tempo: 120
 ---
-C /3[D E F] G
+C [D E F]3/ G
 "#;
     let result = generate_playback_data(source, "treble", 0, None, None);
     assert!(result.is_ok());
@@ -492,7 +492,7 @@ fn test_osmd_match_keys_triplets() {
     let source = r#"---
 tempo: 120
 ---
-C 3[D E F] G
+C [D E F]3 G
 "#;
     let result = generate_playback_data(source, "treble", 0, None, None);
     assert!(result.is_ok());

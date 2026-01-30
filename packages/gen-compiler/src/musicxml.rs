@@ -37,7 +37,7 @@
 //! ```rust
 //! use gen::{parse, to_musicxml};
 //!
-//! let score = parse("C D E F")?;
+//! let score = parse("C D E F").unwrap();
 //! let musicxml = to_musicxml(&score);
 //! // Write to .musicxml file or render with notation software
 //! ```
@@ -46,17 +46,17 @@
 //! ```rust
 //! use gen::{parse, to_musicxml_with_options, Clef, Transposition};
 //!
-//! let score = parse("C D E F")?;
+//! let score = parse("C D E F").unwrap();
 //! let transposition = Transposition::for_key("Bb"); // Bb instrument
 //! let musicxml = to_musicxml_with_options(&score, transposition, Clef::Treble, 0);
 //! ```
 //!
 //! ### With Mod Points
 //! ```rust
-//! use gen::{parse, to_musicxml_with_mod_points, Clef};
+//! use gen::{parse, to_musicxml_with_mod_points, Clef, InstrumentGroup};
 //!
-//! let score = parse("@Eb:^ C D E F")?;  // Eb instrument, up one octave
-//! let musicxml = to_musicxml_with_mod_points(&score, None, Clef::Treble, 0, Some("eb"));
+//! let score = parse("@Eb:^ C D E F").unwrap();  // Eb instrument, up one octave
+//! let musicxml = to_musicxml_with_mod_points(&score, None, Clef::Treble, 0, Some(InstrumentGroup::Eb));
 //! ```
 //!
 //! ## MusicXML Compatibility
@@ -1440,7 +1440,8 @@ C"#;
 
     #[test]
     fn test_musicxml_triplet_output() {
-        let score = parse("3[C D E]").unwrap();
+        // New syntax: tuplet number AFTER bracket
+        let score = parse("[C D E]3").unwrap();
         let xml = to_musicxml(&score);
 
         // Should contain time-modification for triplets
@@ -1565,8 +1566,8 @@ C"#;
 
     #[test]
     fn test_musicxml_slur_across_measures() {
-        // Slur spanning two measures
-        let score = parse("(C D E F\nG A B C^)").unwrap();
+        // Slur spanning two measures (new syntax: octave BEFORE note)
+        let score = parse("(C D E F\nG A B ^C)").unwrap();
         let xml = to_musicxml(&score);
 
         // Should contain slur start and stop
@@ -1978,12 +1979,13 @@ C"#;
     #[test]
     fn test_note_transposition_bb_instrument() {
         // Bb instrument: transposes up a major 2nd (C -> D, E -> F#, G -> A)
-        let score = parse("C D E F G A B C^").unwrap();
+        // New syntax: octave BEFORE note (^C instead of C^)
+        let score = parse("C D E F G A B ^C").unwrap();
         let transposition = Transposition { diatonic: 1, chromatic: 2, fifths: 2 };
         let xml = to_musicxml_with_options(&score, Some(transposition), Clef::Treble, 0);
 
         // Check that notes are transposed correctly
-        // Concert C -> D, Concert D -> E, Concert E -> F#, Concert F -> G, Concert G -> A, Concert A -> B, Concert B -> C#, Concert C^ -> D^
+        // Concert C -> D, Concert D -> E, Concert E -> F#, Concert F -> G, Concert G -> A, Concert A -> B, Concert B -> C#, Concert ^C -> ^D
         assert!(xml.contains("<step>D</step>"), "Concert C should transpose to D");
         assert!(xml.contains("<step>E</step>"), "Concert D should transpose to E");
         assert!(xml.contains("<step>F</step>"), "Concert E should transpose to F");
@@ -2030,14 +2032,15 @@ C"#;
     fn test_note_transposition_octave_crossing() {
         // Test that transposition handles octave crossing correctly
         // High B for Bb instrument should become C# in next octave
-        let score = parse("B C^").unwrap();
+        // New syntax: octave BEFORE note (^C instead of C^)
+        let score = parse("B ^C").unwrap();
         let transposition = Transposition { diatonic: 1, chromatic: 2, fifths: 2 };
         let xml = to_musicxml_with_options(&score, Some(transposition), Clef::Treble, 0);
 
         // Concert B (octave 4) -> C# (octave 5)
-        // Concert C^ (octave 5) -> D (octave 5)
+        // Concert ^C (octave 5) -> D (octave 5)
         assert!(xml.contains("<step>C</step>"), "Concert B should transpose to C#");
-        assert!(xml.contains("<step>D</step>"), "Concert C^ should transpose to D");
+        assert!(xml.contains("<step>D</step>"), "Concert ^C should transpose to D");
 
         // Count octaves - should have octave 5 appear
         assert!(xml.contains("<octave>5</octave>"), "Should have notes in octave 5");
@@ -2063,10 +2066,11 @@ C"#;
         // Test the original issue: Gb major (6 flats) for Bb instrument
         // Key signature should be Ab major (4 flats)
         // Concert C in Gb major (which is actually Cb due to key sig) -> D in Ab major (Db)
+        // New syntax: octave BEFORE note (^C instead of C^)
         let source = r#"---
 key-signature: Gb
 ---
-C D E F G A B C^"#;
+C D E F G A B ^C"#;
         let score = parse(source).unwrap();
         let transposition = Transposition { diatonic: 1, chromatic: 2, fifths: 2 };
         let xml = to_musicxml_with_options(&score, Some(transposition), Clef::Treble, 0);
@@ -2109,7 +2113,8 @@ C D E F"#;
     #[test]
     fn test_concert_pitch_no_transposition() {
         // Concert pitch (C key) should not transpose anything
-        let score = parse("C D E F G A B C^").unwrap();
+        // New syntax: octave BEFORE note (^C instead of C^)
+        let score = parse("C D E F G A B ^C").unwrap();
         let xml = to_musicxml(&score); // No transposition
 
         // Notes should remain as-is
@@ -2126,10 +2131,11 @@ C D E F"#;
     fn test_beaming_12_8_time() {
         // 12/8 time: should beam in groups of 3 eighth notes (dotted quarter beats)
         // Measure has 12 eighth notes, should create 4 beam groups
+        // New syntax: rhythm AFTER note, octave BEFORE note
         let source = r#"---
 time-signature: 12/8
 ---
-/C /D /E /F /G /A /B /C^ /D^ /E^ /F^ /G^"#;
+C/ D/ E/ F/ G/ A/ B/ ^C/ ^D/ ^E/ ^F/ ^G/"#;
         let score = parse(source).unwrap();
         let xml = to_musicxml(&score);
 
@@ -2144,10 +2150,11 @@ time-signature: 12/8
     #[test]
     fn test_beaming_6_8_time() {
         // 6/8 time: should beam in groups of 3 eighth notes (dotted quarter beats)
+        // New syntax: rhythm AFTER note
         let source = r#"---
 time-signature: 6/8
 ---
-/C /D /E /F /G /A"#;
+C/ D/ E/ F/ G/ A/"#;
         let score = parse(source).unwrap();
         let xml = to_musicxml(&score);
 
@@ -2162,10 +2169,11 @@ time-signature: 6/8
     #[test]
     fn test_beaming_9_8_time() {
         // 9/8 time: should beam in groups of 3 eighth notes
+        // New syntax: rhythm AFTER note, octave BEFORE note
         let source = r#"---
 time-signature: 9/8
 ---
-/C /D /E /F /G /A /B /C^ /D^"#;
+C/ D/ E/ F/ G/ A/ B/ ^C/ ^D/"#;
         let score = parse(source).unwrap();
         let xml = to_musicxml(&score);
 
@@ -2189,11 +2197,12 @@ time-signature: 9/8
 
     #[test]
     fn test_key_change_multiple_measures() {
+        // New syntax: octave BEFORE note (^C instead of C^)
         let source = r#"---
 key-signature: C
 ---
 C D E F
-@key:D G A B C^
+@key:D G A B ^C
 @key:F D E F G"#;
         let score = parse(source).unwrap();
         let xml = to_musicxml(&score);

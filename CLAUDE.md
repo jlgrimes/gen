@@ -82,17 +82,17 @@ tempo: 120
 ---
 
 C D E F
-G A B C^
+G A B ^C
 ```
 
 **Tempo field:**
-The `tempo` field accepts BPM with optional rhythm modifiers:
+The `tempo` field accepts BPM with optional rhythm modifiers at the END:
 - `tempo: 120` - Quarter note at 120 BPM (default)
-- `tempo: d160` - Half note at 160 BPM (quarter = 320 BPM)
-- `tempo: /180` - Eighth note at 180 BPM (quarter = 90 BPM)
-- `tempo: o60` - Whole note at 60 BPM (quarter = 240 BPM)
-- `tempo: "*120"` - Dotted quarter at 120 BPM (quarter = 180 BPM, must quote)
-- `tempo: "d*80"` - Dotted half at 80 BPM (quarter = 240 BPM, must quote)
+- `tempo: 160p` - Half note at 160 BPM (quarter = 320 BPM)
+- `tempo: 180/` - Eighth note at 180 BPM (quarter = 90 BPM)
+- `tempo: 60o` - Whole note at 60 BPM (quarter = 240 BPM)
+- `tempo: "120*"` - Dotted quarter at 120 BPM (quarter = 180 BPM, must quote)
+- `tempo: "80p*"` - Dotted half at 80 BPM (quarter = 240 BPM, must quote)
 
 **Key signatures support both major and minor keys:**
 - Major keys: `C`, `G`, `D`, `A`, `E`, `B`, `F#`, `C#`, `F`, `Bb`, `Eb`, `Ab`, `Db`, `Gb`, `Cb`
@@ -100,44 +100,47 @@ The `tempo` field accepts BPM with optional rhythm modifiers:
 - Sharp/flat count: `#`, `##`, `###` (sharps) or `bb`, `bbb`, `bbbb` (flats)
 
 ### Note Format
-`[rhythm][note][pitch]`
+`[octave][note][accidental][rhythm]`
 
-**Rhythm modifiers:**
+**Octave modifiers (at BEGINNING):**
+- `^` = octave up, `^^` = two octaves up
+- `_` = octave down, `__` = two octaves down
+
+**Notes:** `A B C D E F G` or `$` for rest
+
+**Accidentals (after note name):**
+- `#` = sharp, `b` = flat
+
+**Rhythm modifiers (at END):**
 - (none) = quarter note
 - `/` = eighth note
 - `//` = sixteenth note
 - `///` = 32nd note
-- `d` = half note
+- `p` = half note
 - `o` = whole note
-- `*` suffix = dotted
-
-**Notes:** `A B C D E F G` or `$` for rest
-
-**Pitch modifiers:**
-- `#` = sharp, `b` = flat
-- `^` = octave up, `^^` = two octaves up
-- `_` = octave down, `__` = two octaves down
+- `*` = dotted (always at end, after rhythm)
 
 **CRITICAL - Octave System (ALWAYS ABSOLUTE):**
 - **The octave range is ALWAYS C through B, regardless of key signature**
 - **Base octave (no modifier): C D E F G A B** - this is the "middle" octave
-- **High octave (^ modifier): C^ D^ E^ F^ G^ A^ B^** - this is one octave up
-- **Low octave (_ modifier): C_ D_ E_ F_ G_ A_ B_** - this is one octave down
-- **The octave ALWAYS "resets" at C** - so B to C^ is going up, but B^ to C^ is staying in the same octave
+- **High octave (^ modifier): ^C ^D ^E ^F ^G ^A ^B** - this is one octave up
+- **Low octave (_ modifier): _C _D _E _F _G _A _B** - this is one octave down
+- **The octave ALWAYS "resets" at C** - so B to ^C is going up, but ^B to ^C is staying in the same octave
 - **Key signature does NOT affect octave boundaries** - even in F major or Eb minor, the octave break is still at C
-- Example: A melody that goes G A B C^ D^ is going up through the octave break at C
-- Example: In "Happy Birthday", the sustained "you" notes are C^, D^ because they're above B
-- Example: If jumping from high notes to low, you might go E^ D^ C^ B A G (going down through octaves)
+- Example: A melody that goes G A B ^C ^D is going up through the octave break at C
+- Example: In "Happy Birthday", the sustained "you" notes are ^C, ^D because they're above B
+- Example: If jumping from high notes to low, you might go ^E ^D ^C B A G (going down through octaves)
 
 ### Examples
 ```
 C           # C quarter note
-/E          # E eighth note
-dG         # G half note
-/Ab_        # Ab eighth note, one octave down
-//F#^       # F# sixteenth note, one octave up
+E/          # E eighth note
+Gp          # G half note
+_Ab/        # Ab eighth note, one octave down
+^F#//       # F# sixteenth note, one octave up
 $           # quarter rest
-/$          # eighth rest
+$/          # eighth rest
+Gp*         # G dotted half note
 ```
 
 ### Key Changes
@@ -154,25 +157,29 @@ Change the key signature in the middle of a piece:
 **Transposition:** Automatically transposes for instrument groups
 
 ### Bracket Groups
-Groups apply modifiers to multiple notes at once:
+Groups apply modifiers to multiple notes at once. Octave goes BEFORE the bracket, rhythm and tuplet go AFTER.
 
 **Rhythm grouping:**
-- `//[C D E F]` = `//C //D //E //F` (all sixteenth notes)
+- `[C D E F]//` = `C// D// E// F//` (all sixteenth notes)
+
+**Tuplets:**
+- `[C D E]3` = quarter note triplet (3 notes in time of 2)
+- `[C D E]3/` = eighth note triplet
 
 **Octave modifiers on groups:**
-- `[A B C D]^` = `A^ B^ C^ D^` (all notes up one octave)
-- `/[A B C D]^` = `/A^ /B^ /C^ /D^` (eighth notes, all up one octave)
-- `3[C D E]^` = quarter note triplet, all up one octave
-- `/3[C D E]^` = eighth note triplet, all up one octave
+- `^[A B C D]` = `^A ^B ^C ^D` (all notes up one octave)
+- `^[A B C D]/` = `^A/ ^B/ ^C/ ^D/` (eighth notes, all up one octave)
+- `^[C D E]3` = quarter note triplet, all up one octave
+- `^[C D E]3/` = eighth note triplet, all up one octave
 
 Group octave modifiers are applied **after** individual note modifiers:
-- `[A^ B C_]^` results in A^^, B^, C (middle)
+- `^[^A B _C]` results in ^^A, ^B, C (middle)
 
 ### Measure Octave Modifiers
 Apply octave shift to ALL notes in a measure:
-- `A B C D @:^` = `A^ B^ C^ D^` (all notes up one octave)
+- `A B C D @:^` = `^A ^B ^C ^D` (all notes up one octave)
 - `@:_`, `@:^^`, `@:__` also supported
-- Stacks with individual and group modifiers: `[A B]^ @:^` results in all notes ^^
+- Stacks with individual and group modifiers: `^[A B] @:^` results in all notes ^^
 - Similar to instrument group modifiers (@Eb:^) but affects all notes
 
 ## Building

@@ -68,12 +68,11 @@ use super::types::{PlaybackData, PlaybackNote, PlaybackChord};
 /// use gen::playback::generate_playback_data;
 ///
 /// let source = "C D E F";
-/// let data = generate_playback_data(source, "treble", 0, None)?;
+/// let data = generate_playback_data(source, "treble", 0, None, None).unwrap();
 ///
 /// assert_eq!(data.notes.len(), 4);
 /// assert_eq!(data.tempo, 120); // Default tempo
 /// assert_eq!(data.notes[0].midi_note, 60); // C4
-/// # Ok::<(), gen::GenError>(())
 /// ```
 pub fn generate_playback_data(
     source: &str,
@@ -283,8 +282,15 @@ pub fn generate_playback_data(
         chord.duration /= tempo_beat_duration;
     }
 
+    // Return quarter-note equivalent BPM for a unified playback API
+    let quarter_note_bpm = if let Some(ref tempo) = score.metadata.tempo {
+        tempo.to_quarter_note_bpm() as u16
+    } else {
+        120 // Default quarter-note BPM
+    };
+
     Ok(PlaybackData {
-        tempo: tempo_bpm,
+        tempo: quarter_note_bpm,
         notes,
         chords,
     })

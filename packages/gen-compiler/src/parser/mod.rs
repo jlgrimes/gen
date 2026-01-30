@@ -49,7 +49,7 @@
 //! C D E F
 //! "#;
 //!
-//! let score = parse(source)?;
+//! let score = parse(source).unwrap();
 //! assert_eq!(score.metadata.title, Some("My Song".to_string()));
 //! assert_eq!(score.measures.len(), 1);
 //! assert_eq!(score.measures[0].elements.len(), 4);
@@ -79,53 +79,52 @@ pub(crate) struct ParsedChord {
 }
 
 impl ParsedChord {
-    /// Parse a chord annotation string like "Cmaj7" or "dAbm" (half note Abm)
-    /// Rhythm modifiers: o=whole, d=half, (none)=quarter, /=eighth, //=sixteenth
-    /// Dotted: * suffix on rhythm (e.g., d*Cmaj7 = dotted half)
+    /// Parse a chord annotation string like "Cmaj7" or "Abmp" (half note Abm)
+    /// New syntax: chord symbol first, then rhythm at end
+    /// Rhythm modifiers: o=whole, p=half, (none)=quarter, /=eighth, //=sixteenth
+    /// Dotted: * after rhythm (e.g., Cmaj7p* = dotted half)
     /// Default duration is whole note
     pub fn parse(s: &str) -> Self {
-        let mut chars = s.chars().peekable();
         let mut duration = Duration::Whole; // Default to whole note
         let mut dotted = false;
 
-        // Check for rhythm prefix
-        match chars.peek() {
-            Some('o') => {
-                duration = Duration::Whole;
-                chars.next();
+        // Find where rhythm modifiers start (from the end)
+        // Rhythm chars: o, p, /, *
+        let s_bytes = s.as_bytes();
+        let mut rhythm_start = s.len();
+
+        // Scan backwards to find rhythm modifiers
+        while rhythm_start > 0 {
+            let c = s_bytes[rhythm_start - 1] as char;
+            if c == 'o' || c == 'p' || c == '/' || c == '*' {
+                rhythm_start -= 1;
+            } else {
+                break;
             }
-            Some('d') => {
-                duration = Duration::Half;
-                chars.next();
-            }
-            Some('/') => {
-                chars.next();
-                if chars.peek() == Some(&'/') {
-                    chars.next();
-                    if chars.peek() == Some(&'/') {
-                        chars.next();
-                        duration = Duration::ThirtySecond;
-                    } else {
-                        duration = Duration::Sixteenth;
-                    }
-                } else {
-                    duration = Duration::Eighth;
+        }
+
+        let symbol = s[..rhythm_start].to_string();
+        let rhythm_part = &s[rhythm_start..];
+
+        // Parse rhythm modifiers from the suffix
+        for c in rhythm_part.chars() {
+            match c {
+                'o' => duration = Duration::Whole,
+                'p' => duration = Duration::Half,
+                '/' => {
+                    // Count slashes
+                    let slash_count = rhythm_part.chars().filter(|&x| x == '/').count();
+                    duration = match slash_count {
+                        1 => Duration::Eighth,
+                        2 => Duration::Sixteenth,
+                        3 => Duration::ThirtySecond,
+                        _ => Duration::Eighth,
+                    };
                 }
-            }
-            _ => {
-                // Check if starts with uppercase letter (chord root) - no rhythm modifier
-                // Keep default whole note
+                '*' => dotted = true,
+                _ => {}
             }
         }
-
-        // Check for dotted modifier after rhythm
-        if chars.peek() == Some(&'*') {
-            dotted = true;
-            chars.next();
-        }
-
-        // Rest is the chord symbol
-        let symbol: String = chars.collect();
 
         Self { symbol, duration, dotted }
     }
@@ -322,24 +321,41 @@ impl Parser {
     fn parse_tempo(&self, s: &str) -> Result<Tempo, GenError> {
         let s = s.trim();
 
-        // Parse rhythm modifiers at the start of the tempo string
-        let mut chars = s.chars().peekable();
+        // New syntax: BPM first, then rhythm modifiers at the end
+        // Examples: 120 (quarter=120), 120p (half=120), 120o (whole=120), 120/ (eighth=120)
+        // Dotted: 120p* (dotted half=120) - dot comes AFTER rhythm
+
+        // Find where the BPM number ends (first non-digit)
+        let bpm_end = s.chars().take_while(|c| c.is_ascii_digit()).count();
+
+        if bpm_end == 0 {
+            return Err(GenError::MetadataError(format!("Tempo must start with BPM number: {}", s)));
+        }
+
+        let bpm_str = &s[..bpm_end];
+        let bpm = bpm_str.parse::<u16>().map_err(|_| {
+            GenError::MetadataError(format!("Invalid tempo BPM: {}", bpm_str))
+        })?;
+
+        if bpm == 0 {
+            return Err(GenError::MetadataError("Tempo BPM must be greater than 0".to_string()));
+        }
+
+        // Parse rhythm modifiers at the end
+        let suffix = &s[bpm_end..];
+        let mut chars = suffix.chars().peekable();
         let mut duration = Duration::Quarter; // Default to quarter note
         let mut dotted = false;
-        let mut pos = 0;
 
-        // Check for rhythm modifiers
         while let Some(&c) = chars.peek() {
             match c {
                 'o' => {
                     duration = Duration::Whole;
                     chars.next();
-                    pos += 1;
                 }
-                'd' => {
+                'p' => {
                     duration = Duration::Half;
                     chars.next();
-                    pos += 1;
                 }
                 '/' => {
                     // Count consecutive slashes for eighth/sixteenth/32nd
@@ -347,7 +363,6 @@ impl Parser {
                     while chars.peek() == Some(&'/') {
                         slash_count += 1;
                         chars.next();
-                        pos += 1;
                     }
                     duration = match slash_count {
                         1 => Duration::Eighth,
@@ -362,20 +377,9 @@ impl Parser {
                 '*' => {
                     dotted = true;
                     chars.next();
-                    pos += 1;
                 }
-                _ => break, // Stop at first non-rhythm character
+                _ => break, // Stop at first unrecognized character
             }
-        }
-
-        // Parse the BPM number from the remaining string
-        let bpm_str = &s[pos..];
-        let bpm = bpm_str.parse::<u16>().map_err(|_| {
-            GenError::MetadataError(format!("Invalid tempo BPM: {}", bpm_str))
-        })?;
-
-        if bpm == 0 {
-            return Err(GenError::MetadataError("Tempo BPM must be greater than 0".to_string()));
         }
 
         Ok(Tempo { bpm, duration, dotted })
@@ -480,35 +484,35 @@ impl Parser {
             }
 
             // Check for bracket groups (rhythm grouping or tuplet)
-            // Syntax options:
-            //   3[C D E]      - quarter note tuplet (number, then bracket)
-            //   /3[C D E]     - eighth note tuplet (rhythm, number, then bracket)
-            //   //[C D E F]   - rhythm grouping (rhythm, then bracket, NO number)
+            // New syntax options:
+            //   ^[C D E]3/    - octave up, triplet, eighth notes (octave before, tuplet+rhythm after)
+            //   [C D E F]//   - all sixteenth notes (rhythm after bracket)
+            //   ^^[A B]       - two octaves up, quarter notes (octave before, no suffix)
 
             // Save position in case we need to backtrack
             let saved_position = self.position;
-            let (t_line, t_col) = (t.line, t.column);
 
-            // Parse optional rhythm modifier
-            let (group_duration, group_dotted) = self.parse_rhythm()?;
-
-            // Check for optional tuplet number after rhythm
-            let tuplet_number = if let Some(current_t) = self.current() {
-                if let Token::Number(n) = current_t.token {
-                    self.advance();
-                    Some(n)
-                } else {
-                    None
+            // Parse optional octave modifiers BEFORE the bracket (^, _)
+            let mut group_octave_offset = 0i8;
+            while let Some(current_t) = self.current() {
+                match &current_t.token {
+                    Token::Underscore => {
+                        group_octave_offset -= 1;
+                        self.advance();
+                    }
+                    Token::Caret => {
+                        group_octave_offset += 1;
+                        self.advance();
+                    }
+                    _ => break,
                 }
-            } else {
-                None
-            };
+            }
 
             // Now check if we have a bracket
             if let Some(current_t) = self.current() {
                 if current_t.token == Token::LeftBracket {
-                    // This is either a tuplet or rhythm grouping
-                    let (mut grouped_elements, has_pending_tie) = self.parse_bracket_group(tuplet_number, group_duration, group_dotted)?;
+                    // This is a bracket group - parse it, then get tuplet/rhythm AFTER
+                    let (mut grouped_elements, has_pending_tie) = self.parse_bracket_group(group_octave_offset)?;
 
                     // Apply chord annotations and measure octave modifier to notes/rests in the bracket group
                     for element in &mut grouped_elements {
@@ -575,15 +579,6 @@ impl Parser {
                     elements.extend(grouped_elements);
                     continue;
                 }
-            }
-
-            // If we got a tuplet number but no bracket, that's an error
-            if tuplet_number.is_some() {
-                return Err(GenError::ParseError {
-                    line: t_line,
-                    column: t_col,
-                    message: "Expected [ after tuplet number".to_string(),
-                });
             }
 
             // Not a bracket group, restore position and parse as normal element
@@ -664,12 +659,10 @@ impl Parser {
         }
     }
 
-    /// Parse a bracket group - either a rhythm grouping (//[C D E F]) or tuplet (3[C D E])
-    /// tuplet_number: Some(n) for tuplets, None for rhythm groupings
-    /// group_duration: rhythm modifier before the bracket
-    /// group_dotted: whether the rhythm has a dot
+    /// Parse a bracket group with new syntax: ^[C D E]3/ (octave before, tuplet+rhythm after)
+    /// group_octave_offset: octave modifier parsed before the bracket
     /// Returns: (elements, has_pending_tie_stop)
-    fn parse_bracket_group(&mut self, tuplet_number: Option<u8>, group_duration: Duration, group_dotted: bool) -> Result<(Vec<Element>, bool), GenError> {
+    fn parse_bracket_group(&mut self, group_octave_offset: i8) -> Result<(Vec<Element>, bool), GenError> {
         let (line, column) = self
             .current()
             .map(|t| (t.line, t.column))
@@ -774,21 +767,20 @@ impl Parser {
             });
         }
 
-        // Parse optional octave modifiers after the closing bracket (^ or _)
-        let mut group_octave_offset = 0i8;
-        while let Some(t) = self.current() {
-            match &t.token {
-                Token::Underscore => {
-                    group_octave_offset -= 1;
-                    self.advance();
-                }
-                Token::Caret => {
-                    group_octave_offset += 1;
-                    self.advance();
-                }
-                _ => break,
+        // Parse optional tuplet number AFTER the closing bracket
+        let tuplet_number = if let Some(t) = self.current() {
+            if let Token::Number(n) = t.token {
+                self.advance();
+                Some(n)
+            } else {
+                None
             }
-        }
+        } else {
+            None
+        };
+
+        // Parse rhythm modifiers AFTER the bracket (and after tuplet number if present)
+        let (group_duration, group_dotted) = self.parse_rhythm()?;
 
         // If this is a tuplet (has a number), apply tuplet info to all elements
         if let Some(actual_notes) = tuplet_number {
@@ -887,31 +879,38 @@ impl Parser {
     }
 
     /// Parse a single element (note or rest with rhythm)
+    /// New syntax order: [octave][note][accidental][rhythm]
+    /// Examples: ^C#/ (eighth C# up), _Bbd (half Bb down), C (quarter C)
     fn parse_element(&mut self, tuplet_info: Option<TupletInfo>) -> Result<Element, GenError> {
         let (line, column) = self
             .current()
             .map(|t| (t.line, t.column))
             .unwrap_or((0, 0));
 
-        // Parse rhythm prefix
-        let (duration, dotted) = self.parse_rhythm()?;
+        // Parse octave modifiers FIRST (^ or _)
+        let octave = self.parse_octave_modifiers();
 
         // Parse note or rest
         let current = self.current().ok_or(GenError::ParseError {
             line,
             column,
-            message: "Expected note or rest after rhythm".to_string(),
+            message: "Expected note or rest".to_string(),
         })?;
 
         match &current.token {
             Token::Rest => {
                 self.advance();
+                // Parse rhythm suffix
+                let (duration, dotted) = self.parse_rhythm()?;
                 Ok(Element::Rest { duration, dotted, tuplet: tuplet_info, chord: None })
             }
             Token::NoteA | Token::NoteB | Token::NoteC | Token::NoteD | Token::NoteE
             | Token::NoteF | Token::NoteG => {
                 let name = self.parse_note_name()?;
-                let (accidental, octave) = self.parse_pitch_modifiers();
+                // Parse accidental (after note name)
+                let accidental = self.parse_accidental();
+                // Parse rhythm suffix
+                let (duration, dotted) = self.parse_rhythm()?;
 
                 Ok(Element::Note(Note {
                     name,
@@ -938,7 +937,7 @@ impl Parser {
     /// Parse rhythm modifiers and return (Duration, dotted)
     fn parse_rhythm(&mut self) -> Result<(Duration, bool), GenError> {
         let mut slash_count = 0;
-        let mut has_d = false;
+        let mut has_p = false;  // p = half note (changed from 'd' to avoid confusion with flat 'b')
         let mut has_o = false;
         let mut dotted = false;
 
@@ -951,9 +950,9 @@ impl Parser {
                     self.advance();
                     slash_count += 1;
                 }
-                Token::SmallD => {
+                Token::SmallP => {
                     self.advance();
-                    has_d = true;
+                    has_p = true;
                 }
                 Token::SmallO => {
                     self.advance();
@@ -968,9 +967,9 @@ impl Parser {
         }
 
         // Determine duration based on modifiers
-        let duration = match (slash_count, has_d, has_o) {
+        let duration = match (slash_count, has_p, has_o) {
             (0, false, true) => Duration::Whole,        // o
-            (0, true, false) => Duration::Half,         // d
+            (0, true, false) => Duration::Half,         // p
             (0, false, false) => Duration::Quarter,     // (none)
             (1, false, false) => Duration::Eighth,      // /
             (2, false, false) => Duration::Sixteenth,   // //
@@ -1009,29 +1008,9 @@ impl Parser {
         Ok(name)
     }
 
-    fn parse_pitch_modifiers(&mut self) -> (Accidental, Octave) {
-        let mut accidental = Accidental::Natural;
-
-        // Parse accidental (#, b, or %)
-        if let Some(t) = self.current() {
-            match &t.token {
-                Token::Sharp => {
-                    accidental = Accidental::Sharp;
-                    self.advance();
-                }
-                Token::Flat => {
-                    accidental = Accidental::Flat;
-                    self.advance();
-                }
-                Token::Natural => {
-                    accidental = Accidental::ForceNatural;
-                    self.advance();
-                }
-                _ => {}
-            }
-        }
-
-        // Parse octave modifiers (_ or ^)
+    /// Parse octave modifiers BEFORE the note name
+    /// Examples: ^ (octave up), _ (octave down), ^^ (two octaves up)
+    fn parse_octave_modifiers(&mut self) -> Octave {
         let mut octave_offset = 0i8;
         while let Some(t) = self.current() {
             match &t.token {
@@ -1047,15 +1026,37 @@ impl Parser {
             }
         }
 
-        let octave = match octave_offset {
+        match octave_offset {
             i if i <= -2 => Octave::DoubleLow,
             -1 => Octave::Low,
             0 => Octave::Middle,
             1 => Octave::High,
             _ => Octave::DoubleHigh,
-        };
+        }
+    }
 
-        (accidental, octave)
+    /// Parse accidental AFTER the note name
+    /// Examples: # (sharp), b (flat), % (force natural)
+    fn parse_accidental(&mut self) -> Accidental {
+        if let Some(t) = self.current() {
+            match &t.token {
+                Token::Sharp => {
+                    self.advance();
+                    Accidental::Sharp
+                }
+                Token::Flat => {
+                    self.advance();
+                    Accidental::Flat
+                }
+                Token::Natural => {
+                    self.advance();
+                    Accidental::ForceNatural
+                }
+                _ => Accidental::Natural,
+            }
+        } else {
+            Accidental::Natural
+        }
     }
 
     /// Apply an octave offset to an existing octave value
@@ -1085,7 +1086,7 @@ impl Parser {
 /// Returns (metadata_content, remaining_source)
 ///
 /// # Example
-/// ```
+/// ```ignore
 /// use gen::parser::first_pass::extract_metadata;
 ///
 /// let source = "---\ntitle: My Song\n---\nC D E F";
@@ -1502,7 +1503,8 @@ time-signature: 6/8
 
     #[test]
     fn test_rhythm_modifiers() {
-        let score = parse("/C dD oE").unwrap();
+        // New syntax: rhythm AFTER note, 'p' for half note
+        let score = parse("C/ Dp Eo").unwrap();
         let elements = &score.measures[0].elements;
 
         if let Element::Note(n) = &elements[0] {
@@ -1518,8 +1520,8 @@ time-signature: 6/8
 
     #[test]
     fn test_dotted_quarter_rest_asterisk_dollar() {
-        // *$ - dotted quarter rest (asterisk before dollar)
-        let score = parse("*$").unwrap();
+        // $* - dotted quarter rest (asterisk AFTER dollar)
+        let score = parse("$*").unwrap();
         let elements = &score.measures[0].elements;
 
         assert_eq!(elements.len(), 1);
@@ -1534,8 +1536,8 @@ time-signature: 6/8
 
     #[test]
     fn test_dotted_half_rest() {
-        // d*$ - dotted half rest
-        let score = parse("d*$").unwrap();
+        // $p* - dotted half rest (rest, half, dot) - 'p' for half note, dot at end
+        let score = parse("$p*").unwrap();
         let elements = &score.measures[0].elements;
 
         assert_eq!(elements.len(), 1);
@@ -1550,8 +1552,8 @@ time-signature: 6/8
 
     #[test]
     fn test_dotted_eighth_rest() {
-        // /*$ - dotted eighth rest
-        let score = parse("/*$").unwrap();
+        // $*/ - dotted eighth rest (rest, dot, eighth)
+        let score = parse("$*/").unwrap();
         let elements = &score.measures[0].elements;
 
         assert_eq!(elements.len(), 1);
@@ -1566,8 +1568,8 @@ time-signature: 6/8
 
     #[test]
     fn test_triplet_parsing() {
-        // Quarter note triplet: 3[C D E]
-        let score = parse("3[C D E]").unwrap();
+        // Quarter note triplet: [C D E]3 (tuplet number AFTER bracket)
+        let score = parse("[C D E]3").unwrap();
         let elements = &score.measures[0].elements;
 
         assert_eq!(elements.len(), 3);
@@ -1597,8 +1599,8 @@ time-signature: 6/8
 
     #[test]
     fn test_eighth_note_triplet() {
-        // Eighth note triplet: /3[C D E]
-        let score = parse("/3[C D E]").unwrap();
+        // Eighth note triplet: [C D E]3/ (tuplet and rhythm AFTER bracket)
+        let score = parse("[C D E]3/").unwrap();
         let elements = &score.measures[0].elements;
 
         assert_eq!(elements.len(), 3);
@@ -1613,8 +1615,8 @@ time-signature: 6/8
 
     #[test]
     fn test_triplet_with_mixed_notes() {
-        // Triplet with explicit rhythm on first note
-        let score = parse("3[/C D E]").unwrap();
+        // Triplet with explicit rhythm on first note (C/ = eighth, others = default quarter)
+        let score = parse("[C/ D E]3").unwrap();
         let elements = &score.measures[0].elements;
 
         assert_eq!(elements.len(), 3);
@@ -1630,8 +1632,8 @@ time-signature: 6/8
 
     #[test]
     fn test_rhythm_grouping_sixteenth() {
-        // Sixteenth note grouping: //[C D E F]
-        let score = parse("//[C D E F]").unwrap();
+        // Sixteenth note grouping: [C D E F]// (rhythm AFTER bracket)
+        let score = parse("[C D E F]//").unwrap();
         let elements = &score.measures[0].elements;
 
         assert_eq!(elements.len(), 4);
@@ -1647,8 +1649,8 @@ time-signature: 6/8
 
     #[test]
     fn test_rhythm_grouping_eighth() {
-        // Eighth note grouping: /[C D E F]
-        let score = parse("/[C D E F]").unwrap();
+        // Eighth note grouping: [C D E F]/ (rhythm AFTER bracket)
+        let score = parse("[C D E F]/").unwrap();
         let elements = &score.measures[0].elements;
 
         assert_eq!(elements.len(), 4);
@@ -1663,8 +1665,8 @@ time-signature: 6/8
 
     #[test]
     fn test_rhythm_grouping_with_override() {
-        // Rhythm grouping with one note overriding: //[C D /E F]
-        let score = parse("//[C D /E F]").unwrap();
+        // Rhythm grouping with one note overriding: [C D E/ F]// (E/ is eighth, others sixteenth)
+        let score = parse("[C D E/ F]//").unwrap();
         let elements = &score.measures[0].elements;
 
         assert_eq!(elements.len(), 4);
@@ -1687,8 +1689,8 @@ time-signature: 6/8
 
     #[test]
     fn test_quintuplet() {
-        // Quintuplet: 5[C D E F G]
-        let score = parse("5[C D E F G]").unwrap();
+        // Quintuplet: [C D E F G]5 (tuplet number AFTER bracket)
+        let score = parse("[C D E F G]5").unwrap();
         let elements = &score.measures[0].elements;
 
         assert_eq!(elements.len(), 5);
@@ -1711,8 +1713,8 @@ time-signature: 6/8
 
     #[test]
     fn test_sextuplet() {
-        // Sextuplet: 6[C D E F G A]
-        let score = parse("6[C D E F G A]").unwrap();
+        // Sextuplet: [C D E F G A]6 (tuplet number AFTER bracket)
+        let score = parse("[C D E F G A]6").unwrap();
         let elements = &score.measures[0].elements;
 
         assert_eq!(elements.len(), 6);
@@ -1778,8 +1780,8 @@ time-signature: 6/8
 
     #[test]
     fn test_tie_with_rhythm_modifiers() {
-        // Eighth note C tied to quarter note D
-        let score = parse("/C-D").unwrap();
+        // Eighth note C tied to quarter note D (rhythm AFTER note)
+        let score = parse("C/-D").unwrap();
         let elements = &score.measures[0].elements;
 
         assert_eq!(elements.len(), 2);
@@ -1826,7 +1828,8 @@ time-signature: 6/8
     #[test]
     fn test_tie_across_measures() {
         // Tie that spans two measures: last note of measure 1 tied to first note of measure 2
-        let score = parse("C D E F-\nG A B C^").unwrap();
+        // New syntax: octave before note (^C instead of C^)
+        let score = parse("C D E F-\nG A B ^C").unwrap();
 
         assert_eq!(score.measures.len(), 2);
         assert_eq!(score.measures[0].elements.len(), 4);
@@ -1886,7 +1889,8 @@ time-signature: 6/8
 
     #[test]
     fn test_repeat_across_measures() {
-        let score = parse("||: C D E F\nG A B C^ :||").unwrap();
+        // New syntax: octave before note (^C instead of C^)
+        let score = parse("||: C D E F\nG A B ^C :||").unwrap();
         assert_eq!(score.measures.len(), 2);
         assert!(score.measures[0].repeat_start);
         assert!(!score.measures[0].repeat_end);
@@ -1929,8 +1933,9 @@ time-signature: 6/8
 
     #[test]
     fn test_slur_with_accidentals_and_octaves() {
-        // (Bb_ D F) - slur with flat and octave modifier
-        let score = parse("(Bb_ D F)").unwrap();
+        // (_Bb D F) - slur with flat and octave modifier
+        // New syntax: octave before note, accidental after note
+        let score = parse("(_Bb D F)").unwrap();
         let elements = &score.measures[0].elements;
 
         assert_eq!(elements.len(), 3);
@@ -1992,8 +1997,8 @@ time-signature: 6/8
 
     #[test]
     fn test_slur_with_rhythm_modifiers() {
-        // (/C /D /E) - eighth note slur
-        let score = parse("(/C /D /E)").unwrap();
+        // (C/ D/ E/) - eighth note slur (rhythm AFTER note)
+        let score = parse("(C/ D/ E/)").unwrap();
         let elements = &score.measures[0].elements;
 
         assert_eq!(elements.len(), 3);
@@ -2014,8 +2019,8 @@ time-signature: 6/8
 
     #[test]
     fn test_slur_across_measures() {
-        // Slur that spans two measures
-        let score = parse("(C D E F\nG A B C^)").unwrap();
+        // Slur that spans two measures (octave before note: ^C)
+        let score = parse("(C D E F\nG A B ^C)").unwrap();
 
         assert_eq!(score.measures.len(), 2);
         assert_eq!(score.measures[0].elements.len(), 4);
@@ -2070,8 +2075,8 @@ time-signature: 6/8
 
     #[test]
     fn test_first_and_second_endings() {
-        // Full volta bracket pattern
-        let source = "oF\n1. C C C C :||\n2. D D D D";
+        // Full volta bracket pattern (rhythm AFTER note: Fo instead of oF)
+        let source = "Fo\n1. C C C C :||\n2. D D D D";
         let score = parse(source).unwrap();
 
         assert_eq!(score.measures.len(), 3);
@@ -2111,8 +2116,8 @@ time-signature: 6/8
 
     #[test]
     fn test_force_natural_with_octave() {
-        // F%^ - F natural, octave up
-        let score = parse("F%^").unwrap();
+        // ^F% - octave up, F natural (octave BEFORE note, accidental AFTER)
+        let score = parse("^F%").unwrap();
         let elements = &score.measures[0].elements;
 
         if let Element::Note(n) = &elements[0] {
@@ -2210,8 +2215,8 @@ time-signature: 6/8
 
     #[test]
     fn test_slur_in_rhythm_grouping() {
-        // Slur inside a rhythm grouping: //[(G_ F#_ G_) G]
-        let score = parse("//[(G_ F#_ G_) G]").unwrap();
+        // Slur inside a rhythm grouping: [(_G _F# _G) G]// (octave before note, rhythm after bracket)
+        let score = parse("[(_G _F# _G) G]//").unwrap();
         let elements = &score.measures[0].elements;
 
         assert_eq!(elements.len(), 4);
@@ -2259,8 +2264,8 @@ time-signature: 6/8
 
     #[test]
     fn test_slur_in_tuplet() {
-        // Slur inside a tuplet: /3[(C D) E]
-        let score = parse("/3[(C D) E]").unwrap();
+        // Slur inside a tuplet: [(C D) E]3/ (tuplet and rhythm after bracket)
+        let score = parse("[(C D) E]3/").unwrap();
         let elements = &score.measures[0].elements;
 
         assert_eq!(elements.len(), 3);
@@ -2297,8 +2302,8 @@ time-signature: 6/8
 
     #[test]
     fn test_multiple_slurs_in_rhythm_grouping() {
-        // Multiple slurs in one rhythm grouping: //[(C D) (E F)]
-        let score = parse("//[(C D) (E F)]").unwrap();
+        // Multiple slurs in one rhythm grouping: [(C D) (E F)]// (rhythm after bracket)
+        let score = parse("[(C D) (E F)]//").unwrap();
         let elements = &score.measures[0].elements;
 
         assert_eq!(elements.len(), 4);
@@ -2388,7 +2393,8 @@ time-signature: 6/8
 
     #[test]
     fn test_chord_with_bracket_group() {
-        let score = parse("@ch:Am /[C E A]").unwrap();
+        // New syntax: [C E A]/ - bracket then rhythm
+        let score = parse("@ch:Am [C E A]/").unwrap();
         if let Element::Note(n) = &score.measures[0].elements[0] {
             assert_eq!(chord_symbol(&n.chord), Some("Am"));
             assert_eq!(n.duration, Duration::Eighth);
@@ -2409,7 +2415,8 @@ time-signature: 6/8
 
     #[test]
     fn test_chord_multiple_measures() {
-        let source = "@ch:C C D E F\n@ch:G G A B C^";
+        // New syntax: octave BEFORE note (^C instead of C^)
+        let source = "@ch:C C D E F\n@ch:G G A B ^C";
         let score = parse(source).unwrap();
         assert_eq!(score.measures.len(), 2);
 
@@ -2426,8 +2433,8 @@ time-signature: 6/8
 
     #[test]
     fn test_chord_with_duration() {
-        // Test half note chord duration
-        let score = parse("@ch:dAm C D E F").unwrap();
+        // Test half note chord duration (new syntax: Amp - chord symbol first, rhythm at end)
+        let score = parse("@ch:Amp C D E F").unwrap();
         if let Element::Note(n) = &score.measures[0].elements[0] {
             assert_eq!(chord_symbol(&n.chord), Some("Am"));
             assert_eq!(n.chord.as_ref().unwrap().duration, Duration::Half);
@@ -2439,8 +2446,8 @@ time-signature: 6/8
 
     #[test]
     fn test_chord_with_dotted_duration() {
-        // Test dotted half note chord duration
-        let score = parse("@ch:d*G7 C D E F").unwrap();
+        // Test dotted half note chord duration (new syntax: G7p* - chord, rhythm, dot)
+        let score = parse("@ch:G7p* C D E F").unwrap();
         if let Element::Note(n) = &score.measures[0].elements[0] {
             assert_eq!(chord_symbol(&n.chord), Some("G7"));
             assert_eq!(n.chord.as_ref().unwrap().duration, Duration::Half);
@@ -2452,8 +2459,8 @@ time-signature: 6/8
 
     #[test]
     fn test_chord_eighth_duration() {
-        // Test eighth note chord duration
-        let score = parse("@ch:/F C D").unwrap();
+        // Test eighth note chord duration (new syntax: F/ - chord, then rhythm)
+        let score = parse("@ch:F/ C D").unwrap();
         if let Element::Note(n) = &score.measures[0].elements[0] {
             assert_eq!(chord_symbol(&n.chord), Some("F"));
             assert_eq!(n.chord.as_ref().unwrap().duration, Duration::Eighth);
@@ -2464,8 +2471,8 @@ time-signature: 6/8
 
     #[test]
     fn test_rhythm_grouping_with_octave_modifier() {
-        // [A B C D]^ - all notes should be octave up
-        let score = parse("[A B C D]^").unwrap();
+        // ^[A B C D] - all notes should be octave up (octave BEFORE bracket)
+        let score = parse("^[A B C D]").unwrap();
         let elements = &score.measures[0].elements;
 
         assert_eq!(elements.len(), 4);
@@ -2482,8 +2489,8 @@ time-signature: 6/8
 
     #[test]
     fn test_rhythm_grouping_with_octave_modifier_down() {
-        // [E F G A]_ - all notes should be octave down
-        let score = parse("[E F G A]_").unwrap();
+        // _[E F G A] - all notes should be octave down (octave BEFORE bracket)
+        let score = parse("_[E F G A]").unwrap();
         let elements = &score.measures[0].elements;
 
         assert_eq!(elements.len(), 4);
@@ -2500,8 +2507,8 @@ time-signature: 6/8
 
     #[test]
     fn test_rhythm_grouping_with_double_octave_modifier() {
-        // [C D E F]^^ - all notes should be double octave up
-        let score = parse("[C D E F]^^").unwrap();
+        // ^^[C D E F] - all notes should be double octave up (octave BEFORE bracket)
+        let score = parse("^^[C D E F]").unwrap();
         let elements = &score.measures[0].elements;
 
         assert_eq!(elements.len(), 4);
@@ -2515,8 +2522,8 @@ time-signature: 6/8
 
     #[test]
     fn test_rhythm_grouping_with_rhythm_and_octave() {
-        // /[A B C D]^ - eighth notes, all octave up
-        let score = parse("/[A B C D]^").unwrap();
+        // ^[A B C D]/ - octave BEFORE bracket, rhythm AFTER bracket
+        let score = parse("^[A B C D]/").unwrap();
         let elements = &score.measures[0].elements;
 
         assert_eq!(elements.len(), 4);
@@ -2533,8 +2540,8 @@ time-signature: 6/8
 
     #[test]
     fn test_tuplet_with_octave_modifier() {
-        // 3[C D E]^ - triplet with all notes octave up
-        let score = parse("3[C D E]^").unwrap();
+        // ^[C D E]3 - octave BEFORE bracket, triplet AFTER bracket
+        let score = parse("^[C D E]3").unwrap();
         let elements = &score.measures[0].elements;
 
         assert_eq!(elements.len(), 3);
@@ -2551,8 +2558,8 @@ time-signature: 6/8
 
     #[test]
     fn test_tuplet_with_rhythm_and_octave_modifier() {
-        // /3[C D E]^ - eighth note triplet, all octave up
-        let score = parse("/3[C D E]^").unwrap();
+        // ^[C D E]3/ - octave BEFORE bracket, triplet and rhythm AFTER bracket
+        let score = parse("^[C D E]3/").unwrap();
         let elements = &score.measures[0].elements;
 
         assert_eq!(elements.len(), 3);
@@ -2568,16 +2575,16 @@ time-signature: 6/8
 
     #[test]
     fn test_group_octave_modifier_with_individual_modifiers() {
-        // [A^ B C_]^ - group modifier should apply on top of individual modifiers
-        // A^ becomes A^^ (double high), B becomes B^ (high), C_ becomes C (middle)
-        let score = parse("[A^ B C_]^").unwrap();
+        // ^[^A B _C] - group modifier should apply on top of individual modifiers
+        // ^A becomes ^^A (double high), B becomes ^B (high), _C becomes C (middle)
+        let score = parse("^[^A B _C]").unwrap();
         let elements = &score.measures[0].elements;
 
         assert_eq!(elements.len(), 3);
 
         if let Element::Note(n) = &elements[0] {
             assert_eq!(n.name, NoteName::A);
-            assert_eq!(n.octave, Octave::DoubleHigh, "A^ with group ^ should be double high");
+            assert_eq!(n.octave, Octave::DoubleHigh, "^A with group ^ should be double high");
         } else {
             panic!("Expected note");
         }
@@ -2591,7 +2598,7 @@ time-signature: 6/8
 
         if let Element::Note(n) = &elements[2] {
             assert_eq!(n.name, NoteName::C);
-            assert_eq!(n.octave, Octave::Middle, "C_ with group ^ should be middle");
+            assert_eq!(n.octave, Octave::Middle, "_C with group ^ should be middle");
         } else {
             panic!("Expected note");
         }
@@ -2599,9 +2606,9 @@ time-signature: 6/8
 
     #[test]
     fn test_group_octave_modifier_equivalence() {
-        // [A B C D]^ should be equivalent to A^ B^ C^ D^
-        let score1 = parse("[A B C D]^").unwrap();
-        let score2 = parse("A^ B^ C^ D^").unwrap();
+        // ^[A B C D] should be equivalent to ^A ^B ^C ^D
+        let score1 = parse("^[A B C D]").unwrap();
+        let score2 = parse("^A ^B ^C ^D").unwrap();
 
         assert_eq!(score1.measures.len(), 1);
         assert_eq!(score2.measures.len(), 1);
@@ -2623,9 +2630,9 @@ time-signature: 6/8
 
     #[test]
     fn test_rhythm_group_with_octave_equivalence() {
-        // /[A B C D]^ should be equivalent to /A^ /B^ /C^ /D^
-        let score1 = parse("/[A B C D]^").unwrap();
-        let score2 = parse("/A^ /B^ /C^ /D^").unwrap();
+        // ^[A B C D]/ should be equivalent to ^A/ ^B/ ^C/ ^D/
+        let score1 = parse("^[A B C D]/").unwrap();
+        let score2 = parse("^A/ ^B/ ^C/ ^D/").unwrap();
 
         assert_eq!(score1.measures.len(), 1);
         assert_eq!(score2.measures.len(), 1);
@@ -2712,15 +2719,16 @@ time-signature: 6/8
     #[test]
     fn test_measure_octave_modifier_with_individual_modifiers() {
         // Measure modifier applies on top of individual modifiers
-        // A^ with measure @:^ becomes A^^ (double high)
-        let score = parse("A^ B C_ D @:^").unwrap();
+        // ^A with measure @:^ becomes ^^A (double high)
+        // New syntax: octave BEFORE note
+        let score = parse("^A B _C D @:^").unwrap();
         let elements = &score.measures[0].elements;
 
         assert_eq!(elements.len(), 4);
 
         if let Element::Note(n) = &elements[0] {
             assert_eq!(n.name, NoteName::A);
-            assert_eq!(n.octave, Octave::DoubleHigh, "A^ with @:^ should be double high");
+            assert_eq!(n.octave, Octave::DoubleHigh, "^A with @:^ should be double high");
         }
 
         if let Element::Note(n) = &elements[1] {
@@ -2730,7 +2738,7 @@ time-signature: 6/8
 
         if let Element::Note(n) = &elements[2] {
             assert_eq!(n.name, NoteName::C);
-            assert_eq!(n.octave, Octave::Middle, "C_ with @:^ should be middle");
+            assert_eq!(n.octave, Octave::Middle, "_C with @:^ should be middle");
         }
 
         if let Element::Note(n) = &elements[3] {
@@ -2742,8 +2750,9 @@ time-signature: 6/8
     #[test]
     fn test_measure_octave_modifier_with_group_modifier() {
         // Measure modifier and group modifier should stack
-        // [A B]^ with @:^ should make all notes ^^
-        let score = parse("[A B C D]^ @:^").unwrap();
+        // ^[A B C D] with @:^ should make all notes ^^
+        // New syntax: octave BEFORE bracket
+        let score = parse("^[A B C D] @:^").unwrap();
         let elements = &score.measures[0].elements;
 
         assert_eq!(elements.len(), 4);
@@ -2780,9 +2789,10 @@ time-signature: 6/8
 
     #[test]
     fn test_measure_octave_modifier_equivalence() {
-        // A B C D @:^ should be equivalent to A^ B^ C^ D^
+        // A B C D @:^ should be equivalent to ^A ^B ^C ^D
+        // New syntax: octave BEFORE note
         let score1 = parse("A B C D @:^").unwrap();
-        let score2 = parse("A^ B^ C^ D^").unwrap();
+        let score2 = parse("^A ^B ^C ^D").unwrap();
 
         assert_eq!(score1.measures.len(), 1);
         assert_eq!(score2.measures.len(), 1);
@@ -2809,7 +2819,8 @@ time-signature: 6/8
 
     #[test]
     fn test_key_change_multiple_measures() {
-        let source = "C D E F\n@key:D G A B C^\n@key:F D E F G";
+        // New syntax: octave BEFORE note (^C instead of C^)
+        let source = "C D E F\n@key:D G A B ^C\n@key:F D E F G";
         let score = parse(source).unwrap();
         assert_eq!(score.measures.len(), 3);
 
@@ -2856,7 +2867,8 @@ time-signature: 6/8
     #[test]
     fn test_chord_on_rest_in_bracket() {
         // This is the real-world case from the-wizard-and-i.gen
-        let score = parse("@ch:Ab 3[$ C D] 3[E D C]").unwrap();
+        // New syntax: [$ C D]3 - tuplet number AFTER bracket
+        let score = parse("@ch:Ab [$ C D]3 [E D C]3").unwrap();
 
         // First element should be the rest with chord attached
         if let Element::Rest { chord, .. } = &score.measures[0].elements[0] {

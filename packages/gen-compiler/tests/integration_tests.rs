@@ -10,7 +10,7 @@ fn test_compile_with_rhythm_groupings() {
     let source = r#"---
 title: Rhythm Grouping Test
 ---
-//[C D E F] //[G A B C^] C C
+[C D E F]// [G A B ^C]// C C
 "#;
     let result = compile(source);
     assert!(result.is_ok(), "Should compile rhythm groupings successfully");
@@ -25,7 +25,7 @@ fn test_compile_with_triplets_new_syntax() {
     let source = r#"---
 title: Triplet Test
 ---
-3[C D E] C C
+[C D E]3 C C
 "#;
     let result = compile(source);
     assert!(result.is_ok(), "Should compile triplets with new syntax");
@@ -41,7 +41,7 @@ fn test_compile_with_eighth_note_triplet() {
     let source = r#"---
 title: Eighth Note Triplet Test
 ---
-/3[C D E] C C C
+[C D E]3/ C C C
 "#;
     let result = compile(source);
     assert!(result.is_ok(), "Should compile eighth note triplets");
@@ -55,9 +55,9 @@ fn test_compile_mixed_rhythm_grouping_and_triplets() {
     let source = r#"---
 title: Mixed Test
 ---
-//[C D E F] //[G A B C^] C C
-/3[C D E] C C C
-3[C D E] C C
+[C D E F]// [G A B ^C]// C C
+[C D E]3/ C C C
+[C D E]3 C C
 "#;
     let result = compile(source);
     assert!(result.is_ok(), "Should compile mixed rhythm groupings and triplets");
@@ -70,7 +70,7 @@ fn test_compile_quintuplet() {
 title: Quintuplet Test
 time-signature: 5/4
 ---
-5[C D E F G] C
+[C D E F G]5 C
 "#;
     let result = compile(source);
     assert!(result.is_ok(), "Should compile quintuplets");
@@ -85,7 +85,7 @@ fn test_compile_sextuplet() {
     let source = r#"---
 title: Sextuplet Test
 ---
-6[C D E F G A]
+[C D E F G A]6
 "#;
     let result = compile(source);
     assert!(result.is_ok(), "Should compile sextuplets");
@@ -100,7 +100,7 @@ fn test_rhythm_grouping_with_rests() {
     let source = r#"---
 title: Rhythm Grouping with Rests
 ---
-//[C D $ F] C C C
+[C D $ F]// C C C
 "#;
     let result = compile(source);
     assert!(result.is_ok(), "Should compile rhythm groupings with rests");
@@ -114,7 +114,7 @@ fn test_triplet_with_accidentals() {
     let source = r#"---
 title: Triplet with Accidentals
 ---
-3[C# Eb F#] C C
+[C# Eb F#]3 C C
 "#;
     let result = compile(source);
     assert!(result.is_ok(), "Should compile triplets with accidentals");
@@ -130,7 +130,7 @@ fn test_rhythm_grouping_with_ties() {
     let source = r#"---
 title: Rhythm Grouping with Ties
 ---
-/[C D E-] /E C C
+[C D E-]/ E/ C C
 "#;
     let result = compile(source);
     assert!(result.is_ok(), "Should compile rhythm groupings with ties");

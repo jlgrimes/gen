@@ -8,7 +8,7 @@
 //! with line and column information for error reporting.
 //!
 //! ## Token Types
-//! - **Rhythm modifiers**: `/` (eighth), `d` (half), `o` (whole), `*` (dotted)
+//! - **Rhythm modifiers**: `/` (eighth), `p` (half), `o` (whole), `*` (dotted)
 //! - **Note names**: A-G, `$` (rest)
 //! - **Pitch modifiers**: `#` (sharp), `b` (flat), `%` (natural), `^` (up octave), `_` (down octave)
 //! - **Tuplets**: `[`, `]`, numbers (2-9)
@@ -26,8 +26,9 @@
 //! use gen::lexer::Lexer;
 //!
 //! let source = "C D E F";
-//! let tokens = Lexer::tokenize(source);
-//! // Returns: [NoteC, Whitespace, NoteD, Whitespace, NoteE, Whitespace, NoteF]
+//! let mut lexer = Lexer::new(source);
+//! let tokens = lexer.tokenize().unwrap();
+//! // Returns tokens: [NoteC, Whitespace, NoteD, Whitespace, NoteE, Whitespace, NoteF, Newline]
 //! ```
 //!
 //! ## Location Tracking
@@ -48,7 +49,7 @@ use crate::error::GenError;
 pub enum Token {
     // Rhythm modifiers
     Slash,          // /
-    SmallD,         // d (half note)
+    SmallP,         // p (half note) - changed from 'd' to avoid confusion with flat 'b'
     SmallO,         // o (whole note)
     Asterisk,       // * (dotted)
 
@@ -282,9 +283,9 @@ impl<'a> Lexer<'a> {
                         });
                     }
                 }
-                'd' => {
+                'p' => {
                     self.advance();
-                    Token::SmallD
+                    Token::SmallP
                 }
                 'o' => {
                     self.advance();
@@ -507,17 +508,18 @@ mod tests {
 
     #[test]
     fn test_rhythm_modifiers() {
-        let mut lexer = Lexer::new("/C dD");
+        // New syntax: rhythm AFTER note, 'p' for half note
+        let mut lexer = Lexer::new("C/ Dp");
         let tokens = lexer.tokenize().unwrap();
         let token_types: Vec<_> = tokens.iter().map(|t| &t.token).collect();
         assert_eq!(
             token_types,
             vec![
-                &Token::Slash,
                 &Token::NoteC,
+                &Token::Slash,
                 &Token::Whitespace,
-                &Token::SmallD,
                 &Token::NoteD,
+                &Token::SmallP,
             ]
         );
     }

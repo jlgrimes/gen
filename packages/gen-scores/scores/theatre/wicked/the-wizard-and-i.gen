@@ -1,81 +1,81 @@
-@ch:Ab      3[$ C D] 3[E D C]
-@ch:C       /B_ *C $ /[A_ B_]
-@ch:Fm/Ab   3[C D E-] 3[E D C]
-@ch:C/      dB_ $ /[A_ B_]
-@ch:Ab      3[C D E-] E /[D C]
-@ch:C       /B_ C /C-C /$ //[A_ B_]
-@ch:Fm/Ab   3[C D E] dA
-@ch:dAb7    C^ A @ch:dAb7#5 *C^ /B
-@ch:Dbmaj9  /B /A-d*A
+@ch:Ab      [$ C D]3 [E D C]3
+@ch:C       ^_B/ C* $ [^_A ^_B]/
+@ch:Fm/Ab   [C D E-]3 [E D C]3
+@ch:C/      ^_Bp $ [^_A ^_B]/
+@ch:Ab      [C D E-]3 E [D C]/
+@ch:C       ^_B/ C C/-C $/ [^_A ^_B]//
+@ch:Fm/Ab   [C D E]3 Ap
+@ch:dAb7    ^C A @ch:dAb7#5 ^C* B/
+@ch:Dbmaj9  B/ A/-Ap*
 @ch:dBbm7   $ D @ch:dEb7/G E F
-@ch:Cm7     oE
-@ch:Gbadd9  $ B_ C D
-@key:C @ch:C oC-
-oC
-o$
-o$
-$ /C /C C /C /C-
-/C /D-dD $
-/$ /C-/C /C C /D /D-
-D $ d$
-/$ /G_ /C /C C /D /E-
-/E /G-G $ /[E G]
-/[A G-] /[G C^-] C^ E
-/[$ E-E D] /[$ E-E D-]
-/[D C-C C-] /[C C C C-]
-/C *D /$ /E-/E /D
-C /$ /C E /[G A-]
-/[A G-] G $ /[E G]
-A /[Bb A G] /F *$
-/$ /C^ $ 3[$ E G]
-/[A C-C Bb-] *Bb /A
-/[A G] G G /[$ G]
-/*C^ //C^ /C^ /C^-/C^ /B-/B /A
-/[G A G E] *$ /C
-/[C^ C^ C^ C^-] */C^ //B /A /G-
-G $ /$ *F
-/[E F-F G-G C^-C^ C-]
-C /$ /C /[F E] C
-oG_-
-d*G_ $
-o$
-o$
-/[$ C-C C-C C C C-]
-/C /D-dD-/D /E
-/$ E G C /D-
-/D /D-dD $
-/[$ G_ C C-] /[C C D E-]
-/E *G-dG
-/[A G-G C^] /[$ E-E D-]
-dD /$ *E
-/[$ D C C-] 5[C C D E C]
-dC /$ (/Eb D)
-/[$ D-D C] C /[E G-]
-d*G /[$ C]
-/*Bb //Bb Bb /$ /[Bb A-]
-/*A (//[Bb A] /[G A]) /[$ C C C]
-/[Bb Bb-] Bb Bb /[C^ G-]
-d*G /[G G]
-/[C^ C^ A C^] d$
-B /[A G] dG
-/*C^ //C^ /[C^ C^] /[$ E] A-
-/A /G-dG F
-/[E F-F G-G C^-C^ C-]
-C /[$ F] /[F E] C
-@key:A oE-
-d*E /[$ B_]
-/[F F F F-] /*F //G /[F F-]
-/[F E E $] $ /$ /B_
-F /[A B-] /B /A-A C
-/[F E] E d$
-@key:C /[A C^ C^ C^-] /[C^ B] D^
-/[$ A G G-] dG
-$ /B //[C^ C^-] /C^ /B-B
-/[$ E A G] G /[G G]
-/[G A-A Bb-] Bb /[A G]
-G /[A F-] F /[$ F-]
-/[F G A Bb-] /[Bb A] G
-/[$ G A F] *$
+@ch:Cm7     Eo
+@ch:Gbadd9  $ ^_B C D
+@key:C @ch:C Co-
+Co
+$o
+$o
+$ C/ C/ C C/ C/-
+C/ D/-Dp $
+$/ C/-C/ C/ C D/ D/-
+D $ $p
+$/ ^_G/ C/ C/ C D/ E/-
+E/ G/-G $ [E G]/
+[A G-]/ [G ^C-]/ ^C E
+[$ E-E D]/ [$ E-E D-]/
+[D C-C C-]/ [C C C C-]/
+C/ D* $/ E/-E/ D/
+C $/ C/ E [G A-]/
+[A G-]/ G $ [E G]/
+A [^Bb A G]/ F/ $*
+$/ ^C $ [$ E G]3
+[A C-C ^Bb-]/ ^Bb* A/
+[A G]/ G G [$ G]/
+^C*/ ^C// ^C/ ^C/-^C/ B/-B/ A/
+[G A G E]/ $* C/
+[^C ^C ^C ^C-]/ ^C*/ B// A/ G/-
+G $ $/ F*
+[E F-F G-G ^C-^C C-]/
+C $/ C/ [F E]/ C
+^_Go-
+^_Gp* $
+$o
+$o
+[$ C-C C-C C C C-]/
+C/ D/-Dp-D/ E/
+$/ E G C D/-
+D/ D/-Dp $
+[$ ^_G C C-]/ [C C D E-]/
+E/ G*-Gp
+[A G-G ^C]/ [$ E-E D-]/
+Dp $/ E*
+[$ D C C-]/ [C C D E C]5
+Cp $/ (^Eb/ D)
+[$ D-D C]/ C [E G-]/
+Gp* [$ C]/
+^Bb*/ ^Bb// ^Bb $/ [^Bb A-]/
+A*/ ([^Bb// A//] [G A]/) [$ C C C]/
+[^Bb ^Bb-]/ ^Bb ^Bb [^C G-]/
+Gp* [G G]/
+[^C ^C A ^C]/ $p
+B [A G]/ Gp
+^C*/ ^C// [^C ^C]/ [$ E]/ A-
+A/ G/-Gp F
+[E F-F G-G ^C-^C C-]/
+C [$ F]/ [F E]/ C
+@key:A Eo-
+Ep* [$ ^_B]/
+[F F F F-]/ F*/ G// [F F-]/
+[F E E $]/ $ $/ ^_B/
+F [A B-]/ B/ A/-A C
+[F E]/ E $p
+@key:C [A ^C ^C ^C-]/ [^C B]/ ^D
+[$ A G G-]/ Gp
+$ B// [^C ^C-]// ^C/ B/-B
+[$ E A G]/ G [G G]/
+[G A-A ^Bb-]/ ^Bb [A G]/
+G [A F-]/ F [$ F-]/
+[F G A ^Bb-]/ [^Bb A]/ G
+[$ G A F]/ $*
 ---
 title: The Wizard and I
 composer: Steven Schwartz

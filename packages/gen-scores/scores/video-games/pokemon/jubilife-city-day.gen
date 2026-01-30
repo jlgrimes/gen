@@ -1,29 +1,29 @@
-*$ *A *D *$
-*G *F /[D A_ $] *E
-*$ *A *D *$
-*E *D /[A_ F_ $] *B_
-A_ /D $ /D E /D /$ A_
-A#_ /B_ $ /[D E A#_ $] *G
-F /D *$ /[G_ F_ $] D /B
-*A *G *F /[E (D E)]
-*F *D /G F D /A_
-*D *A_ *D /[E F G]
-A D A_ A D A_
-*D *$ E /E /[F E D]
-*dC *dB_
-*dC *dD
-@key:bbbb *$ *F *E /[F E A]
-B /B-/B A $ /E /[B%_ C D]
-*$ *F *E /[F E A]
-B /B-/B A $ /E /[C D D%]
-E /E-E /A_ *A_-/[A_ C D]
-F /E-E /A_ A_ /C-/C D
-*E-/[E C E] d*A
-*B-/[B C E] *B *A
-G /A-A /A-A /G-/[G A B]
-*C^ G /A-/A G /A B
-*G-G /C d*C
-D% /E% $ /F#-F# /G-*G :||
+$* A* D* $*
+G* F* [D _A $]/ E*
+$* A* D* $*
+E* D* [_A _F $]/ _B*
+_A D/ $ D/ E D/ $/ _A
+_A# _B/ $ [D E _A# $]/ G*
+F D/ $* [_G _F $]/ D B/
+A* G* F* [E (D E)]/
+F* D* G/ F D _A/
+D* _A* D* [E F G]/
+A D _A A D _A
+D* $* E E/ [F E D]/
+Cp* _Bp*
+Cp* Dp*
+@key:bbbb $* F* E* [F E A]/
+B B/-B/ A $ E/ [_B% C D]/
+$* F* E* [F E A]/
+B B/-B/ A $ E/ [C D D%]/
+E E/-E _A/ _A*-[_A C D]/
+F E/-E _A/ _A C/-C/ D
+E*-[E C E]/ Ap*
+B*-[B C E]/ B* A*
+G A/-A A/-A G/-[G A B]/
+^C* G A/-A/ G A/ B
+G*-G C/ Cp*
+D% E%/ $ F#/-F# G/-G* :||
 
 ---
 title: Jubilife City (Day)

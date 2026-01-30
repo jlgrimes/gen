@@ -14,6 +14,7 @@
 //! ```rust
 //! use gen::{compile, GenError};
 //!
+//! let source = "C D E F";
 //! match compile(source) {
 //!     Ok(musicxml) => println!("Success!"),
 //!     Err(GenError::ParseError { line, column, message }) => {

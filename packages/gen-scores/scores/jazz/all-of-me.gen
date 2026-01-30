@@ -1,34 +1,34 @@
-@ch:Cmaj7   C^ /[G E-] dE-
-            dE 3[C D C]^
-@ch:E7      B /[G# E-] dE-
-            oE
-@ch:A7      *A /G dE-
-            E D# 3[E Bb A]
-@ch:Dm7     dG dF-
-            oF
-@ch:E7      *E /Eb dD-
-            dD 3[E G# B]
-@ch:Am7     dD^ dC^-
-            oC^
-@ch:D7      *B /Bb dA-
-            dA 3[A D^ B]
-@ch:Dm7     oA
-@ch:G7      oB
-@ch:Cmaj7   C^ /[G E-] dE-
-            dE 3[C D C]^
-@ch:E7      B /[G# E-] dE-
-            oE
-@ch:A7      *A /G dE-
-            E D# 3[E Bb A]
-@ch:Dm7     dG dF-
-            oF
-@ch:F       dD^ C^ B
-@ch:Fm      d*D^ C^
-@ch:Cmaj7   dB E G
-@ch:A7      d*B A
-@ch:Dm7     dC^ A C^
-@ch:G7      dE^ dE^
-@ch:C6      oC^
+@ch:Cmaj7   ^C [G E-]/ Ep-
+            Ep [^C ^D ^C]3
+@ch:E7      B [G# E-]/ Ep-
+            Eo
+@ch:A7      A* G/ Ep-
+            E D# [E Bb A]3
+@ch:Dm7     Gp Fp-
+            Fo
+@ch:E7      E* Eb/ Dp-
+            Dp [E G# B]3
+@ch:Am7     ^Dp ^Cp-
+            ^Co
+@ch:D7      B* Bb/ Ap-
+            Ap [A ^D B]3
+@ch:Dm7     Ao
+@ch:G7      Bo
+@ch:Cmaj7   ^C [G E-]/ Ep-
+            Ep [^C ^D ^C]3
+@ch:E7      B [G# E-]/ Ep-
+            Eo
+@ch:A7      A* G/ Ep-
+            E D# [E Bb A]3
+@ch:Dm7     Gp Fp-
+            Fo
+@ch:F       ^Dp ^C B
+@ch:Fm      ^Dp* ^C
+@ch:Cmaj7   Bp E G
+@ch:A7      Bp* A
+@ch:Dm7     ^Cp A ^C
+@ch:G7      ^Ep ^Ep
+@ch:C6      ^Co
 ---
 title: All of Me
 composer: Simone/Marks

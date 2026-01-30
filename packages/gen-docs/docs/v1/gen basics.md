@@ -13,9 +13,9 @@ time-signature: 4/4
 ---
 
 C C G G
-A A dG
+A A Gp
 F F E E
-D D dC
+D D Cp
 ```
 
 all available fields for metadata are
@@ -101,8 +101,8 @@ key-signature: G
 time-signature: 4/4
 ---
 
-G A B C^
-D^ E^ F^ G^
+G A B ^C
+^D ^E ^F ^G
 ```
 
 Note: The `F` in the second line will automatically be sharped because we're in G major. You don't need to write `F#`.
@@ -115,7 +115,7 @@ key-signature: ##
 ---
 
 D E F G
-A B C D^
+A B C ^D
 ```
 
 Example with minor key:
@@ -125,50 +125,50 @@ title: My Song in A Minor
 key-signature: Am
 ---
 
-A B C^ D
-E F^ G A
+A B ^C D
+E ^F ^G A
 ```
 
 Note: In A minor, all notes follow the natural minor scale without explicit accidentals.
 
 ### Tempo
 
-The `tempo` field specifies the tempo in beats per minute (BPM). You can optionally specify which note duration receives the beat by using rhythm modifiers before the BPM number.
+The `tempo` field specifies the tempo in beats per minute (BPM). You can optionally specify which note duration receives the beat by using rhythm modifiers after the BPM number.
 
-**Syntax:** `[rhythm]BPM`
+**Syntax:** `BPM[rhythm]`
 
 **Examples:**
 - `tempo: 120` - Quarter note at 120 BPM (default)
-- `tempo: d160` - Half note at 160 BPM (equivalent to quarter note at 320 BPM)
-- `tempo: /180` - Eighth note at 180 BPM (equivalent to quarter note at 90 BPM)
-- `tempo: o60` - Whole note at 60 BPM (equivalent to quarter note at 240 BPM)
-- `tempo: "*120"` - Dotted quarter note at 120 BPM (equivalent to quarter note at 180 BPM)
-- `tempo: "d*80"` - Dotted half note at 80 BPM (equivalent to quarter note at 240 BPM)
+- `tempo: 160p` - Half note at 160 BPM (equivalent to quarter note at 320 BPM)
+- `tempo: 180/` - Eighth note at 180 BPM (equivalent to quarter note at 90 BPM)
+- `tempo: 60o` - Whole note at 60 BPM (equivalent to quarter note at 240 BPM)
+- `tempo: "120*"` - Dotted quarter note at 120 BPM (equivalent to quarter note at 180 BPM)
+- `tempo: "80p*"` - Dotted half note at 80 BPM (equivalent to quarter note at 240 BPM)
 
 **Note:** When using the `*` (dotted) modifier, you must quote the tempo value in YAML because `*` is a special character.
 
 **Rhythm modifiers for tempo:**
-| Modifier | Note duration      | Example | Quarter note equivalent |
-| -------- | ------------------ | ------- | ----------------------- |
-| (none)   | Quarter note       | `120`   | 120 BPM                 |
-| `d`      | Half note          | `d120`  | 240 BPM                 |
-| `o`      | Whole note         | `o60`   | 240 BPM                 |
-| `/`      | Eighth note        | `/120`  | 60 BPM                  |
-| `//`     | Sixteenth note     | `//240` | 60 BPM                  |
-| `*`      | Dotted (1.5x)      | `"*120"`| 180 BPM                 |
-| `d*`     | Dotted half note   | `"d*80"`| 240 BPM                 |
+| Modifier | Note duration      | Example  | Quarter note equivalent |
+| -------- | ------------------ | -------- | ----------------------- |
+| (none)   | Quarter note       | `120`    | 120 BPM                 |
+| `p`      | Half note          | `120p`   | 240 BPM                 |
+| `o`      | Whole note         | `60o`    | 240 BPM                 |
+| `/`      | Eighth note        | `120/`   | 60 BPM                  |
+| `//`     | Sixteenth note     | `240//`  | 60 BPM                  |
+| `*`      | Dotted (1.5x)      | `"120*"` | 180 BPM                 |
+| `p*`     | Dotted half note   | `"80p*"` | 240 BPM                 |
 
 **Example in metadata:**
 ```
 ---
 title: Fast Song
 composer: Speed Demon
-tempo: d160
+tempo: 160p
 time-signature: 4/4
 ---
 
 C D E F
-G A B C^
+G A B ^C
 ```
 
 In this example, the half note is at 160 BPM, which means quarter notes play at 320 BPM (very fast!).
@@ -176,8 +176,8 @@ In this example, the half note is at 160 BPM, which means quarter notes play at 
 Each line is its own measure. If you do a new line, it will do a new measure.
 # Anatomy of a note
 
-`/Ab_`
-`[rhythm][note][pitch] ...`
+`_Ab/`
+`[octave][note][accidental][rhythm] ...`
 
 | rhythm modifier | result         |
 | --------------- | -------------- |
@@ -185,10 +185,10 @@ Each line is its own measure. If you do a new line, it will do a new measure.
 | `/`             | Eighth note    |
 | `//`            | Sixteenth note |
 | `///`           | 32nd note      |
-| `d`             | Half note      |
+| `p`             | Half note      |
 | `o`             | Whole note     |
 | `/*`            | dotted eighth  |
-| `d*`            | dotted half    |
+| `p*`            | dotted half    |
 
 | note | result          |
 | ---- | --------------- |
@@ -206,42 +206,43 @@ there are two different modifiers to pitch.
 
 | modifier type         | what it's for                    |
 | --------------------- | -------------------------------- |
-| first level modifier  | specifying quality (flat, sharp) |
-| second level modifier | specifying octave (8va, 8vb)     |
+| first level modifier  | specifying octave (8va, 8vb)     |
+| second level modifier | specifying quality (flat, sharp) |
 
 
-| first level pitch modifier | result  |
-| -------------------------- | ------- |
-| `b`                        | Flat    |
-| `#`                        | Sharp   |
-| `[none]`                   | Natural |
+| first level pitch modifier (octave) | result        |
+| ----------------------------------- | ------------- |
+| `[none]`                            | Middle octave |
+| `_`                                 | 8vb           |
+| `__`                                | 8vbb          |
+| `^`                                 | 8va           |
+| `^^`                                | 8vaa          |
+*note - these octave modifiers go BEFORE the note*
 
-| second level pitch modifier | result        |
-| --------------------------- | ------------- |
-| `[none]`                    | Middle octave |
-| `_`                         | 8vb           |
-| `__`                        | 8vbb          |
-| `^`                         | 8va           |
-| `^^`                        | 8vaa          |
-*note - these second level modifiers are only to be applied at the note level*
+| second level pitch modifier (accidental) | result  |
+| ---------------------------------------- | ------- |
+| `b`                                      | Flat    |
+| `#`                                      | Sharp   |
+| `[none]`                                 | Natural |
+*note - accidentals go AFTER the note name*
 
 **CRITICAL: Understanding Octave Boundaries**
 
 The octave system in Gen is **absolute** and **always based on C**, regardless of the key signature:
 
 - **Base octave (no modifier):** C, D, E, F, G, A, B
-- **High octave (^ modifier):** C^, D^, E^, F^, G^, A^, B^
-- **Low octave (_ modifier):** C_, D_, E_, F_, G_, A_, B_
+- **High octave (^ modifier):** ^C, ^D, ^E, ^F, ^G, ^A, ^B
+- **Low octave (_ modifier):** _C, _D, _E, _F, _G, _A, _B
 
 **The octave ALWAYS resets at C**, not at the tonic of your key. This means:
-- B to C^ is moving up across the octave boundary
-- B^ to C^ stays in the same octave
+- B to ^C is moving up across the octave boundary
+- ^B to ^C stays in the same octave
 - In any key (G major, Eb minor, F# major, etc.), C always marks the octave boundary
 
 **Examples:**
-- Melody going up: `G A B C^ D^ E^` (crosses from base octave to high octave at C)
-- Melody going down: `E^ D^ C^ B A G` (crosses from high octave to base octave at B)
-- Wide jump down: `A^ B^ C^^ D^^ E^ F^ G` (going from double-high down to high then base octave)
+- Melody going up: `G A B ^C ^D ^E` (crosses from base octave to high octave at C)
+- Melody going down: `^E ^D ^C B A G` (crosses from high octave to base octave at B)
+- Wide jump down: `^A ^B ^^C ^^D ^E ^F G` (going from double-high down to high then base octave)
 
 **This is true regardless of key signature.** Even if you're in F major or D minor, the octave boundary is still at C.
 
@@ -249,28 +250,28 @@ The octave system in Gen is **absolute** and **always based on C**, regardless o
 Sometimes, you want to modify more than one note at a time. For this you can use group modifiers. Groups are defined by putting notes in brackets `[...]`.
 
 ### Rhythm grouping
-You can apply the same rhythm to multiple notes by putting the rhythm modifier before the bracket:
+You can apply the same rhythm to multiple notes by putting the rhythm modifier after the bracket:
 
-`//[C D E F]` is the same as `//C //D //E //F`
+`[C D E F]//` is the same as `C// D// E// F//`
 
 ### Octave modifiers on groups
-You can apply octave modifiers to an entire group by putting the octave modifier **after** the closing bracket. This will shift all notes in the group by the specified amount.
+You can apply octave modifiers to an entire group by putting the octave modifier **before** the opening bracket. This will shift all notes in the group by the specified amount.
 
-**Syntax:** `[notes...]^` or `[notes...]_`
+**Syntax:** `^[notes...]` or `_[notes...]`
 
 **Examples:**
-- `[A B C D]^` - all four notes shifted up one octave (equivalent to `A^ B^ C^ D^`)
-- `/[A B C D]^` - eighth notes, all shifted up one octave (equivalent to `/A^ /B^ /C^ /D^`)
-- `[E F G A]_` - all notes shifted down one octave
-- `[C D E F]^^` - all notes shifted up two octaves
+- `^[A B C D]` - all four notes shifted up one octave (equivalent to `^A ^B ^C ^D`)
+- `^[A B C D]/` - eighth notes, all shifted up one octave (equivalent to `^A/ ^B/ ^C/ ^D/`)
+- `_[E F G A]` - all notes shifted down one octave
+- `^^[C D E F]` - all notes shifted up two octaves
 
 **Combining with individual octave modifiers:**
 Group octave modifiers apply on top of individual note octave modifiers:
-- `[A^ B C_]^` - A becomes double high (^^ total), B becomes high (^ from group), C_ becomes middle (_ + ^ = middle)
+- `^[^A B _C]` - A becomes double high (^^ total), B becomes high (^ from group), _C becomes middle (_ + ^ = middle)
 
 **Works with tuplets too:**
-- `3[C D E]^` - quarter note triplet, all notes shifted up one octave
-- `/3[C D E]^` - eighth note triplet, all notes shifted up one octave
+- `^[C D E]3` - quarter note triplet, all notes shifted up one octave
+- `^[C D E]3/` - eighth note triplet, all notes shifted up one octave
 
 ### Measure octave modifiers
 You can apply an octave shift to ALL notes in a measure by adding `@:^` or `@:_` anywhere in the measure (typically at the end).
@@ -278,14 +279,14 @@ You can apply an octave shift to ALL notes in a measure by adding `@:^` or `@:_`
 **Syntax:** `@:^`, `@:_`, `@:^^`, or `@:__`
 
 **Examples:**
-- `A B C D @:^` - all four notes shifted up one octave (equivalent to `A^ B^ C^ D^`)
+- `A B C D @:^` - all four notes shifted up one octave (equivalent to `^A ^B ^C ^D`)
 - `C D E F @:__` - all notes shifted down two octaves
-- `//[D C] /*D //C //D /*E @:^` - all notes (including those in brackets) shifted up one octave
+- `[D C]// D/* C// D// E/* @:^` - all notes (including those in brackets) shifted up one octave
 
 **Combining with other octave modifiers:**
 Measure octave modifiers apply on top of individual note modifiers and group modifiers:
-- `A^ B C @:^` - A becomes ^^ (double high), B becomes ^, C becomes ^
-- `[A B]^ @:^` - all notes become ^^ (group ^ + measure ^)
+- `^A B C @:^` - A becomes ^^ (double high), B becomes ^, C becomes ^
+- `^[A B] @:^` - all notes become ^^ (group ^ + measure ^)
 
 **Note:** This is similar to instrument group modifiers (@Eb:^, @Bb:^) but applies to ALL notes in the measure regardless of instrument.
 
@@ -301,39 +302,39 @@ is a C tied with a D. Ties can only be between individual notes.
 
 The first obvious use case of this is triplets, where you want to play three notes as triplets. To make triplets with Gen, it looks like this
 
-`3[G_ C E] /3[dG E] dG`
+`[_G C E]3 [Gp E]3/ Gp`
 
 Some notes on the triplets
-1. It is notated as a triplet because there is a 3 at the START of the bracket set.
-2. You can specify how fast the triplet is by putting the rhythm modifier BEFORE the number and bracket. If not specified, it is a quarter note triplet. For example, `/3[C E G]` is an eighth note triplet.
+1. It is notated as a triplet because there is a 3 at the END of the bracket set.
+2. You can specify how fast the triplet is by putting the rhythm modifier AFTER the number. If not specified, it is a quarter note triplet. For example, `[C E G]3/` is an eighth note triplet.
 	1. With this, normally, the notes duration are default to quarter note. However, if in a triplet modifier, the default duration of the note would be whatever the triplet duration specifies, instead of quarter note. In the example shown, C E G would all have duration 8th note triplets since defined in the eighth note triplet rhythm bracket. You can also override rhythm like you see from above.
 
 Other tuplets can be specified using the respective numbers:
 
 | syntax    | meaning                 |
 | --------- | ----------------------- |
-| `2[...]`  | duplet                  |
-| `3[...]`  | triplet                 |
-| `4[...]`  | four-et? (the four one) |
-| `5[...]`  | quintuplet              |
-| `6[...]`  | sextuplet               |
+| `[...]2`  | duplet                  |
+| `[...]3`  | triplet                 |
+| `[...]4`  | four-et? (the four one) |
+| `[...]5`  | quintuplet              |
+| `[...]6`  | sextuplet               |
 | and so on |                         |
 
 You can also specify the tuplet rhythm:
 
 | syntax     | meaning                    |
 | ---------- | -------------------------- |
-| `3[...]`   | quarter note triplet       |
-| `/3[...]`  | eighth note triplet        |
-| `//3[...]` | sixteenth note triplet     |
-| `d3[...]` | half note triplet          |
+| `[...]3`   | quarter note triplet       |
+| `[...]3/`  | eighth note triplet        |
+| `[...]3//` | sixteenth note triplet     |
+| `[...]3p`  | half note triplet          |
 | and so on  |                            |
 
 ## Other rhythm groupings
 
-You can also group together notes with the same rhythm by using brackets and specifying the rhythm in front. Like this
+You can also group together notes with the same rhythm by using brackets and specifying the rhythm after. Like this
 
-`//[C D E F]` instead of `//C //D //E //F`
+`[C D E F]//` instead of `C// D// E// F//`
 
 This works with any rhythm modifier. Notes inside the bracket will use the group's rhythm unless they have an explicit rhythm specified.
 
@@ -343,7 +344,7 @@ Slurs can be represented with a normal parantheses set around the group you want
 
 for example
 
-`(Bb_ D F) Bb`
+`(_Bb D F) Bb`
 
 slurs the first three notes
 
@@ -355,8 +356,8 @@ Chord symbols can be added to notes using the `@ch:` annotation. Place the annot
 
 **Examples:**
 ```
-@ch:C C E G C^          # C major chord on first note
-@ch:Dm7 D F A C^        # Dm7 chord on first note
+@ch:C C E G ^C          # C major chord on first note
+@ch:Dm7 D F A ^C        # Dm7 chord on first note
 @ch:C C D @ch:G E F G   # C chord on C, G chord on E
 ```
 
@@ -387,7 +388,7 @@ Key changes allow you to change the key signature in the middle of a piece. Plac
 key-signature: C
 ---
 C D E F                    # Measure 1: C major
-@key:G G A B C^            # Measure 2: changes to G major (1 sharp)
+@key:G G A B ^C            # Measure 2: changes to G major (1 sharp)
 @key:F F G A Bb            # Measure 3: changes to F major (1 flat)
 ```
 
@@ -408,16 +409,16 @@ key-signature: C
 time-signature: 4/4
 ---
 
-C E G C^                   # C major section
-G B D G^
-@key:G G A B C^            # Modulates to G major
+C E G ^C                   # C major section
+G B D ^G
+@key:G G A B ^C            # Modulates to G major
 D E F# G                   # F is now F# due to key signature
 ```
 
 **Combining with other annotations:**
 You can use key changes alongside other annotations in the same measure:
 ```
-@key:D @ch:Dmaj7 D F# A D^  # Key change to D major with Dmaj7 chord
+@key:D @ch:Dmaj7 D F# A ^D  # Key change to D major with Dmaj7 chord
 ```
 
 # Other notation
@@ -435,9 +436,9 @@ a compiler error will be thrown if:
 since these are measure level modifiers, they go at the beginning of the measure to indicate first or second ending respectively.
 this is how you use it
 ```
-oF
-1. Eb $ *Bb /Ab :||
-2. Eb $ dEb
+Fo
+1. Eb $ Bb* Ab/ :||
+2. Eb $ Ebp
 ```
 
 some requirements
@@ -450,7 +451,7 @@ to continue a first second ending to multiple measures, simply prepend consecuti
 the gen viewer will be a tauri app that renders the gen file into real sheet music you can read.
 The viewer will allow you to view by instrument, which transposes the music to given instrumet/key. It changes a new property on the client side called `viewed-pitch`, which is used to transpose the gen notation before it is translated to sheet music. The value of viewed-pitch is whichever note middle C should be mapped to.
 
-`viewed-pitch` Can also specify which octave is written. For example, for flute it'll be something like `viewed-pitch: C^`, since the flute reads music an octave above everyone else.
+`viewed-pitch` Can also specify which octave is written. For example, for flute it'll be something like `viewed-pitch: ^C`, since the flute reads music an octave above everyone else.
 
 `viewed-clef` - TODO: render different kind of clef. default is always treble.
 
@@ -462,10 +463,10 @@ You can specify a viewed pitch or click on an instrument from a dropdown which s
 
 | Instrument    | viewed-pitch |
 | ------------- | ------------ |
-| Flute         | C^           |
-| Piccolo       | C^^          |
+| Flute         | ^C           |
+| Piccolo       | ^^C          |
 | Clarinet      | Bb           |
-| Bass Clarinet | Bb_          |
+| Bass Clarinet | _Bb          |
 | Alto Sax      | Eb           |
-| Tenor Sax     | Bb_          |
-| Baritone Sax  | Eb_          |
+| Tenor Sax     | _Bb          |
+| Baritone Sax  | _Eb          |

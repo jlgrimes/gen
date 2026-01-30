@@ -1,16 +1,16 @@
-/C
-/C //[C C] /C //[C C] /E //[C C] /[C E]
-/E //[E E] /E //[E E] /G //[E E] G
-/E //[E E] /E //[E E-] //[E E] /E /$ /E
-/E //[E E] //E /E //E-E //E /*G
-d*A //A //B
-d*E //E //G
-d*A //A //B
-oE
-/$ //[D C] /*D //C //D /*E-E @:^
-/$ //[C^ C^] /B //[B A-] //[A A] G /F
-oE-
-d*E //E /*G
+C/
+C/ [C C]// C/ [C C]// E/ [C C]// [C E]/
+E/ [E E]// E/ [E E]// G/ [E E]// G
+E/ [E E]// E/ [E E-]// [E E]// E/ $/ E/
+E/ [E E]// E// E/ E//- E// G/*
+Ap* A// B//
+Ep* E// G//
+Ap* A// B//
+Eo
+$/ [D C]// D/* C// D// E/*- E @:^
+$/ [^C ^C]// B/ [B A-]// [A A]// G F/
+Eo-
+Ep* E// G/*
 A
 
 ---

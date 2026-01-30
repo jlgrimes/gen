@@ -34,8 +34,8 @@
 //! use gen::{parse, validate};
 //!
 //! let source = "C D E F";  // 4 quarter notes = 4 beats (valid in 4/4)
-//! let score = parse(source)?;
-//! validate(&score)?;  // Passes validation
+//! let score = parse(source).unwrap();
+//! validate(&score).unwrap();  // Passes validation
 //! ```
 //!
 //! ## Related Modules
@@ -231,21 +231,24 @@ mod tests {
 
     #[test]
     fn test_valid_with_different_durations() {
-        let score = parse("dC dC").unwrap(); // 2 half notes
+        // New syntax: 'p' for half note, rhythm AFTER note
+        let score = parse("Cp Cp").unwrap(); // 2 half notes
         assert!(validate(&score).is_ok());
     }
 
     #[test]
     fn test_triplet_duration() {
         // Quarter note triplet (3 quarters in the time of 2) + 2 regular quarters = 4 beats
-        let score = parse("3[C D E] C C").unwrap();
+        // New syntax: tuplet number AFTER bracket
+        let score = parse("[C D E]3 C C").unwrap();
         assert!(validate(&score).is_ok());
     }
 
     #[test]
     fn test_eighth_note_triplet_duration() {
         // Eighth note triplet (3 eighths in time of 2 eighths = 1 quarter) + 3 regular quarters = 4 beats
-        let score = parse("/3[C D E] C C C").unwrap();
+        // New syntax: tuplet and rhythm AFTER bracket
+        let score = parse("[C D E]3/ C C C").unwrap();
         assert!(validate(&score).is_ok());
     }
 
