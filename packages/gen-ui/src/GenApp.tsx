@@ -6,11 +6,13 @@ import {
 } from 'opensheetmusicdisplay';
 import { jsPDF } from 'jspdf';
 import 'svg2pdf.js';
-import { Download, Code, Music2, Eye, EyeOff } from 'lucide-react';
+import { Download, Eye, EyeOff } from 'lucide-react';
 import { Sidebar } from '@/components/ui/sidebar';
 import { GenMonacoEditor } from '@/editor/GenMonacoEditor';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { useIsMobile } from '@/hooks/useIsMobile';
+import { useBreakpoint } from '@/hooks/useBreakpoint';
+import { SideDrawer } from '@/components/ui/side-drawer';
+import { MobileHeader } from '@/components/ui/mobile-header';
+import { BottomTabBar } from '@/components/ui/bottom-tab-bar';
 import type {
   CompilerAdapter,
   FileAdapter,
@@ -220,7 +222,7 @@ export interface GenAppProps {
 }
 
 export function GenApp({ compiler, files, playback, url, scores }: GenAppProps) {
-  const isMobile = useIsMobile();
+  const { isMobile, isTablet, isDesktop, isMobileOrTablet } = useBreakpoint();
 
   // Get initial values from URL
   const initialParams = useMemo(() => getUrlParams(), []);
@@ -231,9 +233,10 @@ export function GenApp({ compiler, files, playback, url, scores }: GenAppProps) 
   );
   const [error, setError] = useState<CompileError | null>(null);
   const [isCompiling, setIsCompiling] = useState(false);
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(isMobile); // Collapsed by default on mobile
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true); // Start collapsed, managed by drawer on mobile/tablet
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false); // Drawer state for mobile/tablet
   const [isEditorVisible, setIsEditorVisible] = useState(true); // Toggle editor visibility
-  const [mobileTab, setMobileTab] = useState<MobileTab>('sheet'); // Default to sheet view on mobile
+  const [mobileTab, setMobileTab] = useState<MobileTab>('sheet'); // Default to sheet view on mobile/tablet
   const [instrumentIndex, setInstrumentIndex] = useState(() =>
     getInstrumentIndexById(initialParams.instrument),
   ); // Index into INSTRUMENT_PRESETS, or CUSTOM_PRESET_INDEX for custom
@@ -330,12 +333,12 @@ export function GenApp({ compiler, files, playback, url, scores }: GenAppProps) 
     url?.openExternal('https://docs.gen.band');
   }, [url]);
 
-  // Collapse sidebar when switching to mobile
+  // Close drawer when switching to desktop
   useEffect(() => {
-    if (isMobile) {
-      setIsSidebarCollapsed(true);
+    if (!isMobileOrTablet) {
+      setIsDrawerOpen(false);
     }
-  }, [isMobile]);
+  }, [isMobileOrTablet]);
 
   // Load score from URL or default to first score
   useEffect(() => {
@@ -1102,9 +1105,73 @@ export function GenApp({ compiler, files, playback, url, scores }: GenAppProps) 
     </div>
   );
 
+  // Mobile/Tablet layout
+  if (isMobileOrTablet) {
+    return (
+      <div className='flex flex-col h-screen w-screen'>
+        {/* Side Drawer for score selection */}
+        <SideDrawer
+          isOpen={isDrawerOpen}
+          onClose={() => setIsDrawerOpen(false)}
+          title='Scores'
+          width={isTablet ? 'wide' : 'default'}
+        >
+          <Sidebar
+            scores={scores}
+            onScoreSelect={handleScoreSelect}
+            selectedScore={selectedScore}
+            onOpenDocs={url ? handleOpenDocs : undefined}
+            variant='drawer'
+            onClose={() => setIsDrawerOpen(false)}
+          />
+        </SideDrawer>
+
+        {/* Mobile Header */}
+        <MobileHeader
+          title={selectedScore?.split('/').pop()?.replace('.gen', '') || 'Gen'}
+          onMenuClick={() => setIsDrawerOpen(true)}
+          rightContent={
+            <button
+              onClick={exportToPdf}
+              className='p-3 -mr-1 rounded-md hover:bg-gray-100 text-gray-700'
+              title='Export to PDF'
+            >
+              <Download size={20} />
+            </button>
+          }
+        />
+
+        {/* Main content area */}
+        <div className='flex-1 flex flex-col min-h-0 overflow-hidden'>
+          {/* Show active panel */}
+          <div
+            className={mobileTab === 'editor' ? 'flex-1 overflow-hidden' : 'hidden'}
+            role='tabpanel'
+            id='editor-panel'
+            aria-labelledby='editor-tab'
+          >
+            {editorPanel}
+          </div>
+          <div
+            className={mobileTab === 'sheet' ? 'flex-1 overflow-hidden' : 'hidden'}
+            role='tabpanel'
+            id='sheet-panel'
+            aria-labelledby='sheet-tab'
+          >
+            {sheetMusicPanel}
+          </div>
+        </div>
+
+        {/* Bottom Tab Bar */}
+        <BottomTabBar activeTab={mobileTab} onTabChange={setMobileTab} />
+      </div>
+    );
+  }
+
+  // Desktop layout
   return (
     <div className='flex h-screen w-screen'>
-      {/* Sidebar - outside of resizable panels */}
+      {/* Sidebar - fixed on desktop */}
       <Sidebar
         scores={scores}
         onScoreSelect={handleScoreSelect}
@@ -1112,64 +1179,25 @@ export function GenApp({ compiler, files, playback, url, scores }: GenAppProps) 
         isCollapsed={isSidebarCollapsed}
         onToggleCollapse={toggleSidebar}
         onOpenDocs={url ? handleOpenDocs : undefined}
+        variant='fixed'
       />
 
-      {/* Mobile layout with tabs */}
-      {isMobile ? (
-        <Tabs
-          value={mobileTab}
-          onValueChange={(value: string) => setMobileTab(value as MobileTab)}
-          className='flex-1 flex flex-col h-full'
-        >
-          <TabsList className='w-full rounded-none border-b border-border h-12 bg-muted p-0'>
-            <TabsTrigger
-              value='editor'
-              className='flex-1 h-full rounded-none data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary gap-2'
-            >
-              <Code size={16} />
-              Editor
-            </TabsTrigger>
-            <TabsTrigger
-              value='sheet'
-              className='flex-1 h-full rounded-none data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary gap-2'
-            >
-              <Music2 size={16} />
-              Sheet Music
-            </TabsTrigger>
-          </TabsList>
-          <TabsContent
-            value='editor'
-            keepMounted
-            className='flex-1 mt-0 overflow-hidden'
-          >
-            {editorPanel}
-          </TabsContent>
-          <TabsContent
-            value='sheet'
-            keepMounted
-            className='flex-1 mt-0 overflow-hidden'
-          >
-            {sheetMusicPanel}
-          </TabsContent>
-        </Tabs>
-      ) : (
-        /* Desktop layout - header row always full width, body changes */
-        <div className='flex-1 h-full flex flex-col'>
-          {/* Header row - editor header (30%) + sheet music header (70%) */}
-          <div className='flex'>
-            {editorHeader}
-            {sheetMusicHeader}
-          </div>
+      {/* Desktop layout - header row always full width, body changes */}
+      <div className='flex-1 h-full flex flex-col'>
+        {/* Header row - editor header (40%) + sheet music header (60%) */}
+        <div className='flex'>
+          {editorHeader}
+          {sheetMusicHeader}
+        </div>
 
-          {/* Body row - editor body (30% when visible) + sheet music body */}
-          <div className='flex-1 flex min-h-0'>
-            {isEditorVisible && editorBody}
-            <div className={isEditorVisible ? 'w-[60%] h-full' : 'w-full h-full'}>
-              {sheetMusicBody}
-            </div>
+        {/* Body row - editor body (40% when visible) + sheet music body */}
+        <div className='flex-1 flex min-h-0'>
+          {isEditorVisible && editorBody}
+          <div className={isEditorVisible ? 'w-[60%] h-full' : 'w-full h-full'}>
+            {sheetMusicBody}
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }
