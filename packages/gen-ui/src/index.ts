@@ -19,4 +19,5 @@ export type {
   PlaybackData,
   PlaybackNote,
   PlaybackChord,
+  SwingType,
 } from './types';

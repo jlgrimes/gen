@@ -61,10 +61,13 @@ export interface PlaybackChord {
   osmdTimestamp: number; // OSMD's display timestamp (for visual highlighting)
 }
 
+export type SwingType = 'eighth' | 'sixteenth';
+
 export interface PlaybackData {
   tempo: number;      // BPM
   notes: PlaybackNote[];
   chords: PlaybackChord[];  // chord accompaniment (always piano)
+  swing?: SwingType;  // optional swing feel
 }
 
 export interface PlaybackResult {

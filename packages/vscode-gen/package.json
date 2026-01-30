@@ -1,0 +1,52 @@
+{
+  "name": "gen-language",
+  "displayName": "Gen Music Notation",
+  "description": "Language support for Gen music notation files",
+  "version": "0.1.0",
+  "publisher": "gen",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/anthropics/gen"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Linters"
+  ],
+  "activationEvents": [
+    "onLanguage:gen"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "gen",
+        "extensions": [".gen"],
+        "aliases": ["Gen", "gen"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "gen",
+        "scopeName": "source.gen",
+        "path": "./syntaxes/gen.tmLanguage.json"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run build",
+    "build": "node esbuild.config.js",
+    "watch": "node esbuild.config.js --watch",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "esbuild": "^0.20.0",
+    "typescript": "^5.3.0",
+    "@vscode/vsce": "^2.22.0"
+  }
+}

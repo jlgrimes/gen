@@ -1,5 +1,5 @@
 import Soundfont from 'soundfont-player';
-import type { PlaybackData } from '../types';
+import type { PlaybackData, SwingType } from '../types';
 
 export type PlaybackState = 'stopped' | 'playing' | 'paused';
 
@@ -9,6 +9,47 @@ function midiToNoteName(midi: number): string {
   const octave = Math.floor(midi / 12) - 1;
   const noteName = noteNames[midi % 12];
   return `${noteName}${octave}`;
+}
+
+/**
+ * Apply swing timing adjustment to a note's start time.
+ *
+ * Swing delays the "off-beat" notes (upbeats) to create a triplet feel.
+ * Standard jazz swing uses a 2:1 ratio where:
+ * - Downbeat eighth notes stay at their position
+ * - Upbeat eighth notes are delayed to 2/3 of the beat (triplet feel)
+ *
+ * @param startTime - Original start time in beats
+ * @param duration - Note duration in beats
+ * @param swingType - Type of swing ('eighth' or 'sixteenth')
+ * @returns Adjusted start time with swing applied
+ */
+function applySwing(startTime: number, _duration: number, swingType: SwingType): number {
+  // Swing ratio: 2:1 triplet feel (downbeat gets 2/3, upbeat gets 1/3)
+  const swingRatio = 2 / 3;
+
+  // Determine the swing grid based on swing type
+  // For eighth note swing: grid is 0.5 beats (eighth notes)
+  // For sixteenth note swing: grid is 0.25 beats (sixteenth notes)
+  const swingGrid = swingType === 'eighth' ? 0.5 : 0.25;
+
+  // Find position within the swing pair (0 to swingGrid*2)
+  const pairLength = swingGrid * 2; // One beat for eighths, half beat for sixteenths
+  const positionInPair = startTime % pairLength;
+
+  // If this note is on the upbeat (second half of the pair), apply swing
+  // Small epsilon for floating point comparison
+  const epsilon = 0.001;
+  if (positionInPair >= swingGrid - epsilon && positionInPair < pairLength - epsilon) {
+    // This is an upbeat - delay it
+    // Calculate how far into the upbeat position we are
+    const pairStart = Math.floor(startTime / pairLength) * pairLength;
+    // Upbeat should be at 2/3 of the pair instead of 1/2
+    return pairStart + (pairLength * swingRatio);
+  }
+
+  // Downbeat - no adjustment needed
+  return startTime;
 }
 
 export class PlaybackEngine {
@@ -114,8 +155,18 @@ export class PlaybackEngine {
     // Schedule all melody notes
     // Add small buffer (50ms) to ensure first note plays
     const startBuffer = 0.05;
+    const swing = data.swing;
+    if (swing) {
+      console.log('[Playback] Swing enabled:', swing);
+    }
+
     for (const note of data.notes) {
-      const timeInSeconds = note.startTime / beatsPerSecond;
+      // Apply swing timing if enabled
+      const swungStartTime = swing
+        ? applySwing(note.startTime, note.duration, swing)
+        : note.startTime;
+
+      const timeInSeconds = swungStartTime / beatsPerSecond;
       const durationInSeconds = note.duration / beatsPerSecond;
       const absoluteTime = this.audioContext.currentTime + startBuffer + timeInSeconds - this.pausedAt;
 

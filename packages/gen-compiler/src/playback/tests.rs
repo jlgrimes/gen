@@ -558,7 +558,8 @@ C D E
 
 #[test]
 fn test_swing_eighth_notes() {
-    // Test swing with eighth notes
+    // Test swing metadata is correctly parsed and passed to PlaybackData
+    // NOTE: Swing timing adjustment is now handled by the frontend during playback
     let source = r#"---
 swing: /
 ---
@@ -568,23 +569,19 @@ swing: /
     assert!(result.is_ok());
     let data = result.unwrap();
 
-    // Check swing is set
+    // Swing type should be set
     assert_eq!(data.swing, Some(crate::playback::types::SwingType::Eighth));
 
-    // In swing, off-beat notes (at 0.5, 1.5, etc.) are delayed
-    // Note at 0.0 (on beat) - unchanged
-    assert!((data.notes[0].start_time - 0.0).abs() < 0.01, "Note 0: expected 0.0, got {}", data.notes[0].start_time);
-    // Note at 0.5 (off beat) - delayed to ~0.667
-    assert!((data.notes[1].start_time - 0.667).abs() < 0.02, "Note 1: expected 0.667, got {}", data.notes[1].start_time);
-    // Note at 1.0 (on beat) - unchanged
-    assert!((data.notes[2].start_time - 1.0).abs() < 0.01, "Note 2: expected 1.0, got {}", data.notes[2].start_time);
-    // Note at 1.5 (off beat) - delayed to ~1.667
-    assert!((data.notes[3].start_time - 1.667).abs() < 0.02, "Note 3: expected 1.667, got {}", data.notes[3].start_time);
+    // Note timings should be straight (swing applied by frontend)
+    assert!((data.notes[0].start_time - 0.0).abs() < 0.01);
+    assert!((data.notes[1].start_time - 0.5).abs() < 0.01);
+    assert!((data.notes[2].start_time - 1.0).abs() < 0.01);
+    assert!((data.notes[3].start_time - 1.5).abs() < 0.01);
 }
 
 #[test]
 fn test_swing_sixteenth_notes() {
-    // Test swing with sixteenth notes
+    // Test sixteenth note swing metadata
     let source = r#"---
 swing: //
 ---
@@ -594,23 +591,19 @@ swing: //
     assert!(result.is_ok());
     let data = result.unwrap();
 
-    // Check swing is set
+    // Swing type should be set to sixteenth
     assert_eq!(data.swing, Some(crate::playback::types::SwingType::Sixteenth));
 
-    // In sixteenth swing, notes at 0.25, 0.75, 1.25, 1.75 etc. are delayed
-    // Note at 0.0 - unchanged
+    // Note timings should be straight (swing applied by frontend)
     assert!((data.notes[0].start_time - 0.0).abs() < 0.01);
-    // Note at 0.25 (off beat) - delayed to ~0.333
-    assert!((data.notes[1].start_time - 0.333).abs() < 0.02);
-    // Note at 0.5 - unchanged (this is on the half-beat)
+    assert!((data.notes[1].start_time - 0.25).abs() < 0.01);
     assert!((data.notes[2].start_time - 0.5).abs() < 0.01);
-    // Note at 0.75 (off beat) - delayed to ~0.833
-    assert!((data.notes[3].start_time - 0.833).abs() < 0.02);
+    assert!((data.notes[3].start_time - 0.75).abs() < 0.01);
 }
 
 #[test]
 fn test_no_swing_by_default() {
-    // Verify no swing is applied when not specified
+    // Verify no swing is set when not specified in metadata
     let source = r#"---
 tempo: 120
 ---
@@ -620,12 +613,206 @@ tempo: 120
     assert!(result.is_ok());
     let data = result.unwrap();
 
-    // Check no swing
+    // No swing should be set
     assert_eq!(data.swing, None);
 
-    // Notes should be at straight timing: 0, 0.5, 1.0, 1.5
+    // Notes should be at straight timing
     assert!((data.notes[0].start_time - 0.0).abs() < 0.01);
     assert!((data.notes[1].start_time - 0.5).abs() < 0.01);
     assert!((data.notes[2].start_time - 1.0).abs() < 0.01);
     assert!((data.notes[3].start_time - 1.5).abs() < 0.01);
+}
+
+#[test]
+fn test_swing_with_complex_pattern() {
+    // Test that swing is correctly set with complex patterns
+    // (swing timing applied by frontend, not here)
+    let source = r#"---
+title: Test Pattern
+time-signature: 4/4
+swing: /
+---
+Cp [B F]/
+"#;
+    let result = generate_playback_data(source, "treble", 0, None, None);
+    assert!(result.is_ok());
+    let data = result.unwrap();
+
+    // Verify swing is set
+    assert_eq!(data.swing, Some(crate::playback::types::SwingType::Eighth));
+
+    // Verify notes are at straight timing (swing applied by frontend)
+    assert_eq!(data.notes.len(), 3);
+    assert!((data.notes[0].start_time - 0.0).abs() < 0.01); // C half
+    assert!((data.notes[1].start_time - 2.0).abs() < 0.01); // B eighth
+    assert!((data.notes[2].start_time - 2.5).abs() < 0.01); // F eighth
+}
+
+// ==================== REPEAT TESTS ====================
+
+#[test]
+fn test_playback_simple_repeat() {
+    // ||: C D :|| should play C D C D
+    let source = r#"---
+tempo: 120
+time-signature: 4/4
+---
+||: C D E F :||
+"#;
+    let result = generate_playback_data(source, "treble", 0, None, None);
+    assert!(result.is_ok());
+    let data = result.unwrap();
+
+    // 4 notes * 2 repetitions = 8 notes
+    assert_eq!(data.notes.len(), 8, "Expected 8 notes (repeat), got {}", data.notes.len());
+
+    // First pass: C D E F at beats 0, 1, 2, 3
+    assert_eq!(data.notes[0].midi_note, 60); // C
+    assert_eq!(data.notes[0].start_time, 0.0);
+    assert_eq!(data.notes[1].midi_note, 62); // D
+    assert_eq!(data.notes[1].start_time, 1.0);
+    assert_eq!(data.notes[2].midi_note, 64); // E
+    assert_eq!(data.notes[2].start_time, 2.0);
+    assert_eq!(data.notes[3].midi_note, 65); // F
+    assert_eq!(data.notes[3].start_time, 3.0);
+
+    // Second pass: C D E F at beats 4, 5, 6, 7
+    assert_eq!(data.notes[4].midi_note, 60); // C
+    assert_eq!(data.notes[4].start_time, 4.0);
+    assert_eq!(data.notes[5].midi_note, 62); // D
+    assert_eq!(data.notes[5].start_time, 5.0);
+    assert_eq!(data.notes[6].midi_note, 64); // E
+    assert_eq!(data.notes[6].start_time, 6.0);
+    assert_eq!(data.notes[7].midi_note, 65); // F
+    assert_eq!(data.notes[7].start_time, 7.0);
+}
+
+#[test]
+fn test_playback_repeat_multiple_measures() {
+    // ||: C D
+    //     E F :||
+    // Should play both measures twice
+    let source = r#"---
+tempo: 120
+time-signature: 4/4
+---
+||: C D E F
+G A B ^C :||
+"#;
+    let result = generate_playback_data(source, "treble", 0, None, None);
+    assert!(result.is_ok());
+    let data = result.unwrap();
+
+    // 8 notes * 2 repetitions = 16 notes
+    assert_eq!(data.notes.len(), 16, "Expected 16 notes, got {}", data.notes.len());
+
+    // Verify the sequence plays twice
+    // First measure first time: C D E F at 0, 1, 2, 3
+    assert_eq!(data.notes[0].midi_note, 60); // C
+    assert_eq!(data.notes[3].midi_note, 65); // F
+
+    // Second measure first time: G A B ^C at 4, 5, 6, 7
+    assert_eq!(data.notes[4].midi_note, 67); // G
+    assert_eq!(data.notes[7].midi_note, 72); // ^C
+
+    // First measure second time: C D E F at 8, 9, 10, 11
+    assert_eq!(data.notes[8].midi_note, 60); // C
+    assert_eq!(data.notes[8].start_time, 8.0);
+
+    // Second measure second time: G A B ^C at 12, 13, 14, 15
+    assert_eq!(data.notes[12].midi_note, 67); // G
+    assert_eq!(data.notes[15].midi_note, 72); // ^C
+}
+
+#[test]
+fn test_playback_with_intro_and_repeat() {
+    // Intro, then repeated section
+    let source = r#"---
+tempo: 120
+time-signature: 4/4
+---
+A B C D
+||: E F G A :||
+"#;
+    let result = generate_playback_data(source, "treble", 0, None, None);
+    assert!(result.is_ok());
+    let data = result.unwrap();
+
+    // 4 intro notes + 4 repeated notes * 2 = 12 notes
+    assert_eq!(data.notes.len(), 12, "Expected 12 notes, got {}", data.notes.len());
+
+    // Intro: A B C D at beats 0-3
+    assert_eq!(data.notes[0].midi_note, 69); // A
+    assert_eq!(data.notes[3].midi_note, 62); // D
+
+    // First pass of repeat: E F G A at beats 4-7
+    assert_eq!(data.notes[4].midi_note, 64); // E
+    assert_eq!(data.notes[4].start_time, 4.0);
+
+    // Second pass of repeat: E F G A at beats 8-11
+    assert_eq!(data.notes[8].midi_note, 64); // E
+    assert_eq!(data.notes[8].start_time, 8.0);
+}
+
+#[test]
+fn test_playback_volta_endings() {
+    // ||: C D 1. E F :|| 2. G A ||
+    // Should play: C D E F, C D G A
+    let source = r#"---
+tempo: 120
+time-signature: 4/4
+---
+||: C D E F
+1. G A B ^C :||
+2. ^D ^E ^F ^G
+"#;
+    let result = generate_playback_data(source, "treble", 0, None, None);
+    assert!(result.is_ok());
+    let data = result.unwrap();
+
+    println!("\n=== Volta Endings Playback ===");
+    for (i, note) in data.notes.iter().enumerate() {
+        println!("Note {}: MIDI {} at beat {:.1}", i, note.midi_note, note.start_time);
+    }
+
+    // First pass: C D E F (main) + G A B ^C (1st ending) = 8 notes
+    // Second pass: C D E F (main) + ^D ^E ^F ^G (2nd ending) = 8 notes
+    // Total: 16 notes
+    assert_eq!(data.notes.len(), 16, "Expected 16 notes with volta, got {}", data.notes.len());
+
+    // First time through: main section + 1st ending
+    // C D E F at 0, 1, 2, 3
+    assert_eq!(data.notes[0].midi_note, 60); // C
+    assert_eq!(data.notes[3].midi_note, 65); // F
+
+    // 1st ending: G A B ^C at 4, 5, 6, 7
+    assert_eq!(data.notes[4].midi_note, 67); // G
+    assert_eq!(data.notes[7].midi_note, 72); // ^C
+
+    // Second time through: main section + 2nd ending
+    // C D E F at 8, 9, 10, 11
+    assert_eq!(data.notes[8].midi_note, 60); // C
+    assert_eq!(data.notes[8].start_time, 8.0);
+
+    // 2nd ending: ^D ^E ^F ^G at 12, 13, 14, 15
+    assert_eq!(data.notes[12].midi_note, 74); // ^D
+    assert_eq!(data.notes[15].midi_note, 79); // ^G
+}
+
+#[test]
+fn test_playback_no_repeat() {
+    // No repeat markers - should play through once
+    let source = r#"---
+tempo: 120
+---
+C D E F
+"#;
+    let result = generate_playback_data(source, "treble", 0, None, None);
+    assert!(result.is_ok());
+    let data = result.unwrap();
+
+    // Just 4 notes, no repetition
+    assert_eq!(data.notes.len(), 4);
+    assert_eq!(data.notes[0].midi_note, 60);
+    assert_eq!(data.notes[3].midi_note, 65);
 }

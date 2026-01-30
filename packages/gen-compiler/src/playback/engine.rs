@@ -9,6 +9,149 @@ use crate::parser::parse;
 use super::chord_parser::parse_chord_symbol;
 use super::types::{PlaybackData, PlaybackNote, PlaybackChord, SwingType};
 
+/// Build an expanded sequence of measure indices that respects repeats and volta endings.
+///
+/// This function handles:
+/// - Simple repeats: ||: ... :|| plays the section twice
+/// - Volta endings: 1. and 2. endings for first/second time through
+/// - Nested structure: repeat sections with different endings
+///
+/// Returns a Vec of (original_measure_index, osmd_measure_index) pairs.
+/// - original_measure_index: index into score.measures for getting the notes
+/// - osmd_measure_index: index for OSMD visual matching (always linear 0, 1, 2...)
+fn build_playback_sequence(measures: &[Measure]) -> Vec<(usize, usize)> {
+    let mut sequence = Vec::new();
+    let mut i = 0;
+    let mut osmd_idx = 0;
+
+    while i < measures.len() {
+        // Check if this measure starts a repeat section
+        if measures[i].repeat_start {
+            // Find the matching repeat end and endings
+            let repeat_start_idx = i;
+            let mut repeat_end_idx = i;
+            let mut first_ending_start: Option<usize> = None;
+            let mut second_ending_start: Option<usize> = None;
+
+            // Scan forward to find repeat end and endings (within or after the repeat)
+            let mut j = i;
+            while j < measures.len() {
+                if let Some(Ending::First) = measures[j].ending {
+                    if first_ending_start.is_none() {
+                        first_ending_start = Some(j);
+                    }
+                }
+                if let Some(Ending::Second) = measures[j].ending {
+                    if second_ending_start.is_none() {
+                        second_ending_start = Some(j);
+                    }
+                }
+                if measures[j].repeat_end {
+                    repeat_end_idx = j;
+                    // If we have a second ending, keep scanning for it past the repeat_end
+                    if second_ending_start.is_none() {
+                        // Check if there's a second ending right after
+                        if j + 1 < measures.len() {
+                            if let Some(Ending::Second) = measures[j + 1].ending {
+                                second_ending_start = Some(j + 1);
+                            }
+                        }
+                    }
+                    break;
+                }
+                j += 1;
+            }
+
+            // If we didn't find a repeat end, treat as no repeat
+            if repeat_end_idx == i && !measures[i].repeat_end {
+                sequence.push((i, osmd_idx));
+                osmd_idx += 1;
+                i += 1;
+                continue;
+            }
+
+            // Determine the end of main section (before any volta endings)
+            let main_section_end = first_ending_start.unwrap_or(repeat_end_idx + 1);
+
+            // First pass through the repeated section
+            if first_ending_start.is_some() {
+                // Play main section (up to first ending)
+                for k in repeat_start_idx..main_section_end {
+                    sequence.push((k, osmd_idx));
+                    osmd_idx += 1;
+                }
+                // Play first ending (up to repeat_end inclusive)
+                for k in main_section_end..=repeat_end_idx {
+                    sequence.push((k, osmd_idx));
+                    osmd_idx += 1;
+                }
+            } else {
+                // No volta endings - just play through
+                for k in repeat_start_idx..=repeat_end_idx {
+                    sequence.push((k, osmd_idx));
+                    osmd_idx += 1;
+                }
+            }
+
+            // Second pass through the repeated section
+            if let Some(second_start) = second_ending_start {
+                // Play main section again
+                for k in repeat_start_idx..main_section_end {
+                    sequence.push((k, osmd_idx));
+                    osmd_idx += 1;
+                }
+                // Play second ending (one measure typically)
+                // Find where second ending ends (until next repeat_start, repeat_end, or end of score)
+                let mut second_ending_end = second_start;
+                for k in (second_start + 1)..measures.len() {
+                    if measures[k].repeat_start || measures[k].ending.is_some() {
+                        break;
+                    }
+                    second_ending_end = k;
+                }
+                for k in second_start..=second_ending_end {
+                    sequence.push((k, osmd_idx));
+                    osmd_idx += 1;
+                }
+                i = second_ending_end + 1;
+            } else if first_ending_start.is_some() {
+                // Has first ending but no second - still repeat main section and skip first ending
+                for k in repeat_start_idx..main_section_end {
+                    sequence.push((k, osmd_idx));
+                    osmd_idx += 1;
+                }
+                i = repeat_end_idx + 1;
+            } else {
+                // No volta endings - just repeat the section
+                for k in repeat_start_idx..=repeat_end_idx {
+                    sequence.push((k, osmd_idx));
+                    osmd_idx += 1;
+                }
+                i = repeat_end_idx + 1;
+            }
+        } else if measures[i].repeat_end && !measures[i].repeat_start {
+            // Repeat end without a start - find implicit start (beginning or after previous repeat)
+            // For now, treat as start of score for simple cases
+            sequence.push((i, osmd_idx));
+            osmd_idx += 1;
+
+            // Replay from beginning to here
+            for k in 0..=i {
+                sequence.push((k, osmd_idx));
+                osmd_idx += 1;
+            }
+            i += 1;
+        } else {
+            // Regular measure - just add it
+            sequence.push((i, osmd_idx));
+            osmd_idx += 1;
+            i += 1;
+        }
+    }
+
+    sequence
+}
+
 /// Generate playback data from a Gen source string
 ///
 /// Returns timing and MIDI note information for audio playback and visual highlighting.
@@ -105,7 +248,6 @@ pub fn generate_playback_data(
     let _group = instrument_group.and_then(InstrumentGroup::from_str); // Reserved for future mod point support
 
     let mut current_time = 0.0;      // Playback time (triplet-adjusted)
-    let mut osmd_time = 0.0;         // OSMD display time (not triplet-adjusted)
     let mut notes = Vec::new();
     let mut chords = Vec::new();
     let mut current_key = score.metadata.key_signature.clone();
@@ -117,9 +259,54 @@ pub fn generate_playback_data(
     // For 4/4 (beat_type=4): quarter note = 1 TS beat = 1.0 quarter note, so multiply by 1.0
     let osmd_to_quarter_multiplier = 4.0 / score.metadata.time_signature.beat_type as f64;
 
-    for (measure_idx, measure) in score.measures.iter().enumerate() {
-        let measure_number = measure_idx + 1; // 1-indexed
+    // Pre-calculate OSMD timestamps for each measure (linear, ignoring repeats)
+    // OSMD renders the sheet music linearly, so we need to use the original timestamps
+    // when we repeat back to an earlier measure for highlighting to match.
+    let mut measure_osmd_times: Vec<f64> = Vec::with_capacity(score.measures.len());
+    let mut osmd_time = 0.0;
+    for measure in &score.measures {
+        measure_osmd_times.push(osmd_time);
+        for element in &measure.elements {
+            let osmd_duration = match element {
+                Element::Note(note) => {
+                    let base = note.duration.as_beats(&score.metadata.time_signature);
+                    let with_dot = if note.dotted { base * 1.5 } else { base };
+                    if let Some(tuplet) = &note.tuplet {
+                        let divisions = 4.0;
+                        let musicxml_dur = ((tuplet.normal_notes as f64 * with_dot * divisions) / tuplet.actual_notes as f64).floor();
+                        musicxml_dur / divisions
+                    } else {
+                        with_dot
+                    }
+                },
+                Element::Rest { duration: rest_dur, dotted, tuplet, .. } => {
+                    let base = rest_dur.as_beats(&score.metadata.time_signature);
+                    let with_dot = if *dotted { base * 1.5 } else { base };
+                    if let Some(t) = tuplet {
+                        let divisions = 4.0;
+                        let musicxml_dur = ((t.normal_notes as f64 * with_dot * divisions) / t.actual_notes as f64).floor();
+                        musicxml_dur / divisions
+                    } else {
+                        with_dot
+                    }
+                },
+            };
+            osmd_time += osmd_duration;
+        }
+    }
+
+    // Build expanded sequence that respects repeats
+    let playback_sequence = build_playback_sequence(&score.measures);
+
+    for (measure_idx, _osmd_measure_idx) in &playback_sequence {
+        let measure = &score.measures[*measure_idx];
+        let measure_number = measure_idx + 1; // 1-indexed (original measure number)
         let measure_start_time = current_time;
+
+        // Get OSMD time for this measure from pre-calculated values
+        // This ensures repeated measures use their original OSMD timestamps for highlighting
+        let measure_osmd_start = measure_osmd_times[*measure_idx];
+        let mut element_osmd_offset = 0.0;
 
         // Check for key changes
         if let Some(new_key) = &measure.key_change {
@@ -129,16 +316,13 @@ pub fn generate_playback_data(
         for element in &measure.elements {
             let duration = element.total_beats(&score.metadata.time_signature);
 
-            // OSMD accumulates using MusicXML duration values (quantized to divisions)
-            // For triplets, MusicXML uses floor((normal * base * divisions) / actual) / divisions
-            // With divisions=4: quarter triplet (3:2) = floor((2*1*4)/3)/4 = floor(2.67)/4 = 2/4 = 0.5
+            // Calculate OSMD duration for this element (for tracking offset within measure)
             let osmd_duration = match element {
                 Element::Note(note) => {
                     let base = note.duration.as_beats(&score.metadata.time_signature);
                     let with_dot = if note.dotted { base * 1.5 } else { base };
                     if let Some(tuplet) = &note.tuplet {
-                        // Calculate MusicXML quantized duration
-                        let divisions = 4.0; // Standard: quarter note = 4 divisions
+                        let divisions = 4.0;
                         let musicxml_dur = ((tuplet.normal_notes as f64 * with_dot * divisions) / tuplet.actual_notes as f64).floor();
                         musicxml_dur / divisions
                     } else {
@@ -158,6 +342,9 @@ pub fn generate_playback_data(
                 },
             };
 
+            // Calculate the OSMD timestamp for this element using pre-calculated measure start
+            let element_osmd_time = measure_osmd_start + element_osmd_offset;
+
             match element {
                 Element::Note(note) => {
                     // Handle chord symbol if present - uses its own duration (independent from melody)
@@ -166,7 +353,7 @@ pub fn generate_playback_data(
                         if !chord_notes.is_empty() {
                             // Use chord's own duration (defaults to whole note)
                             let chord_duration = chord_ann.duration_beats(&score.metadata.time_signature);
-                            let osmd_quarter_time = osmd_time * osmd_to_quarter_multiplier;
+                            let osmd_quarter_time = element_osmd_time * osmd_to_quarter_multiplier;
                             chords.push(PlaybackChord {
                                 midi_notes: chord_notes,
                                 start_time: current_time,
@@ -182,7 +369,7 @@ pub fn generate_playback_data(
                         let beat_in_measure = current_time - measure_start_time;
                         let display_midi_base = note.to_midi_note(&current_key, total_offset);
                         let display_midi = (display_midi_base as i16 + transposition_chromatic as i16).clamp(0, 127) as u8;
-                        let osmd_quarter_time = osmd_time * osmd_to_quarter_multiplier;
+                        let osmd_quarter_time = element_osmd_time * osmd_to_quarter_multiplier;
                         notes.push(PlaybackNote {
                             midi_note: note.to_midi_note(&current_key, octave_shift), // Playback pitch (with octave shift, no clef offset)
                             display_midi_note: display_midi, // Display pitch (with full offset + transposition)
@@ -213,7 +400,7 @@ pub fn generate_playback_data(
                         let beat_in_measure = current_time - measure_start_time;
                         let display_midi_base = note.to_midi_note(&current_key, total_offset);
                         let display_midi = (display_midi_base as i16 + transposition_chromatic as i16).clamp(0, 127) as u8;
-                        let osmd_quarter_time = osmd_time * osmd_to_quarter_multiplier;
+                        let osmd_quarter_time = element_osmd_time * osmd_to_quarter_multiplier;
                         notes.push(PlaybackNote {
                             midi_note: note.to_midi_note(&current_key, octave_shift), // Playback pitch (with octave shift, no clef offset)
                             display_midi_note: display_midi, // Display pitch (with full offset + transposition)
@@ -236,7 +423,7 @@ pub fn generate_playback_data(
                         if !chord_notes.is_empty() {
                             // Use chord's own duration (defaults to whole note)
                             let chord_duration = chord_ann.duration_beats(&score.metadata.time_signature);
-                            let osmd_quarter_time = osmd_time * osmd_to_quarter_multiplier;
+                            let osmd_quarter_time = element_osmd_time * osmd_to_quarter_multiplier;
                             chords.push(PlaybackChord {
                                 midi_notes: chord_notes,
                                 start_time: current_time,
@@ -250,8 +437,8 @@ pub fn generate_playback_data(
                 }
             }
 
-            current_time += duration;        // Playback time (triplet-adjusted)
-            osmd_time += osmd_duration;      // OSMD time (not triplet-adjusted)
+            current_time += duration;            // Playback time (triplet-adjusted)
+            element_osmd_offset += osmd_duration; // Track position within measure for OSMD
         }
     }
 
@@ -290,15 +477,13 @@ pub fn generate_playback_data(
     };
 
     // Convert swing metadata to playback swing type
+    // Note: Swing timing is applied by the frontend during playback, not here.
+    // This allows the frontend to apply swing in real-time without affecting
+    // the note scheduling or visual synchronization.
     let swing = score.metadata.swing.map(|s| match s {
         crate::ast::Swing::Eighth => SwingType::Eighth,
         crate::ast::Swing::Sixteenth => SwingType::Sixteenth,
     });
-
-    // Apply swing timing adjustments to notes
-    if let Some(ref swing_type) = swing {
-        apply_swing(&mut notes, swing_type, &score.metadata.time_signature);
-    }
 
     Ok(PlaybackData {
         tempo: quarter_note_bpm,
@@ -306,49 +491,4 @@ pub fn generate_playback_data(
         chords,
         swing,
     })
-}
-
-/// Apply swing timing to notes
-///
-/// Swing adjusts the timing of pairs of notes at a specific subdivision.
-/// Standard jazz swing uses a 2:1 ratio (triplet-based):
-/// - First note of pair: gets 2/3 of the combined duration
-/// - Second note of pair: gets 1/3 of the combined duration, starts later
-///
-/// For eighth note swing in 4/4:
-/// - Beat positions 0, 1, 2, 3 are "on the beat" (unchanged)
-/// - Beat positions 0.5, 1.5, 2.5, 3.5 are "off the beat" (shifted later)
-///
-/// The off-beat note is delayed from 50% to 67% of the beat.
-fn apply_swing(notes: &mut Vec<PlaybackNote>, swing_type: &SwingType, time_sig: &TimeSignature) {
-    // Determine the swing unit size in beats
-    // For eighth swing: 0.5 beats (in 4/4), for sixteenth swing: 0.25 beats
-    let swing_unit = match swing_type {
-        SwingType::Eighth => crate::ast::Duration::Eighth.as_beats(time_sig),
-        SwingType::Sixteenth => crate::ast::Duration::Sixteenth.as_beats(time_sig),
-    };
-
-    // Swing ratio: 2:1 means the off-beat is at 2/3 instead of 1/2 of the beat pair
-    // A beat pair = 2 * swing_unit (e.g., 1.0 beats for eighth swing in 4/4)
-    // Off-beat moves from 0.5 to 0.667 of the beat pair
-    // Shift = (2/3 - 1/2) * beat_pair = 1/6 * 2 * swing_unit = swing_unit / 3
-    let swing_shift = swing_unit * 2.0 * (2.0 / 3.0 - 0.5); // ~0.167 for eighths in 4/4
-
-    for note in notes.iter_mut() {
-        // Check if this note falls on an "off-beat" position
-        // Off-beats are at odd multiples of the swing unit (1, 3, 5... units from start)
-        // In 4/4 with eighth swing: 0.5, 1.5, 2.5, 3.5 beats = 1, 3, 5, 7 eighth-note units
-        let position_in_units = note.start_time / swing_unit;
-        let rounded_units = position_in_units.round();
-
-        // Check if this position aligns with a swing unit boundary (within tolerance)
-        if (position_in_units - rounded_units).abs() < 0.01 {
-            // Check if it's an odd multiple (off-beat)
-            let unit_index = rounded_units as i64;
-            if unit_index % 2 == 1 {
-                // This is an off-beat note - delay it
-                note.start_time += swing_shift;
-            }
-        }
-    }
 }
