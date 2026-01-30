@@ -1,11 +1,15 @@
 #!/bin/bash
 set -e
 
-# Install Rust if not present
-if ! command -v rustc &> /dev/null; then
-    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-    . "$HOME/.cargo/env"
-fi
+# Always install rustup to ensure we have wasm32 target support
+# Vercel's pre-installed Rust doesn't have rustup, so we need our own
+export CARGO_HOME="$HOME/.cargo"
+export RUSTUP_HOME="$HOME/.rustup"
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+. "$CARGO_HOME/env"
+
+# Add wasm32 target
+rustup target add wasm32-unknown-unknown
 
 # Install wasm-pack if not present
 if ! command -v wasm-pack &> /dev/null; then
