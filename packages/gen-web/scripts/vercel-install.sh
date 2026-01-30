@@ -14,6 +14,6 @@ curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 cd ../gen-wasm
 wasm-pack build --target web
 
-# Install npm dependencies (production only to skip canvas)
+# Install npm dependencies
 cd ../gen-web
-pnpm install --prod
+pnpm install
