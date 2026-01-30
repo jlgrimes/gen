@@ -693,7 +693,43 @@ export function GenApp({ compiler, files, playback, url, scores }: GenAppProps) 
     await files.savePdf(new Uint8Array(pdfData), `${baseName}.pdf`);
   }, [selectedScore, files]);
 
-  // Editor panel content (shared between mobile and desktop)
+  // Editor header (always 30% width)
+  const editorHeader = (
+    <div className='w-[40%] p-3 border-b border-r border-border flex items-center justify-between bg-white'>
+      <h2 className='font-semibold text-sm'>
+        Editor
+        {isCompiling && (
+          <span className='ml-2 text-xs text-muted-foreground'>
+            compiling...
+          </span>
+        )}
+      </h2>
+      <button
+        onClick={() => setIsEditorVisible(!isEditorVisible)}
+        className='p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors'
+        title={isEditorVisible ? 'Hide editor' : 'Show editor'}
+      >
+        {isEditorVisible ? <Eye size={16} /> : <EyeOff size={16} />}
+      </button>
+    </div>
+  );
+
+  // Editor body (only when visible)
+  const editorBody = (
+    <div className='w-[40%] h-full border-r border-border bg-white overflow-hidden'>
+      <GenMonacoEditor
+        value={genSource}
+        onChange={setGenSource}
+        error={error}
+        placeholder='Select a score or start typing...'
+        instrumentGroup={currentInstrumentGroup}
+        modPointsForGroup={modPointsForGroup}
+        onModPointToggle={handleModPointToggle}
+      />
+    </div>
+  );
+
+  // Editor panel for mobile (combined header + body)
   const editorPanel = (
     <div className='h-full border-r border-border flex flex-col bg-white'>
       <div className='p-3 border-b border-border flex items-center justify-between'>
@@ -705,13 +741,6 @@ export function GenApp({ compiler, files, playback, url, scores }: GenAppProps) 
             </span>
           )}
         </h2>
-        <button
-          onClick={() => setIsEditorVisible(false)}
-          className='p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors'
-          title='Hide editor'
-        >
-          <Eye size={16} />
-        </button>
       </div>
       <div className='flex-1 overflow-hidden'>
         <GenMonacoEditor
@@ -727,26 +756,186 @@ export function GenApp({ compiler, files, playback, url, scores }: GenAppProps) 
     </div>
   );
 
+  // Sheet music header (takes remaining width - 70% on desktop)
+  const sheetMusicHeader = (
+    <div className='flex-1 p-3 border-b border-border flex items-center justify-between bg-white'>
+      <h2 className='font-semibold text-sm'>Sheet Music</h2>
+      <div className='flex items-center gap-2'>
+        {/* Playback controls - only show if playback adapter is available */}
+        {playback && playbackData && (
+          <div className='flex items-center gap-1.5 mr-2'>
+            {!isPlaying ? (
+              <button
+                onClick={handlePlay}
+                disabled={isLoadingPlayback}
+                className='flex items-center gap-1 px-2 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed rounded-md transition-colors'
+                title='Play'
+              >
+                <Play size={14} />
+              </button>
+            ) : (
+              <button
+                onClick={handlePause}
+                className='flex items-center gap-1 px-2 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors'
+                title='Pause'
+              >
+                <Pause size={14} />
+              </button>
+            )}
+            <button
+              onClick={handleStop}
+              disabled={!isPlaying && currentBeat === 0}
+              className='flex items-center gap-1 px-2 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed rounded-md transition-colors'
+              title='Stop'
+            >
+              <Square size={14} />
+            </button>
+            <input
+              type='range'
+              min={0}
+              max={totalBeats}
+              step={0.01}
+              value={currentBeat}
+              onChange={e => handleSeek(Number(e.target.value))}
+              className='w-32 h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer'
+              title='Seek'
+            />
+            <span className='text-xs text-gray-500 min-w-12 text-right'>
+              {(() => {
+                if (!playbackData) return '0:00';
+                const seconds = (currentBeat / (playbackData.tempo / 60));
+                const mins = Math.floor(seconds / 60);
+                const secs = Math.floor(seconds % 60);
+                return `${mins}:${secs.toString().padStart(2, '0')}`;
+              })()}
+            </span>
+          </div>
+        )}
+        <button
+          onClick={exportToPdf}
+          className='flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors'
+          title='Export to PDF'
+        >
+          <Download size={14} />
+          Export PDF
+        </button>
+      </div>
+    </div>
+  );
+
+  // Sheet music body (toolbar + content, for desktop)
+  const sheetMusicBody = (
+    <div className='h-full flex flex-col bg-white min-w-0'>
+      {/* Toolbar */}
+      <div className='px-4 py-2 border-b border-border bg-gray-50 flex items-center gap-4 md:gap-6 flex-wrap'>
+        {/* Instrument preset dropdown */}
+        <div className='flex items-center gap-2'>
+          <label className='text-xs font-medium text-gray-600'>
+            Instrument:
+          </label>
+          <select
+            value={instrumentIndex}
+            onChange={e => {
+              const idx = Number(e.target.value);
+              setInstrumentIndex(idx);
+              if (idx < INSTRUMENT_PRESETS.length) {
+                const preset = INSTRUMENT_PRESETS[idx];
+                setTransposeIndex(preset.transposeIndex);
+                setOctaveShift(preset.octaveShift);
+                setClef(preset.clef);
+              }
+            }}
+            className='px-2 py-1 text-xs border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
+          >
+            {INSTRUMENT_PRESETS.map((preset, index) => (
+              <option key={preset.label} value={index}>
+                {preset.label}
+              </option>
+            ))}
+            <option value={CUSTOM_PRESET_INDEX}>Custom</option>
+          </select>
+        </div>
+
+        {/* Octave control - always visible */}
+        <div className='flex items-center gap-2'>
+          <label className='text-xs font-medium text-gray-600'>Octave:</label>
+          <select
+            value={octaveShift}
+            onChange={e => setOctaveShift(Number(e.target.value))}
+            className='px-2 py-1 text-xs border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
+          >
+            {OCTAVE_OPTIONS.map(option => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Custom controls - only shown when Custom is selected */}
+        {instrumentIndex === CUSTOM_PRESET_INDEX && (
+          <>
+            <div className='flex items-center gap-2'>
+              <label className='text-xs font-medium text-gray-600'>
+                Transpose:
+              </label>
+              <select
+                value={transposeIndex}
+                onChange={e => setTransposeIndex(Number(e.target.value))}
+                className='px-2 py-1 text-xs border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
+              >
+                {TRANSPOSE_OPTIONS.map((option, index) => (
+                  <option key={option.label} value={index}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className='flex items-center gap-2'>
+              <label className='text-xs font-medium text-gray-600'>Clef:</label>
+              <select
+                value={clef}
+                onChange={e => setClef(e.target.value as Clef)}
+                className='px-2 py-1 text-xs border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
+              >
+                {CLEF_OPTIONS.map(option => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </>
+        )}
+
+        {/* Zoom control - always visible */}
+        <div className='flex items-center gap-2'>
+          <label className='text-xs font-medium text-gray-600'>Zoom:</label>
+          <input
+            type='range'
+            min='0.3'
+            max='1.5'
+            step='0.05'
+            value={zoom}
+            onChange={e => setZoom(Number(e.target.value))}
+            className='w-20 md:w-24 h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer'
+          />
+          <span className='text-xs text-gray-500 w-10'>
+            {Math.round(zoom * 100)}%
+          </span>
+        </div>
+      </div>
+      <div className='flex-1 overflow-auto p-4'>
+        <div ref={sheetMusicRef} className='w-full' />
+      </div>
+    </div>
+  );
+
   // Sheet music panel content (shared between mobile and desktop)
   const sheetMusicPanel = (
     <div className='h-full flex flex-col bg-white min-w-0'>
       <div className='p-3 border-b border-border flex items-center justify-between'>
-        <div className='flex items-center gap-2'>
-          {!isEditorVisible && (
-            <>
-              <button
-                onClick={() => setIsEditorVisible(true)}
-                className='p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors'
-                title='Show editor'
-              >
-                <EyeOff size={16} />
-              </button>
-              <h2 className='font-semibold text-sm text-gray-500'>Editor</h2>
-              <span className='text-gray-300'>|</span>
-            </>
-          )}
-          <h2 className='font-semibold text-sm'>Sheet Music</h2>
-        </div>
+        <h2 className='font-semibold text-sm'>Sheet Music</h2>
         <div className='flex items-center gap-2'>
           {/* Playback controls - only show if playback adapter is available */}
           {playback && playbackData && (
@@ -964,18 +1153,20 @@ export function GenApp({ compiler, files, playback, url, scores }: GenAppProps) 
           </TabsContent>
         </Tabs>
       ) : (
-        /* Desktop layout with 30/70 split */
-        <div className='flex-1 h-full flex'>
-          {/* Editor Panel - 30% width when visible */}
-          {isEditorVisible && (
-            <div className='w-[30%] h-full'>
-              {editorPanel}
-            </div>
-          )}
+        /* Desktop layout - header row always full width, body changes */
+        <div className='flex-1 h-full flex flex-col'>
+          {/* Header row - editor header (30%) + sheet music header (70%) */}
+          <div className='flex'>
+            {editorHeader}
+            {sheetMusicHeader}
+          </div>
 
-          {/* Sheet Music Panel - 70% or full width */}
-          <div className={isEditorVisible ? 'w-[70%] h-full' : 'w-full h-full'}>
-            {sheetMusicPanel}
+          {/* Body row - editor body (30% when visible) + sheet music body */}
+          <div className='flex-1 flex min-h-0'>
+            {isEditorVisible && editorBody}
+            <div className={isEditorVisible ? 'w-[60%] h-full' : 'w-full h-full'}>
+              {sheetMusicBody}
+            </div>
           </div>
         </div>
       )}
