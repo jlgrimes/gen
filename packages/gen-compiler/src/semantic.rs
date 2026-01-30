@@ -110,8 +110,14 @@ fn validate_endings(score: &Score) -> Result<(), GenError> {
 
         match measure.ending {
             Some(Ending::First) => {
-                // 1st ending must have a repeat end
-                if !measure.repeat_end {
+                // 1st ending must have a repeat end, unless the next measure is also a 1st ending
+                let next_is_also_first = score
+                    .measures
+                    .get(i + 1)
+                    .map(|m| m.ending == Some(Ending::First))
+                    .unwrap_or(false);
+
+                if !measure.repeat_end && !next_is_also_first {
                     return Err(GenError::SemanticError {
                         measure: measure_number,
                         message: "First ending (1.) must end with a repeat sign (:||)".to_string(),

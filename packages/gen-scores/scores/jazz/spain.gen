@@ -6,14 +6,14 @@ $ Fp*-
 Fp $ F
 G* A/-A B
 C* D/-D E             @:^
-D* C/-Cp-            @:^
+D* C/-Cp-             @:^
 ^C $ $ F
 G* A/-A B
 C* D/-D E             @:^
-D E/ F/-Fp           @:^
-$p $/ E/ $/ D/       @:^
+D E/ F/-Fp            @:^
+$p $/ E/ $/ D/        @:^
 C* D/-D E             @:^
-Dp Cp               @:^
+Dp Cp                 @:^
 ^C* B/-Bp-
 Bp $p
 B $/ ^E/ $ $/ ^G/     @Eb:_

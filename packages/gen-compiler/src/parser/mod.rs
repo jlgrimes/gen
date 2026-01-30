@@ -1315,7 +1315,7 @@ pub(crate) fn extract_chords(source: &str) -> ChordAnnotations {
 
                 if end < line.len() {
                     let chord_symbol = &line[start..end];
-                    let mut after_brace = end + 1;
+                    let after_brace = end + 1;
 
                     // Check if next char is ':' (attached chord syntax)
                     let attached = after_brace < line.len() && line_bytes[after_brace] as char == ':';
