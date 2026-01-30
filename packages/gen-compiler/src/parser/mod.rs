@@ -63,7 +63,7 @@
 use crate::ast::*;
 use crate::error::GenError;
 use crate::lexer::{Lexer, LocatedToken, Token};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// Context for parsing tuplets
 struct TupletContext {
@@ -192,8 +192,8 @@ impl Parser {
     }
 
     /// Parse the music content into a Score (metadata already extracted)
-    /// mod_points, line_to_measure, chord_annotations, key_changes, and measure_octave_modifiers are passed in from the outer parse function
-    pub(crate) fn parse_music(&mut self, metadata: Metadata, mod_points: ModPoints, line_to_measure: HashMap<usize, usize>, chord_annotations: ChordAnnotations, key_changes: HashMap<usize, KeySignature>, measure_octave_modifiers: HashMap<usize, i8>) -> Result<Score, GenError> {
+    /// mod_points, line_to_measure, chord_annotations, key_changes, measure_octave_modifiers, and pickup_measures are passed in from the outer parse function
+    pub(crate) fn parse_music(&mut self, metadata: Metadata, mod_points: ModPoints, line_to_measure: HashMap<usize, usize>, chord_annotations: ChordAnnotations, key_changes: HashMap<usize, KeySignature>, measure_octave_modifiers: HashMap<usize, i8>, pickup_measures: HashSet<usize>) -> Result<Score, GenError> {
         self.chord_annotations = chord_annotations;
         self.measure_octave_modifiers = measure_octave_modifiers;
         self.current_measure_index = 0;
@@ -215,6 +215,10 @@ impl Parser {
                 // Apply key change if one exists for this measure
                 if let Some(key_sig) = key_changes.get(&self.current_measure_index) {
                     measure.key_change = Some(key_sig.clone());
+                }
+                // Apply pickup flag if this measure has @pickup annotation
+                if pickup_measures.contains(&self.current_measure_index) {
+                    measure.is_pickup = true;
                 }
                 measures.push(measure);
                 self.current_measure_index += 1;
@@ -407,12 +411,13 @@ impl Parser {
     /// Parse a single measure (one line)
     /// Takes and returns slur state to track slurs across measures, and current ending state
     /// Returns: (Option<Measure>, in_slur, slur_start_marked, pending_tie_stop, current_ending)
-    fn parse_measure(&mut self, mut in_slur: bool, mut slur_start_marked: bool, mut next_note_has_tie_stop: bool, current_ending: Option<Ending>) -> Result<(Option<Measure>, bool, bool, bool, Option<Ending>), GenError> {
+    fn parse_measure(&mut self, mut in_slur: bool, mut slur_start_marked: bool, mut next_note_has_tie_stop: bool, _current_ending: Option<Ending>) -> Result<(Option<Measure>, bool, bool, bool, Option<Ending>), GenError> {
         let mut elements = Vec::new();
         let mut note_index_in_measure = 0;  // Track note index for chord application
         let mut repeat_start = false;
         let mut repeat_end = false;
-        let mut ending: Option<Ending> = current_ending;
+        // Endings don't persist across measures - each measure starts fresh
+        let mut ending: Option<Ending> = None;
 
         // Check for first/second ending at beginning of measure
         if let Some(t) = self.current() {
@@ -674,7 +679,7 @@ impl Parser {
         if elements.is_empty() && !repeat_start && !repeat_end && ending.is_none() {
             Ok((None, in_slur, slur_start_marked, next_note_has_tie_stop, ending))
         } else {
-            Ok((Some(Measure { elements, repeat_start, repeat_end, ending, key_change: None }), in_slur, slur_start_marked, next_note_has_tie_stop, ending))
+            Ok((Some(Measure { elements, repeat_start, repeat_end, ending, key_change: None, is_pickup: false }), in_slur, slur_start_marked, next_note_has_tie_stop, ending))
         }
     }
 
@@ -1448,6 +1453,42 @@ pub(crate) fn extract_measure_octave_modifiers(source: &str) -> HashMap<usize, i
     modifiers
 }
 
+/// Extract pickup measure annotations from `@pickup` patterns in source.
+/// Returns a HashSet of measure indices that should skip duration validation.
+pub(crate) fn extract_pickup_measures(source: &str) -> HashSet<usize> {
+    let mut pickups = HashSet::new();
+    let mut measure_index = 0;
+    let mut in_metadata = false;
+
+    for line in source.lines() {
+        let trimmed = line.trim();
+
+        // Track metadata blocks
+        if trimmed == "---" {
+            in_metadata = !in_metadata;
+            continue;
+        }
+        if in_metadata {
+            continue;
+        }
+
+        // Check if line has music content
+        let has_music = line.chars().any(|c| matches!(c, 'A'..='G' | '$' | '['));
+
+        // Look for @pickup annotation
+        if line.contains("@pickup") {
+            pickups.insert(measure_index);
+        }
+
+        // Move to next measure if we had notes
+        if has_music {
+            measure_index += 1;
+        }
+    }
+
+    pickups
+}
+
 /// Extract metadata block from source (can be at top or bottom)
 /// Returns (metadata_content, remaining_source)
 pub fn parse(source: &str) -> Result<Score, GenError> {
@@ -1464,6 +1505,9 @@ pub fn parse(source: &str) -> Result<Score, GenError> {
     // Extract measure octave modifiers from source
     let measure_octave_modifiers = extract_measure_octave_modifiers(source);
 
+    // Extract pickup measure annotations from source
+    let pickup_measures = extract_pickup_measures(source);
+
     // Extract metadata block (can be anywhere in the file)
     let (metadata_content, music_source) = extract_metadata(source);
 
@@ -1478,7 +1522,7 @@ pub fn parse(source: &str) -> Result<Score, GenError> {
     let mut lexer = Lexer::new(&music_source);
     let tokens = lexer.tokenize()?;
     let mut parser = Parser::new(tokens);
-    parser.parse_music(metadata, mod_points, line_to_measure, chord_annotations, key_changes, measure_octave_modifiers)
+    parser.parse_music(metadata, mod_points, line_to_measure, chord_annotations, key_changes, measure_octave_modifiers, pickup_measures)
 }
 
 #[cfg(test)]

@@ -434,6 +434,12 @@ impl<'a> Lexer<'a> {
                         continue;
                     }
 
+                    // Check if this is a pickup annotation (@pickup)
+                    if annotation == "pickup" {
+                        // Valid pickup annotation - skip it (will be extracted by parser)
+                        continue;
+                    }
+
                     // Otherwise, validate mod point format: should be like "Eb:^" or "Bb:_"
                     // Format: Group (Eb or Bb) + colon + modifier (^ or _)
                     if !annotation.is_empty() {
@@ -451,14 +457,14 @@ impl<'a> Lexer<'a> {
                             return Err(GenError::ParseError {
                                 line,
                                 column,
-                                message: format!("Invalid annotation '@{}'. Expected: @ch:ChordName, @key:KeySig, @Eb:^, @Bb:_, or @:^", annotation.trim()),
+                                message: format!("Invalid annotation '@{}'. Expected: @ch:ChordName, @key:KeySig, @Eb:^, @Bb:_, @:^, or @pickup", annotation.trim()),
                             });
                         }
                     } else {
                         return Err(GenError::ParseError {
                             line,
                             column,
-                            message: "Empty annotation. Expected: @ch:ChordName, @key:KeySig, @Eb:^, @Bb:_, or @:^".to_string(),
+                            message: "Empty annotation. Expected: @ch:ChordName, @key:KeySig, @Eb:^, @Bb:_, @:^, or @pickup".to_string(),
                         });
                     }
 

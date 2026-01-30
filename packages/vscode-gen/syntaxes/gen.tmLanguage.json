@@ -42,35 +42,34 @@
     "annotations": {
       "patterns": [
         {
-          "name": "meta.annotation.mod-point.gen",
-          "match": "@(Eb|Bb|F|C|G):(\\^+|_+)",
-          "captures": {
-            "1": { "name": "entity.name.function.gen" },
-            "2": { "name": "keyword.operator.octave.gen" }
-          }
+          "name": "entity.name.function.annotation.gen",
+          "match": "@(Eb|Bb|F|C|G):(\\^+|_+)"
         },
         {
-          "name": "meta.annotation.key-change.gen",
-          "match": "@key:([A-G][#b]?m?|#{1,4}|b{1,4})",
+          "name": "meta.annotation.key.gen",
+          "match": "(@key:)([A-G][#b]?m?|#{1,4}|b{1,4})",
           "captures": {
-            "0": { "name": "keyword.control.key-change.gen" },
-            "1": { "name": "constant.language.key.gen" }
+            "1": { "name": "entity.name.function.annotation.gen" },
+            "2": { "name": "string.other.key.gen" }
           }
         },
         {
           "name": "meta.annotation.chord.gen",
-          "match": "@ch:([A-G][#b]?[^\\s]*)",
+          "match": "(@ch:)([A-G][#b]?[^\\s/po*]*)(/{1,3}|p|o)?(\\*)?",
           "captures": {
-            "0": { "name": "entity.name.type.chord.gen" },
-            "1": { "name": "string.other.chord-symbol.gen" }
+            "1": { "name": "entity.name.function.annotation.gen" },
+            "2": { "name": "string.other.chord.gen" },
+            "3": { "name": "constant.numeric.rhythm.gen" },
+            "4": { "name": "constant.numeric.rhythm.gen" }
           }
         },
         {
-          "name": "meta.annotation.measure-octave.gen",
-          "match": "@:(\\^+|_+)",
-          "captures": {
-            "0": { "name": "keyword.operator.measure-octave.gen" }
-          }
+          "name": "entity.name.function.annotation.gen",
+          "match": "@:(\\^+|_+)"
+        },
+        {
+          "name": "entity.name.function.annotation.gen",
+          "match": "@pickup"
         }
       ]
     },
@@ -90,25 +89,23 @@
       "patterns": [
         {
           "name": "keyword.control.ending.gen",
-          "match": "\\b([12])\\.",
-          "captures": {
-            "1": { "name": "constant.numeric.ending.gen" }
-          }
+          "match": "\\b[12]\\."
         }
       ]
     },
     "brackets": {
       "name": "meta.group.gen",
-      "begin": "(\\^*|_*)(\\[)",
-      "end": "(\\])([0-9]*)?([/po\\*]*)?",
+      "begin": "(\\^+|_+)?(\\[)",
+      "end": "(\\])([0-9]+)?(/{1,3}|p|o)?(\\*)?",
       "beginCaptures": {
-        "1": { "name": "keyword.operator.octave.gen" },
-        "2": { "name": "punctuation.definition.group.begin.gen" }
+        "1": { "name": "keyword.control.octave.gen" },
+        "2": { "name": "punctuation.section.brackets.begin.gen" }
       },
       "endCaptures": {
-        "1": { "name": "punctuation.definition.group.end.gen" },
+        "1": { "name": "punctuation.section.brackets.end.gen" },
         "2": { "name": "constant.numeric.tuplet.gen" },
-        "3": { "name": "keyword.operator.rhythm.gen" }
+        "3": { "name": "constant.numeric.rhythm.gen" },
+        "4": { "name": "constant.numeric.rhythm.gen" }
       },
       "patterns": [
         { "include": "#rests" },
@@ -116,22 +113,22 @@
       ]
     },
     "rests": {
-      "name": "constant.language.rest.gen",
-      "match": "\\$([/po\\*]*)",
+      "name": "meta.rest.gen",
+      "match": "(\\$)(/{1,3}|p|o)?(\\*)?",
       "captures": {
-        "0": { "name": "constant.language.rest.gen" },
-        "1": { "name": "keyword.operator.rhythm.gen" }
+        "1": { "name": "variable.other.rest.gen" },
+        "2": { "name": "constant.numeric.rhythm.gen" },
+        "3": { "name": "constant.numeric.rhythm.gen" }
       }
     },
     "notes": {
       "name": "meta.note.gen",
-      "match": "(\\^+|_+)?([A-G])([#b])?(o|p|\\/+)?(\\*)?",
+      "match": "(\\^+|_+)?([A-G][#b%]?)(/{1,3}|p|o)?(\\*)?",
       "captures": {
-        "1": { "name": "keyword.operator.octave.gen" },
+        "1": { "name": "keyword.control.octave.gen" },
         "2": { "name": "variable.other.note.gen" },
-        "3": { "name": "constant.character.accidental.gen" },
-        "4": { "name": "keyword.operator.rhythm.gen" },
-        "5": { "name": "keyword.operator.dotted.gen" }
+        "3": { "name": "constant.numeric.rhythm.gen" },
+        "4": { "name": "constant.numeric.rhythm.gen" }
       }
     }
   }

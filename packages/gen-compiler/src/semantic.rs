@@ -53,7 +53,10 @@ use crate::error::GenError;
 /// 3. Endings are correctly structured
 pub fn validate(score: &Score) -> Result<(), GenError> {
     for (i, measure) in score.measures.iter().enumerate() {
-        validate_measure(measure, &score.metadata.time_signature, i + 1)?;
+        // Skip duration validation for pickup measures (@pickup annotation)
+        if !measure.is_pickup {
+            validate_measure(measure, &score.metadata.time_signature, i + 1)?;
+        }
     }
     validate_repeats(score)?;
     validate_endings(score)?;
@@ -338,5 +341,22 @@ mod tests {
         if let Err(GenError::SemanticError { message, .. }) = result {
             assert!(message.contains("must immediately follow a first ending"));
         }
+    }
+
+    #[test]
+    fn test_quintuplet_duration() {
+        // Eighth note quintuplet (5 eighths in time of 4) = 2 beats
+        // Plus 4 eighth notes = 2 beats
+        // Total = 4 beats in 4/4 = valid
+        let score = parse("[$ D C C-]/ [C C D E C]5/").unwrap();
+        assert!(validate(&score).is_ok());
+    }
+
+    #[test]
+    fn test_quarter_quintuplet_duration() {
+        // Quarter note quintuplet (5 quarters in time of 4) = 4 beats
+        // This alone fills a 4/4 measure
+        let score = parse("[C C D E C]5").unwrap();
+        assert!(validate(&score).is_ok());
     }
 }

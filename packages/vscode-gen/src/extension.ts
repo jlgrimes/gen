@@ -216,7 +216,7 @@ async function lintWithCompiler(source: string, compilerPath: string): Promise<v
 
 function findMeasureLine(source: string, measureNum: number): number {
   const lines = source.split('\n');
-  let measureIndex = 0;
+  let measureCount = 0;
   let inMetadata = false;
 
   for (let i = 0; i < lines.length; i++) {
@@ -232,8 +232,11 @@ function findMeasureLine(source: string, measureNum: number): number {
     // Skip empty lines and comments
     if (!line || line.startsWith('//')) continue;
 
-    measureIndex++;
-    if (measureIndex === measureNum) {
+    // This line has music content, increment measure count
+    measureCount++;
+
+    // measureNum is 1-indexed, so check after incrementing
+    if (measureCount === measureNum) {
       return i;
     }
   }

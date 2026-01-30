@@ -1,4 +1,4 @@
-_A/
+@pickup      _A/
 ||: @ch:Eb7 [_B Db F]3/ ^Cp [B F]/
 @ch:Dm7     G#/ A*-A* _A/
 @ch:Eb7     [_B Db F]3/ ^Cp [B F]/
@@ -9,7 +9,7 @@ _A/
 1. @ch:Dm7  Dp $ $/ _A/ :||
 2. @ch:Dm7  Dp* A
 @ch:Am7b5   ^Cp A* G/
-@ch:D7b9    F# [^Eb ^D-]/ ^Dp [^C A]/
+@ch:D7b9    F# [^Eb ^D-]/ ^D [^C A]/
 @ch:Gm      B/ G F#/-[F# G A G-]/
 @ch:Gm7     Gp @ch:C7 $p
 @ch:Gm7b5   Bp G* F/
@@ -35,7 +35,7 @@ _A/
 @ch:GmM7    A [F# D%]/ A [F# D]/
 @ch:Gm7     [A F% D A]/ $ $/ A/-
 @ch:Gb7#9   A [E D#]/ A [E D#]/
-@ch:Gb7#9   [A E Db A]/ $ [A ^C]
+@ch:Gb7#9   [A E Db A]/ $ [A ^C]/
 @ch:Fmaj7   $o
 @ch:Fmaj7   $o
 @ch:Ebm7b5  $o

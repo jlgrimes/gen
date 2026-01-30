@@ -578,6 +578,7 @@ pub struct Measure {
     pub repeat_end: bool,     // :|| at the end of the measure
     pub ending: Option<Ending>, // 1. or 2. volta bracket
     pub key_change: Option<KeySignature>, // @key: annotation - changes key signature from this point forward
+    pub is_pickup: bool, // @pickup annotation - skip duration validation for this measure
 }
 
 /// Instrument groups for mod points
