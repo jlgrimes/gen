@@ -23,7 +23,7 @@ describe('wasmCompiler', () => {
     const options: CompileOptions = {
       clef: 'treble',
       octaveShift: 0,
-      instrumentGroup: 'Bb',
+      instrumentGroup: 'bb',
       transposeKey: 'Bb',
     };
 
@@ -210,7 +210,7 @@ describe('wasmCompiler', () => {
     const options: CompileOptions = {
       clef: 'bass',
       octaveShift: -1,
-      instrumentGroup: 'Eb',
+      instrumentGroup: 'eb',
       transposeKey: 'F',
     };
 

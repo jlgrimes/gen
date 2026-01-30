@@ -70,8 +70,8 @@ export class OSMDNoteMapper {
               // Skip rests
               if (!note.sourceNote || note.sourceNote.isRest()) {
                 // Still accumulate duration for rests
-                if (note.sourceNote && note.sourceNote.length) {
-                  accumulatedDuration += note.sourceNote.length.RealValue * 4;
+                if (note.sourceNote && note.sourceNote.Length) {
+                  accumulatedDuration += note.sourceNote.Length.RealValue * 4;
                 }
                 continue;
               }
@@ -89,8 +89,8 @@ export class OSMDNoteMapper {
                 this.noteMap.get(key)!.push(note);
 
                 // Accumulate this note's duration for the next note
-                if (note.sourceNote.length) {
-                  accumulatedDuration += note.sourceNote.length.RealValue * 4;
+                if (note.sourceNote.Length) {
+                  accumulatedDuration += note.sourceNote.Length.RealValue * 4;
                 }
 
               } catch (err) {
