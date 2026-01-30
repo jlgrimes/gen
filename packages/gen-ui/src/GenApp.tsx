@@ -612,17 +612,19 @@ export function GenApp({ compiler, files, playback, url, scores }: GenAppProps) 
     }
   }, [zoom]);
 
-  // Re-render when layout changes (editor or sidebar visibility)
+  // Re-render when editor visibility changes (layout change)
   useEffect(() => {
     if (osmdRef.current) {
-      // Longer delay to let the layout fully settle before re-rendering
+      // Use requestAnimationFrame to wait for layout to settle
       const timeout = setTimeout(() => {
-        osmdRef.current?.render();
-        setOsmdRenderCount(prev => prev + 1);
-      }, 150);
+        requestAnimationFrame(() => {
+          osmdRef.current?.render();
+          setOsmdRenderCount(prev => prev + 1);
+        });
+      }, 50);
       return () => clearTimeout(timeout);
     }
-  }, [isEditorVisible, isSidebarCollapsed]);
+  }, [isEditorVisible]);
 
   // Initialize highlight controller when playback data and OSMD are ready
   useEffect(() => {
@@ -708,7 +710,7 @@ export function GenApp({ compiler, files, playback, url, scores }: GenAppProps) 
           className='p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors'
           title='Hide editor'
         >
-          <EyeOff size={16} />
+          <Eye size={16} />
         </button>
       </div>
       <div className='flex-1 overflow-hidden'>
@@ -731,13 +733,17 @@ export function GenApp({ compiler, files, playback, url, scores }: GenAppProps) 
       <div className='p-3 border-b border-border flex items-center justify-between'>
         <div className='flex items-center gap-2'>
           {!isEditorVisible && (
-            <button
-              onClick={() => setIsEditorVisible(true)}
-              className='p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors'
-              title='Show editor'
-            >
-              <Eye size={16} />
-            </button>
+            <>
+              <button
+                onClick={() => setIsEditorVisible(true)}
+                className='p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors'
+                title='Show editor'
+              >
+                <EyeOff size={16} />
+              </button>
+              <h2 className='font-semibold text-sm text-gray-500'>Editor</h2>
+              <span className='text-gray-300'>|</span>
+            </>
           )}
           <h2 className='font-semibold text-sm'>Sheet Music</h2>
         </div>
