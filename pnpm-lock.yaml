@@ -151,10 +151,6 @@ importers:
       tailwindcss:
         specifier: ^4.1.0
         version: 4.1.18
-    optionalDependencies:
-      canvas:
-        specifier: ^2.11.2
-        version: 2.11.2(encoding@0.1.13)
     devDependencies:
       '@testing-library/jest-dom':
         specifier: ^6.9.1
